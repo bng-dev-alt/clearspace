@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Check, Search, Settings2, Users } from 'lucide-react';
+import { X, Check, Search, Settings2, Users, UserSearch } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
+import { Button, EmptyState } from '../ui';
 
 interface ProjectMembersModalProps {
   isOpen: boolean;
@@ -90,49 +91,24 @@ export default function ProjectMembersModal({
             <span style={{ fontSize: '0.8rem', color: 'var(--gray-text)', fontWeight: 600 }}>
               V projektu: {projectMemberIds.length} / {workspaceMembers.length}
             </span>
-            <button
-              type="button"
-              onClick={onManageWorkspace}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                background: 'none',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                padding: '0.35rem 0.7rem',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                color: 'var(--blue-primary)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              data-testid="manage-workspace-link"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={onManageWorkspace} data-testid="manage-workspace-link">
               <Settings2 size={13} />
               Spravovat Workspace
-            </button>
+            </Button>
           </div>
 
-          {/* Vyhledávání */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              padding: '0.4rem 0.6rem',
-              backgroundColor: 'var(--bg-column)',
-            }}
-          >
-            <Search size={14} style={{ color: 'var(--gray-text)' }} />
+          {/* Vyhledávání -- stejná "zapuštěná do fokusu" receptura jako
+              .cs-input jinde v aplikaci (Etapa 1/5/6), ne vlastní ohraničený
+              wrapper bez focus ringu. */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Search size={14} style={{ position: 'absolute', left: '0.75rem', color: 'var(--gray-text)', pointerEvents: 'none' }} />
             <input
               type="text"
               placeholder="Vyhledat člena..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '0.8rem', width: '100%', background: 'transparent', color: 'var(--dark-navy)' }}
+              className="cs-input"
+              style={{ paddingLeft: '2.25rem', fontSize: '0.8rem' }}
               data-testid="project-members-search"
             />
           </div>
@@ -150,14 +126,17 @@ export default function ProjectMembersModal({
             data-testid="project-members-list"
           >
             {workspaceMembers.length === 0 ? (
-              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--gray-text)', fontSize: '0.85rem' }}>
-                Workspace zatím nemá žádné členy.<br />
-                Přidejte je přes &quot;Spravovat Workspace&quot;.
-              </div>
+              <EmptyState
+                icon={<Users size={20} />}
+                title="Workspace nemá žádné členy"
+                description={'Přidejte je přes „Spravovat Workspace".'}
+              />
             ) : filtered.length === 0 ? (
-              <div style={{ padding: '1.5rem 0', textAlign: 'center', color: 'var(--gray-text)', fontSize: '0.85rem' }}>
-                Žádní členové nebyli nalezeni.
-              </div>
+              <EmptyState
+                icon={<UserSearch size={20} />}
+                title="Nikdo nenalezen"
+                description="Zkuste hledat podle jiného jména nebo e-mailu."
+              />
             ) : (
               filtered.map((member) => {
                 const isIn = projectMemberIds.includes(member.id);
@@ -172,13 +151,15 @@ export default function ProjectMembersModal({
                       justifyContent: 'space-between',
                       width: '100%',
                       padding: '0.55rem 0.75rem',
-                      borderRadius: '8px',
-                      border: isIn ? '1px solid var(--blue-primary)' : '1px solid var(--border-color)',
-                      backgroundColor: isIn ? 'var(--accent-soft)' : 'var(--bg-column)',
+                      borderRadius: 'var(--radius)',
+                      border: isIn ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      backgroundColor: isIn ? 'var(--accent-soft)' : 'var(--surface-2)',
                       cursor: 'pointer',
                       textAlign: 'left',
-                      transition: 'all 0.15s ease',
+                      transition: 'var(--transition-base)',
                     }}
+                    onMouseEnter={(e) => { if (!isIn) e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                    onMouseLeave={(e) => { if (!isIn) e.currentTarget.style.borderColor = 'var(--border)'; }}
                     data-testid={`project-member-toggle-${member.id}`}
                     aria-pressed={isIn}
                   >
@@ -215,9 +196,9 @@ export default function ProjectMembersModal({
                       style={{
                         width: '22px',
                         height: '22px',
-                        borderRadius: '6px',
-                        border: isIn ? 'none' : '1.5px solid var(--border-color)',
-                        backgroundColor: isIn ? 'var(--blue-primary)' : 'transparent',
+                        borderRadius: 'var(--radius-sm)',
+                        border: isIn ? 'none' : '1.5px solid var(--border-strong)',
+                        backgroundColor: isIn ? 'var(--accent)' : 'transparent',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

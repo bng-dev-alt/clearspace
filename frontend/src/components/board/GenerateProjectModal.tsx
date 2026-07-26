@@ -1021,6 +1021,12 @@ export default function GenerateProjectModal({
                             borderRadius: '10px',
                             overflow: 'hidden',
                             backgroundColor: 'var(--surface)',
+                            // Rodič je flex column s overflowY:auto -- bez
+                            // flexShrink:0 by flexbox místo scrollování
+                            // nerovnoměrně smrskl všechny řádky, aby se
+                            // vešly do max-height, a overflow:hidden by ten
+                            // smrsklý obsah uřízl (viděl by se jen proužek).
+                            flexShrink: 0,
                           }}
                         >
                           {/* Accordion Header */}

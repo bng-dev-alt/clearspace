@@ -50,13 +50,19 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
   // Souvislá spojnice nákladů (Etapa 7: "dej sparklinu stejnou péči jako
   // typografii" -- rozptýlené tečky teď spojuje jedna linka přes celý
   // týden, ne jen izolované body u dnů s nenulovým nákladem).
-  const costLinePoints = last7Days
-    .map((day, idx) => {
-      const x = (idx / 6) * 88 + 6;
-      const y = 120 - Math.min((day.cost / maxCost) * 90, 90);
-      return `${x},${y}`;
-    })
-    .join(' ');
+  //
+  // Segmenty <line>, ne <polyline points="...">: polyline potřebuje čistá
+  // čísla, takže by graf musel dostat viewBox. Ten by ale s
+  // preserveAspectRatio="none" nerovnoměrně natáhl X/Y osu vůči
+  // skutečnému (širokému) poměru stran karty -- přesně to předtím
+  // roztahovalo rx na sloupcích do kapslí a text do nečitelné změti.
+  // <line> podporuje procenta v x1/x2 stejně jako zbytek grafu (viz
+  // mřížka níž), takže žádný viewBox není potřeba.
+  const costLinePoint = (idx: number) => {
+    const x = (idx / 6) * 88 + 6;
+    const y = 120 - Math.min((last7Days[idx].cost / maxCost) * 90, 90);
+    return { x, y };
+  };
 
   // 2. Prepare feature distribution stacked bar
   const totalFeatureRequests = featureBreakdown.reduce((sum, f) => sum + f.requestCount, 0);
@@ -72,7 +78,7 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
         </div>
 
         <div style={{ height: '140px', width: '100%', position: 'relative', marginTop: '0.5rem' }}>
-          <svg viewBox="0 0 100 140" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }}>
             {/* Grid lines */}
             <line x1="0" y1="0" x2="100%" y2="0" stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
             <line x1="0" y1="60" x2="100%" y2="60" stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
@@ -80,16 +86,24 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
 
             {/* Spojnice nákladů -- souvislá linka přes celý týden, tečky
                 jen zvýrazňují dny se skutečným nákladem (emphasized endpoint). */}
-            {totalRequests > 0 && (
-              <polyline
-                points={costLinePoints}
-                fill="none"
-                stroke="var(--warning)"
-                strokeWidth="1.25"
-                strokeOpacity="0.55"
-                strokeLinejoin="round"
-              />
-            )}
+            {totalRequests > 0 && last7Days.slice(1).map((_, i) => {
+              const idx = i + 1;
+              const from = costLinePoint(idx - 1);
+              const to = costLinePoint(idx);
+              return (
+                <line
+                  key={idx}
+                  x1={`${from.x}%`}
+                  y1={from.y}
+                  x2={`${to.x}%`}
+                  y2={to.y}
+                  stroke="var(--warning)"
+                  strokeWidth="1.25"
+                  strokeOpacity="0.55"
+                  strokeLinecap="round"
+                />
+              );
+            })}
 
             {/* Render Bars */}
             {last7Days.map((day, idx) => {

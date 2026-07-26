@@ -12,7 +12,7 @@ vi.mock('../services/kanbanService', () => {
       id: 'col-1',
       name: 'Sloupec 1',
       cards: [
-        { id: 'card-1', title: 'Task 1', details: 'Details 1', priority: 'High', archived: false }
+        { id: 'card-1', title: 'Task 1', details: 'Details 1', priority: 'High' as const, archived: false }
       ]
     }
   ];
@@ -46,7 +46,7 @@ describe('AI History & Restore Engine Tests', () => {
       id: 'col-1',
       name: 'Sloupec 1',
       cards: [
-        { id: 'card-1', title: 'Task 1', details: 'Details 1', priority: 'High', archived: false }
+        { id: 'card-1', title: 'Task 1', details: 'Details 1', priority: 'High' as const, archived: false }
       ]
     }
   ];

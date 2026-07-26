@@ -2892,11 +2892,17 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.4rem 0.7rem;
-  background: var(--surface);
+  /* Redesign Etapa 6: stejná "zapuštěná do fokusu" receptura jako
+     .cs-input/.form-input jinde v aplikaci (dřív plochý --surface pořád). */
+  background: var(--surface-2);
   color: var(--text-muted);
-  transition: border-color 0.2s;
+  transition: var(--transition-base);
 }
-.team-search:focus-within { border-color: var(--accent); }
+.team-search:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .team-search input {
   border: none;
   outline: none;
@@ -2912,7 +2918,7 @@ body {
   font-size: 0.9rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .members-table {
@@ -2933,17 +2939,19 @@ body {
   padding: 0.85rem 1.25rem;
 }
 .members-table-head {
-  font-size: 0.62rem;
+  /* Redesign Etapa 6: sjednoceno na --text-xs -- stejná trackovaná škála
+     jako uppercase labely jinde v aplikaci (dřív vlastní 0.62rem). */
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
 .member-row {
   border-bottom: 1px solid var(--border);
-  transition: background-color 0.15s ease;
+  transition: background-color var(--dur-base) var(--ease-out);
 }
 .member-row:last-child { border-bottom: none; }
 .member-row:hover { background: var(--surface-2); }
@@ -3010,7 +3018,7 @@ body {
   color: var(--text-secondary);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: var(--spring-transition);
+  transition: var(--transition-base);
 }
 .member-action-btn:hover { color: var(--accent); border-color: var(--accent); }
 .member-action-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }

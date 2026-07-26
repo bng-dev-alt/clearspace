@@ -44,10 +44,11 @@ function KanbanCard({
       {card.details && <p className="card-details">{card.details}</p>}
 
       {(card.tag || card.priority) && (
-        <div className="card-badges-row">
-          {card.tag && <span className="card-tag">{card.tag}</span>}
+        <div className="card-meta-row">
+          {card.tag && <span className="card-meta-tag">{card.tag}</span>}
+          {card.tag && card.priority && <span className="card-meta-sep" aria-hidden="true" />}
           {card.priority && (
-            <span className="card-priority-badge">
+            <span className="card-meta-priority">
               <span
                 className="priority-indicator-dot"
                 style={{ backgroundColor: getPriorityColor(card.priority) }}

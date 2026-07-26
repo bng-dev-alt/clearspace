@@ -104,7 +104,7 @@ export default function TeamPage() {
                 data-testid="team-search"
               />
             </div>
-            <button type="button" className="toolbar-btn toolbar-btn-primary" onClick={handleAdd} data-testid="team-add-member">
+            <button type="button" className="cs-btn cs-btn--primary" onClick={handleAdd} data-testid="team-add-member">
               <Plus size={15} />
               Přidat člena
             </button>

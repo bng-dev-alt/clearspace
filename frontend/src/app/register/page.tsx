@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import { User, Mail, Lock, Plus, ArrowLeft } from 'lucide-react';
+import { Button } from '../../components/ui';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -50,17 +51,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div 
+    <div
       style={{
         display: 'flex',
         minHeight: '100vh',
         width: '100vw',
-        backgroundColor: 'var(--surface-2)', // Warm off-white
+        backgroundColor: 'var(--bg-page)',
         fontFamily: 'var(--font-sans)',
       }}
     >
-      {/* Left panel - Decorative Branding */}
-      <div 
+      {/* Levý panel -- pevná redakční tmavá identita, nezávislá na motivu
+          aplikace. Redesign Etapa 1 (DESIGN_PLAN.md): tři vrstvené
+          organické skvrny + jemné zrno, stejně jako na Loginu. */}
+      <div
         style={{
           flex: '1.2',
           backgroundColor: '#0e2833', // Pevná ocean navy -- nezávislá na motivu (var(--text) se v dark mode obracel na světlou -> bílé logo/nadpis mizely)
@@ -74,27 +77,51 @@ export default function RegisterPage() {
         }}
         className="register-left-panel"
       >
-        {/* Subtle background abstract shapes */}
-        <div 
+        <div
+          aria-hidden="true"
           style={{
             position: 'absolute',
-            top: '-15%',
-            right: '-15%',
-            width: '450px',
-            height: '450px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, var(--accent-soft) 0%, rgba(0,0,0,0) 70%)',
+            inset: 0,
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)',
+            backgroundSize: '3px 3px',
+            opacity: 0.5,
+            pointerEvents: 'none',
           }}
         />
-        <div 
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '-18%',
+            right: '-15%',
+            width: '480px',
+            height: '480px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(217, 154, 11, 0.18) 0%, rgba(0,0,0,0) 70%)',
+          }}
+        />
+        <div
+          aria-hidden="true"
           style={{
             position: 'absolute',
             bottom: '-20%',
-            left: '-5%',
-            width: '350px',
-            height: '350px',
+            left: '-8%',
+            width: '360px',
+            height: '360px',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, var(--accent-soft) 0%, rgba(0,0,0,0) 70%)',
+            background: 'radial-gradient(circle, rgba(52, 201, 138, 0.16) 0%, rgba(0,0,0,0) 70%)',
+          }}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '40%',
+            left: '22%',
+            width: '250px',
+            height: '250px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(251, 249, 244, 0.05) 0%, rgba(0,0,0,0) 72%)',
           }}
         />
 
@@ -103,7 +130,7 @@ export default function RegisterPage() {
         </div>
 
         <div style={{ maxWidth: '460px', zIndex: 10 }}>
-          <span 
+          <span
             style={{
               color: 'var(--blue-primary)',
               fontSize: '0.7rem',
@@ -116,7 +143,7 @@ export default function RegisterPage() {
           >
             SaaS Kanban Board
           </span>
-          <h1 
+          <h1
             style={{
               fontFamily: 'var(--font-serif)',
               fontSize: '3rem',
@@ -128,7 +155,7 @@ export default function RegisterPage() {
           >
             Začněte ihned.
           </h1>
-          <p 
+          <p
             style={{
               color: 'var(--text-muted)',
               fontSize: '0.95rem',
@@ -145,26 +172,39 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Right panel - Registration Form */}
-      <div 
+      {/* Pravý panel -- plovoucí glass karta na teplém pozadí stránky,
+          stejně jako Login. */}
+      <div
         style={{
           flex: '1',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '2.5rem',
-          backgroundColor: 'var(--surface)',
-          borderLeft: '1px solid var(--border-color)',
+          backgroundColor: 'var(--bg-page)',
         }}
       >
-        <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '420px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2rem',
+            backgroundColor: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--shadow-lg)',
+            padding: '2.5rem',
+          }}
+        >
           <div>
-            <Link 
-              href="/login" 
-              style={{ 
-                color: 'var(--gray-text)', 
-                textDecoration: 'none', 
-                fontSize: '0.8rem', 
+            <Link
+              href="/login"
+              style={{
+                color: 'var(--gray-text)',
+                textDecoration: 'none',
+                fontSize: '0.8rem',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
@@ -178,7 +218,7 @@ export default function RegisterPage() {
               <ArrowLeft size={14} />
               Zpět na přihlášení
             </Link>
-            <h2 
+            <h2
               style={{
                 fontSize: '1.75rem',
                 fontWeight: 800,
@@ -195,12 +235,12 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <div 
+            <div
               style={{
                 padding: '0.75rem 1rem',
                 backgroundColor: 'var(--danger-soft)',
                 color: 'var(--danger)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius)',
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 border: '1px solid var(--danger-soft)',
@@ -212,21 +252,12 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label 
-                htmlFor="displayName" 
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: 'var(--dark-navy)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <label htmlFor="displayName" className="cs-label">
                 Jméno / Název firmy *
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <User 
-                  size={16} 
+                <User
+                  size={16}
                   style={{
                     position: 'absolute',
                     left: '0.85rem',
@@ -239,47 +270,20 @@ export default function RegisterPage() {
                   placeholder="Jakub Novák"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 1rem 0.65rem 2.5rem',
-                    fontSize: 'var(--auth-input-font)',
-                    fontWeight: 500,
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    outline: 'none',
-                    backgroundColor: 'var(--surface-2)',
-                    color: 'var(--dark-navy)',
-                    transition: 'var(--spring-transition)',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--blue-primary)';
-                    e.target.style.backgroundColor = '#ffffff';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-color)';
-                    e.target.style.backgroundColor = 'var(--surface-2)';
-                  }}
+                  className="cs-input"
+                  style={{ paddingLeft: '2.5rem', fontSize: 'var(--auth-input-font)' }}
                   required
                 />
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label 
-                htmlFor="email" 
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: 'var(--dark-navy)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <label htmlFor="email" className="cs-label">
                 E-mail *
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Mail 
-                  size={16} 
+                <Mail
+                  size={16}
                   style={{
                     position: 'absolute',
                     left: '0.85rem',
@@ -292,47 +296,20 @@ export default function RegisterPage() {
                   placeholder="jmeno@firma.cz"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 1rem 0.65rem 2.5rem',
-                    fontSize: 'var(--auth-input-font)',
-                    fontWeight: 500,
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    outline: 'none',
-                    backgroundColor: 'var(--surface-2)',
-                    color: 'var(--dark-navy)',
-                    transition: 'var(--spring-transition)',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--blue-primary)';
-                    e.target.style.backgroundColor = '#ffffff';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-color)';
-                    e.target.style.backgroundColor = 'var(--surface-2)';
-                  }}
+                  className="cs-input"
+                  style={{ paddingLeft: '2.5rem', fontSize: 'var(--auth-input-font)' }}
                   required
                 />
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label 
-                htmlFor="password" 
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: 'var(--dark-navy)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <label htmlFor="password" className="cs-label">
                 Heslo *
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Lock 
-                  size={16} 
+                <Lock
+                  size={16}
                   style={{
                     position: 'absolute',
                     left: '0.85rem',
@@ -345,47 +322,20 @@ export default function RegisterPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 1rem 0.65rem 2.5rem',
-                    fontSize: 'var(--auth-input-font)',
-                    fontWeight: 500,
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    outline: 'none',
-                    backgroundColor: 'var(--surface-2)',
-                    color: 'var(--dark-navy)',
-                    transition: 'var(--spring-transition)',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--blue-primary)';
-                    e.target.style.backgroundColor = '#ffffff';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-color)';
-                    e.target.style.backgroundColor = 'var(--surface-2)';
-                  }}
+                  className="cs-input"
+                  style={{ paddingLeft: '2.5rem', fontSize: 'var(--auth-input-font)' }}
                   required
                 />
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label 
-                htmlFor="confirmPassword" 
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: 'var(--dark-navy)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <label htmlFor="confirmPassword" className="cs-label">
                 Potvrzení hesla *
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Lock 
-                  size={16} 
+                <Lock
+                  size={16}
                   style={{
                     position: 'absolute',
                     left: '0.85rem',
@@ -398,68 +348,27 @@ export default function RegisterPage() {
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 1rem 0.65rem 2.5rem',
-                    fontSize: 'var(--auth-input-font)',
-                    fontWeight: 500,
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    outline: 'none',
-                    backgroundColor: 'var(--surface-2)',
-                    color: 'var(--dark-navy)',
-                    transition: 'var(--spring-transition)',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--blue-primary)';
-                    e.target.style.backgroundColor = '#ffffff';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-color)';
-                    e.target.style.backgroundColor = 'var(--surface-2)';
-                  }}
+                  className="cs-input"
+                  style={{ paddingLeft: '2.5rem', fontSize: 'var(--auth-input-font)' }}
                   required
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                backgroundColor: 'var(--purple-secondary)', // Purple action button
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                transition: 'var(--spring-transition)',
-                opacity: isSubmitting ? 0.7 : 1,
-                boxShadow: '0 2px 4px var(--accent-soft)',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
-            >
+            <Button type="submit" variant="primary" size="lg" block disabled={isSubmitting}>
               <Plus size={16} />
               {isSubmitting ? 'Registrování...' : 'Zaregistrovat se'}
-            </button>
+            </Button>
           </form>
 
           <div style={{ display: 'flex', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 500, color: 'var(--gray-text)' }}>
             Již máte účet?&nbsp;
-            <Link 
-              href="/login" 
-              style={{ 
-                color: 'var(--blue-primary)', 
-                textDecoration: 'none', 
-                fontWeight: 700 
+            <Link
+              href="/login"
+              style={{
+                color: 'var(--blue-primary)',
+                textDecoration: 'none',
+                fontWeight: 700
               }}
             >
               Přihlaste se
@@ -467,7 +376,7 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
-      
+
       {/* Visual responsiveness styling */}
       <style jsx>{`
         @media (max-width: 900px) {

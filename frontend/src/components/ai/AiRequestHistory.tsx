@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { AiRequestLog } from '../../services/ai/aiAnalyticsService';
 import { aiCostEstimator } from '../../services/ai/aiCostEstimator';
-import { ChevronDown, ChevronUp, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle2, XCircle, ListTree } from 'lucide-react';
+import { EmptyState } from '../ui';
 
 interface AiRequestHistoryProps {
   history: AiRequestLog[];
@@ -40,22 +41,19 @@ export default function AiRequestHistory({ history }: AiRequestHistoryProps) {
 
   if (history.length === 0) {
     return (
-      <div style={{
-        padding: '3rem',
-        textAlign: 'center',
-        color: 'var(--gray-text)',
-        fontSize: '0.85rem',
-        border: '1px dashed var(--border-color)',
-        borderRadius: '8px',
-      }}>
-        Žádná historie AI dotazů nebyla zaznamenána.
+      <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-card)' }}>
+        <EmptyState
+          icon={<ListTree size={22} />}
+          title="Žádná historie dotazů"
+          description="Jakmile proběhne první AI požadavek, jeho log a ladicí detaily se objeví tady."
+        />
       </div>
     );
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
         <table style={{
           width: '100%',
           borderCollapse: 'collapse',

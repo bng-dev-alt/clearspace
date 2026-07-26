@@ -272,7 +272,7 @@ export default function Toolbar({
               Generate / Sprint / Risk žijí uvnitř panelu jako kontextové akce. */}
           <button
             type="button"
-            className="toolbar-btn toolbar-btn-primary pi-chip-btn"
+            className="cs-btn cs-btn--primary pi-chip-btn"
             onClick={onOpenIntelligence}
             title={intelHealth ? `${intelHealth.label} — ${intelHealth.reason} (⌘I)` : 'Project Intelligence (⌘I)'}
             data-testid="project-intelligence-btn"
@@ -290,7 +290,7 @@ export default function Toolbar({
 
           <button
             type="button"
-            className="toolbar-new-task-btn"
+            className="cs-btn cs-btn--primary toolbar-new-task-btn"
             onClick={onNewTask}
             data-testid="new-task-btn"
           >

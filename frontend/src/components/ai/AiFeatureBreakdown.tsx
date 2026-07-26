@@ -1,6 +1,8 @@
 import React from 'react';
+import { BarChart2 } from 'lucide-react';
 import { FeatureStats } from '../../services/ai/aiAnalyticsService';
 import { aiCostEstimator } from '../../services/ai/aiCostEstimator';
+import { EmptyState } from '../ui';
 
 interface AiFeatureBreakdownProps {
   breakdown: FeatureStats[];
@@ -9,21 +11,18 @@ interface AiFeatureBreakdownProps {
 export default function AiFeatureBreakdown({ breakdown }: AiFeatureBreakdownProps) {
   if (breakdown.length === 0) {
     return (
-      <div style={{
-        padding: '2rem',
-        textAlign: 'center',
-        color: 'var(--gray-text)',
-        fontSize: '0.85rem',
-        border: '1px dashed var(--border-color)',
-        borderRadius: '8px',
-      }}>
-        Zatím nejsou k dispozici žádná data o AI funkcích. Spusťte nějakou AI akci na boardu.
+      <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-card)' }}>
+        <EmptyState
+          icon={<BarChart2 size={22} />}
+          title="Zatím žádná data"
+          description="Jakmile spustíte nějakou AI akci na boardu, tady se objeví rozpad podle jednotlivých funkcí."
+        />
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+    <div style={{ width: '100%', overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
       <table style={{
         width: '100%',
         borderCollapse: 'collapse',
@@ -50,7 +49,7 @@ export default function AiFeatureBreakdown({ breakdown }: AiFeatureBreakdownProp
                 borderBottom: idx === breakdown.length - 1 ? 'none' : '1px solid var(--border-color)',
                 transition: 'background-color 0.2s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.01)'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-2)'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--dark-navy)' }}>

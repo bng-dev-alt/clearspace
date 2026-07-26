@@ -287,19 +287,7 @@ export default function ProjectDashboard() {
               <div
                 key={project.id}
                 onClick={() => router.push(`/projects/${project.id}`)}
-                className="card"
-                style={{
-                  padding: '2rem 1.75rem',
-                  cursor: 'pointer',
-                  backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-card)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  justifyContent: 'space-between',
-                  transition: 'var(--spring-transition)',
-                }}
+                className="project-card"
                 data-testid={`project-card-${project.id}`}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

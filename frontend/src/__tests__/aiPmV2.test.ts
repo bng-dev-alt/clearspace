@@ -4,10 +4,11 @@ import { aiService } from '../services/ai/aiService';
 describe('AI Project Manager v2 Unit Tests', () => {
   it('calls executeDailyBrief and handles JSON briefing structure', async () => {
     const mockColumns = [
-      { id: 'col-1', name: 'V průběhu', cards: [{ id: 'card-1', title: 'Refaktoring DB' }] },
+      { id: 'col-1', name: 'V průběhu', cards: [{ id: 'card-1', title: 'Refaktoring DB', details: '' }] },
     ];
 
     vi.spyOn(aiService, 'executeDailyBrief').mockResolvedValueOnce({
+      model: 'gemini-test',
       content: JSON.stringify({
         greeting: 'Dobré ráno týme!',
         executiveSummary: 'Projekt postupuje podle plánu.',
@@ -28,7 +29,7 @@ describe('AI Project Manager v2 Unit Tests', () => {
 
   it('calls executeCapacityPlanning and handles team workload suggestions', async () => {
     const mockColumns = [
-      { id: 'col-1', name: 'V průběhu', cards: [{ id: 'card-1', title: 'AI Chat UI' }] },
+      { id: 'col-1', name: 'V průběhu', cards: [{ id: 'card-1', title: 'AI Chat UI', details: '' }] },
     ];
     const mockMembers = [
       { id: 'm-1', fullName: 'Jan Novák', initials: 'JN', avatarColor: '#209dd7', createdAt: '2026-01-01' },
@@ -36,6 +37,7 @@ describe('AI Project Manager v2 Unit Tests', () => {
     ];
 
     vi.spyOn(aiService, 'executeCapacityPlanning').mockResolvedValueOnce({
+      model: 'gemini-test',
       content: JSON.stringify({
         totalCapacityHours: 80,
         allocatedHours: 65,

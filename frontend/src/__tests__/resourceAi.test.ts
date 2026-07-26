@@ -7,6 +7,7 @@ describe('Task Resources v2 - AI Context Unit Tests', () => {
     const mockContent = 'Specifikace modulu pro přihlašování a dvoufázové ověření 2FA.';
 
     vi.spyOn(aiService, 'executeResourceAnalysis').mockResolvedValueOnce({
+      model: 'gemini-test',
       content: JSON.stringify({
         summary: 'Specifikace 2FA autentizace.',
         extractedRequirements: ['Implementovat TOTP 2FA', 'Uložit secret kód v šifrované podobě'],

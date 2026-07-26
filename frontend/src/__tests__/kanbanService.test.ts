@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { kanbanService } from '../services/kanbanService';
+import { kanbanService, Project } from '../services/kanbanService';
 
 describe('Kanban Service Unit Tests (Project Isolation & Seeding)', () => {
   beforeEach(() => {

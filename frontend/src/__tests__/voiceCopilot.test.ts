@@ -9,6 +9,7 @@ describe('AI Voice Action Copilot Unit Tests', () => {
     ];
 
     vi.spyOn(aiService, 'executeVoiceAction').mockResolvedValueOnce({
+      model: 'gemini-test',
       content: JSON.stringify({
         intentType: 'CREATE_CARD',
         summary: 'Vytvořit kartu "Refaktoring DB" ve sloupci "V průběhu"',
@@ -35,6 +36,7 @@ describe('AI Voice Action Copilot Unit Tests', () => {
     const mockColumns = [{ id: 'col-todo', name: 'To Do', cards: [] }];
 
     vi.spyOn(aiService, 'executeVoiceAction').mockResolvedValueOnce({
+      model: 'gemini-test',
       content: JSON.stringify({
         intentType: 'RENAME_COLUMN',
         summary: 'Přejmenovat sloupec "To Do" na "Všechny úkoly"',

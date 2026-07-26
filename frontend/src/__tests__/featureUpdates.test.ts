@@ -66,6 +66,7 @@ describe('Feature Updates Integration Tests', () => {
       ];
 
       vi.spyOn(aiService, 'executeProjectManager').mockResolvedValueOnce({
+        model: 'gemini-test',
         content: JSON.stringify({
           summary: 'Projekt je v dobrém stavu.',
           healthScore: 85,

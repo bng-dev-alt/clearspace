@@ -123,7 +123,7 @@ export default function AiControlCenterPage() {
             backgroundColor: 'var(--accent-soft)',
             color: 'var(--accent)',
             padding: '0.4rem 0.75rem',
-            borderRadius: '9999px',
+            borderRadius: 'var(--radius-full)',
             fontSize: '0.75rem',
             fontWeight: 700,
           }}>
@@ -142,7 +142,7 @@ export default function AiControlCenterPage() {
               border: '1px solid var(--danger)',
               color: 'var(--danger)',
               padding: '0.4rem 0.75rem',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-button)',
               fontSize: '0.75rem',
               fontWeight: 600,
               cursor: history.length === 0 ? 'not-allowed' : 'pointer',

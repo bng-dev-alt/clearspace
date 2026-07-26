@@ -1,5 +1,7 @@
 import React from 'react';
+import { PieChart } from 'lucide-react';
 import { AiRequestLog, FeatureStats } from '../../services/ai/aiAnalyticsService';
+import { EmptyState } from '../ui';
 
 interface AiChartsProps {
   logs: AiRequestLog[];
@@ -42,6 +44,19 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
 
   // Scale for Daily Requests
   const maxRequests = Math.max(...last7Days.map(d => d.requests), 4);
+  const totalRequests = last7Days.reduce((sum, d) => sum + d.requests, 0);
+  const maxCost = Math.max(...last7Days.map(d => d.cost), 0.01);
+
+  // Souvislá spojnice nákladů (Etapa 7: "dej sparklinu stejnou péči jako
+  // typografii" -- rozptýlené tečky teď spojuje jedna linka přes celý
+  // týden, ne jen izolované body u dnů s nenulovým nákladem).
+  const costLinePoints = last7Days
+    .map((day, idx) => {
+      const x = (idx / 6) * 88 + 6;
+      const y = 120 - Math.min((day.cost / maxCost) * 90, 90);
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   // 2. Prepare feature distribution stacked bar
   const totalFeatureRequests = featureBreakdown.reduce((sum, f) => sum + f.requestCount, 0);
@@ -57,17 +72,31 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
         </div>
 
         <div style={{ height: '140px', width: '100%', position: 'relative', marginTop: '0.5rem' }}>
-          <svg style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <svg viewBox="0 0 100 140" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
             {/* Grid lines */}
             <line x1="0" y1="0" x2="100%" y2="0" stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
             <line x1="0" y1="60" x2="100%" y2="60" stroke="var(--border)" strokeWidth="1" strokeDasharray="3" />
             <line x1="0" y1="120" x2="100%" y2="120" stroke="var(--border)" strokeWidth="1" />
+
+            {/* Spojnice nákladů -- souvislá linka přes celý týden, tečky
+                jen zvýrazňují dny se skutečným nákladem (emphasized endpoint). */}
+            {totalRequests > 0 && (
+              <polyline
+                points={costLinePoints}
+                fill="none"
+                stroke="var(--warning)"
+                strokeWidth="1.25"
+                strokeOpacity="0.55"
+                strokeLinejoin="round"
+              />
+            )}
 
             {/* Render Bars */}
             {last7Days.map((day, idx) => {
               const xPercent = (idx / 6) * 88 + 6; // range from 6% to 94%
               const barHeight = (day.requests / maxRequests) * 100; // max height 100px
               const yPos = 120 - barHeight;
+              const costY = 120 - Math.min((day.cost / maxCost) * 90, 90);
 
               return (
                 <g key={idx}>
@@ -94,8 +123,8 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
                   {day.cost > 0 && (
                     <circle
                       cx={`${xPercent}%`}
-                      cy={120 - Math.min((day.cost / 5) * 100, 100)} // scale up to 5 CZK
-                      r="4"
+                      cy={costY}
+                      r="3"
                       fill="var(--warning)"
                     />
                   )}
@@ -127,6 +156,25 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
               );
             })}
           </svg>
+
+          {/* Prázdný stav: bez jediného požadavku za celý týden zůstávaly
+              sloupce jen tichým řádkem šedých duchů bez vysvětlení. */}
+          {totalRequests === 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                Zatím žádná aktivita v tomto týdnu
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
@@ -149,15 +197,12 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
         </div>
 
         {totalFeatureRequests === 0 ? (
-          <div style={{
-            height: '140px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-muted)',
-            fontSize: '0.75rem',
-          }}>
-            Žádná aktivita
+          <div style={{ minHeight: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EmptyState
+              icon={<PieChart size={22} />}
+              title="Zatím žádná data"
+              description="Jakmile použijete některou z AI funkcí, uvidíte tu poměr spotřeby mezi moduly."
+            />
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', justifyContent: 'center', height: '100%' }}>

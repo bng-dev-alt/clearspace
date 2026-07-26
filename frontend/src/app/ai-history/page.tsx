@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/layout/Navbar';
+import { EmptyState } from '../../components/ui';
 import { aiHistoryService, AiHistoryRecord } from '../../services/ai/aiHistoryService';
 import { Clock, Sparkles, Folder, RotateCcw, AlertTriangle, Star, BarChart2, Eye, Download, Info, Check, Trash2, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -142,7 +143,7 @@ export default function AiHistoryPage() {
             backgroundColor: 'var(--success-soft)',
             color: 'var(--success)',
             padding: '1rem 1.5rem',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius)',
             marginBottom: '2rem',
             fontSize: '0.82rem',
             fontWeight: 600,
@@ -150,7 +151,7 @@ export default function AiHistoryPage() {
             alignItems: 'center',
             gap: '0.6rem',
             border: '1px solid var(--success)',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.08)'
+            boxShadow: 'var(--shadow-sm)'
           }}>
             <Check size={18} />
             {successMessage}
@@ -158,27 +159,12 @@ export default function AiHistoryPage() {
         )}
 
         {history.length === 0 ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '6rem 0',
-            border: '1px dashed var(--border-color)',
-            borderRadius: '12px',
-            backgroundColor: 'var(--surface)',
-            textAlign: 'center',
-            gap: '1rem'
-          }}>
-            <Clock size={40} style={{ color: 'var(--gray-text)' }} />
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dark-navy)', margin: '0 0 0.25rem 0' }}>
-                Žádné AI operace
-              </h3>
-              <p style={{ fontSize: '0.78rem', color: 'var(--gray-text)', margin: 0, maxWidth: '320px', lineHeight: '1.4' }}>
-                Historie je prázdná. Jakmile použijete jakoukoliv z AI funkcí k úpravě boardu, záznamy se objeví zde.
-              </p>
-            </div>
+          <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-card)', padding: '2rem 0' }}>
+            <EmptyState
+              icon={<Clock size={22} />}
+              title="Žádné AI operace"
+              description="Historie je prázdná. Jakmile použijete jakoukoliv z AI funkcí k úpravě boardu, záznamy se objeví zde."
+            />
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -216,7 +202,7 @@ export default function AiHistoryPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 5px rgba(0,0,0,0.02)'
+                  boxShadow: 'var(--shadow-sm)'
                 }}>
                   {getIcon(record.operationType)}
                 </div>
@@ -225,13 +211,13 @@ export default function AiHistoryPage() {
                 <div style={{
                   backgroundColor: 'var(--surface)',
                   border: '1px solid var(--border-color)',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-card)',
                   padding: '1.5rem',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '0.75rem',
-                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'var(--transition-base)',
                 }}
                 className="timeline-card"
                 >
@@ -279,13 +265,13 @@ export default function AiHistoryPage() {
                           background: 'var(--purple-secondary)',
                           color: '#ffffff',
                           border: 'none',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-button)',
                           padding: '0.4rem 0.85rem',
                           fontSize: '0.75rem',
                           fontWeight: 700,
                           cursor: 'pointer',
-                          boxShadow: '0 2px 4px var(--accent-soft)',
-                          transition: 'all 0.2s ease',
+                          boxShadow: 'var(--shadow-sm)',
+                          transition: 'var(--transition-base)',
                         }}
                         data-testid={`restore-btn-${record.id}`}
                         onMouseEnter={(e) => {
@@ -362,7 +348,7 @@ export default function AiHistoryPage() {
           <div
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: '460px', borderRadius: '12px', padding: '1.5rem' }}
+            style={{ width: '100%', maxWidth: '460px', padding: '1.5rem' }}
             role="dialog"
             aria-modal="true"
           >
@@ -407,7 +393,7 @@ export default function AiHistoryPage() {
       <style jsx global>{`
         .timeline-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 16px -2px rgba(3,33,71,0.03), 0 4px 6px -2px rgba(3,33,71,0.02) !important;
+          box-shadow: var(--shadow-md) !important;
         }
       `}</style>
     </div>

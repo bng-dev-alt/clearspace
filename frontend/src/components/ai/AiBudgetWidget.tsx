@@ -118,7 +118,7 @@ export default function AiBudgetWidget({ monthlyUsage, budgetLimit, onBudgetChan
                 fontWeight: 800,
                 color: 'var(--dark-navy)',
                 border: '1px solid var(--border-color)',
-                borderRadius: '6px',
+                borderRadius: 'var(--radius)',
                 padding: '0.2rem 0.4rem',
                 outline: 'none',
               }}
@@ -143,15 +143,15 @@ export default function AiBudgetWidget({ monthlyUsage, budgetLimit, onBudgetChan
         <div style={{
           height: '8px',
           width: '100%',
-          backgroundColor: 'rgba(0, 0, 0, 0.04)',
-          borderRadius: '9999px',
+          backgroundColor: 'var(--surface-3)',
+          borderRadius: 'var(--radius-full)',
           overflow: 'hidden',
         }}>
           <div style={{
             height: '100%',
             width: `${Math.min(percentUsed, 100)}%`,
             backgroundColor: barColor,
-            borderRadius: '9999px',
+            borderRadius: 'var(--radius-full)',
             transition: 'width 0.3s ease-in-out, background-color 0.3s',
           }} />
         </div>

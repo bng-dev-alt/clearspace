@@ -286,11 +286,17 @@ body {
   color: var(--accent-yellow);
 }
 
+/* Redesign Etapa 1 (DESIGN_PLAN.md): pill segmentovaný ovladač, stejný
+   tvarový jazyk jako .theme-toggle -- dřív osamocený, teď sdílený se
+   všemi ovládacími prvky navbaru. */
 .navbar-center {
   display: flex;
-  gap: 1.75rem;
-  height: 100%;
+  gap: 2px;
   align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
 }
 
 /* Dřív inline styl na elementu -- přesunuto sem beze změny hodnot,
@@ -303,35 +309,29 @@ body {
 }
 
 .nav-link {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--gray-text);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-secondary);
   cursor: pointer;
-  height: 100%;
+  height: 2rem;
+  padding: 0 0.9rem;
   display: flex;
   align-items: center;
-  position: relative;
-  transition: var(--spring-transition);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  transition: var(--transition-base);
 }
 
 .nav-link:hover {
-  color: var(--dark-navy);
+  color: var(--text);
 }
 
+/* Aktivní položka jako plná pilulka, ne podtržení -- stejný vzorec jako
+   .theme-toggle-btn.active. */
 .nav-link.active {
-  color: var(--dark-navy);
-  font-weight: 600;
-}
-
-.nav-link.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: 2px;
-  background-color: var(--accent);
+  color: var(--text);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Theme toggle (segmented control) */

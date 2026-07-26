@@ -45,7 +45,7 @@ function KanbanCard({
 
       {(card.tag || card.priority) && (
         <div className="card-badges-row">
-          {card.tag && <span className="card-tag">{card.tag}</span>}
+          {card.tag && <span className="cs-badge">{card.tag}</span>}
           {card.priority && (
             <span className="card-priority-badge">
               <span

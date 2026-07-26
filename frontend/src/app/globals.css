@@ -1060,20 +1060,23 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   align-items: stretch;
+  /* Redesign Etapa 4: sloupce oddělené mezerou, ne linkou (viz .column). */
+  gap: 0.75rem;
+  padding: 0.75rem;
 }
 
 .column {
   flex: 1;
   min-width: 260px;
   background-color: var(--bg-column); /* Light warm gray */
-  border-right: 1px solid var(--border-color); /* Column grid lines */
+  /* Redesign Etapa 4 (DESIGN_PLAN.md): dřív tvrdá 1px linka mezi sloupci
+     (viz .board-container gap níž), teď oddělení světlem/mezerou. Vlastní
+     radius, protože mezera odhalila vnitřní rohy, které dřív schovávala
+     jen overflow:hidden na .board-panel-card. */
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  transition: var(--spring-transition);
-}
-
-.column:last-child {
-  border-right: none;
+  transition: var(--transition-base);
 }
 
 .column.drag-over {
@@ -1232,31 +1235,50 @@ body {
   margin-top: 0.35rem;
 }
 
-/* Badges Row styled elegantly */
-.card-badges-row {
+/* Redesign Etapa 4 (DESIGN_PLAN.md): "badge soup" -- karta dřív skládala
+   čtyři ohraničené prvky (tag chip, priority chip, datum chip, avatary)
+   do dvou řádků. .card-badges-row/.card-priority-badge nahrazeny jedním
+   klidným textovým řádkem bez ohraničení (.card-meta-row); .card-due-date
+   ztratil svůj bordered chip, zůstal jen ikona + text -- bohatost nese
+   typografie a rozestup, ne skládání čipů. */
+.card-meta-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 0.4rem;
-  flex-wrap: wrap;
   margin-top: 0.15rem;
+  min-width: 0; /* umožní text-overflow na dlouhém štítku */
 }
 
-/* Redesign Etapa 2: .card-tag duplikoval .cs-badge skoro identickou
-   recepturou -- karta teď sdílí stejnou badge třídu jako zbytek aplikace. */
-
-.card-priority-badge {
-  font-size: 0.6rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--gray-text);
-  background-color: var(--surface);
-  border: 1px solid var(--border-color);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+.card-meta-tag {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.card-meta-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: var(--border-strong);
+  flex: none;
+}
+
+.card-meta-priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .priority-indicator-dot {
@@ -1264,6 +1286,7 @@ body {
   height: 4.5px;
   border-radius: 50%;
   display: inline-block;
+  flex: none;
 }
 
 /* Card Footer Detail Row */
@@ -1284,15 +1307,12 @@ body {
 }
 
 .card-due-date {
-  font-size: 0.65rem;
-  color: var(--gray-text);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  background-color: var(--surface-2);
-  border: 1px solid var(--border-color);
-  padding: 0.1rem 0.3rem;
-  border-radius: 4px;
+  gap: 0.3rem;
 }
 
 .calendar-icon {

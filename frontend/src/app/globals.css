@@ -24,6 +24,14 @@
      (media query by na inline hodnotu nedosáhla) -- viz breakpoint níž. */
   --auth-input-font: 0.85rem;
 
+  /* --- RGB trojice pro rgba() vrstvení (Etapa 3: hero "Materiál") ---
+     CSS neumí z hex tokenu vytáhnout komponenty, proto se drží zvlášť.
+     Hodnoty odpovídají --accent/--accent-yellow/--text výše. */
+  --accent-rgb: 11, 125, 87;
+  --accent-yellow-rgb: 217, 154, 11;
+  --text-rgb: 27, 27, 22;
+  --cream-rgb: 255, 253, 248;
+
   /* --- Surfaces ---
      Redesign (DESIGN_PLAN.md, Etapa 0): neutrální paleta oteplena z chladné
      modro-šedé na teplou kamennou/krémovou -- akcent i sémantické barvy
@@ -44,7 +52,6 @@
   --glass-border: rgba(255, 255, 255, 0.7);
   /* Hero: veil na straně textu + nálada fotky (light = vzdušná/světlá) */
   --hero-veil: var(--bg-page);
-  --hero-tint: rgba(255, 255, 255, 0.24);
   --hero-card-glass: rgba(255, 255, 255, 0.78);
 
   /* --- Borders --- */
@@ -177,6 +184,11 @@
   --warning: #fbbf24;  --warning-soft: rgba(251, 191, 36, 0.14);
   --danger: #f87171;   --danger-soft: rgba(248, 113, 113, 0.14);
 
+  --accent-rgb: 52, 201, 138;
+  --accent-yellow-rgb: 251, 191, 36;
+  --text-rgb: 232, 242, 244;
+  --cream-rgb: 232, 242, 244;
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.46);
   --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.56);
@@ -186,7 +198,6 @@
   --glass-blur: blur(10px) saturate(1.1);
   --glass-border: rgba(255, 255, 255, 0.06);
   --hero-veil: var(--bg-page);
-  --hero-tint: rgba(6, 26, 34, 0.54);
   --hero-card-glass: rgba(12, 36, 46, 0.55);
 }
 
@@ -403,23 +414,32 @@ body {
   overflow: hidden;
 }
 
-/* Aerial-ocean background: artwork on the right, veiled toward the text side */
+/* Redesign Etapa 3 (DESIGN_PLAN.md): "Materiál" nahrazuje opakovanou
+   leteckou fotku pláže (dřív identická na Dashboardu, Boardu i Týmu, což
+   z atmosféry dělalo tapetu). Čisté CSS -- žádný obrázkový asset, žádné
+   licenční riziko, stejně dobře funguje v obou motivech. Vybráno ze tří
+   konceptů (viz DESIGN_PLAN.md), tenhle byl zvolený kvůli fotografické
+   hloubce bez skutečné fotky. */
 .app-hero::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  /* Vrstvy (odshora): veil na straně textu -> veil nahoře/dole -> nálada motivu (tint)
-     -> letecká fotka (hero-ocean.jpg) -> fallback SVG, pokud fotka ještě není v public/. */
+  /* Vrstvy (odshora): veil na straně textu -> veil nahoře/dole -> jemné
+     zrno -> tři organické skvrny (emerald, jantar, krémový highlight)
+     -> jemná tkaná textura -> podkladová barva stránky (poslední vrstva
+     v background-image stacku je "nejníž", proto nemá vlastní obrázek --
+     dodává ji --bg-page na .app-hero). */
   background-image:
     linear-gradient(to right, var(--hero-veil) 0%, var(--hero-veil) 18%, rgba(0, 0, 0, 0) 58%),
     linear-gradient(to bottom, var(--hero-veil) 0%, rgba(0, 0, 0, 0) 20%, rgba(0, 0, 0, 0) 80%, var(--hero-veil) 100%),
-    linear-gradient(var(--hero-tint), var(--hero-tint)),
-    url('/hero-ocean.jpg'),
-    url('/hero-ocean.svg');
-  background-size: cover, cover, cover, cover, cover;
-  background-position: center, center, center, right center, right center;
-  background-repeat: no-repeat;
+    radial-gradient(circle, rgba(var(--text-rgb), 0.45) 1px, transparent 1px),
+    radial-gradient(ellipse 42% 65% at 18% 28%, rgba(var(--accent-rgb), 0.20), transparent 60%),
+    radial-gradient(ellipse 38% 52% at 82% 78%, rgba(var(--accent-yellow-rgb), 0.16), transparent 62%),
+    radial-gradient(ellipse 60% 70% at 45% 105%, rgba(var(--cream-rgb), 0.5), transparent 70%),
+    repeating-linear-gradient(115deg, rgba(var(--text-rgb), 0.05) 0px, rgba(var(--text-rgb), 0.05) 1px, transparent 1px, transparent 4px);
+  background-size: cover, cover, 3px 3px, cover, cover, cover, cover;
+  background-repeat: no-repeat, no-repeat, repeat, no-repeat, no-repeat, no-repeat, no-repeat;
   pointer-events: none;
 }
 
@@ -1354,6 +1374,30 @@ body {
 
 .column-add-card-btn:active {
   transform: scale(0.97);
+}
+
+/* Redesign Etapa 3 (DESIGN_PLAN.md): dlaždice projektu na Dashboardu dřív
+   sdílely .card s kanban kartou -- zdědily tak cursor:grab na hoveru a
+   .dragging stav, které tu nikdy nenastanou (dlaždice nejde přetahovat).
+   Vlastní, klidnější třída bez těchto kanban-specifických stavů. */
+.project-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 2rem 1.75rem;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  justify-content: space-between;
+  transition: var(--transition-base);
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
 }
 
 /* Modal Styling in clearspace. warm off-white */

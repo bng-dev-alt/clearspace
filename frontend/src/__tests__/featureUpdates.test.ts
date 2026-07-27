@@ -20,6 +20,12 @@ describe('Feature Updates Integration Tests', () => {
       expect(inv.token).toHaveLength(32);
     });
 
+    it('accepts an invitation token in demo mode without Supabase configured', async () => {
+      const res = await collaborationService.acceptInvitationToken('any-token', 'Jan Novák', 'heslo123');
+      expect(res.success).toBe(true);
+      expect(res.projectId).toBeDefined();
+    });
+
     it('logs project activity events correctly', async () => {
       const log = await collaborationService.logActivity({
         projectId: 'proj-1',

@@ -283,13 +283,13 @@ export const kanbanService = {
     }
 
     try {
-      let query = supabase.from('projects').select('*');
-
-      if (userId) {
-        query = query.eq('user_id', userId);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
+      // Žádný ruční filtr na user_id -- RLS (is_project_member, viz
+      // supabase_schema.sql sekce 16) sama vrátí sjednocení vlastních
+      // i sdílených projektů, na které má uživatel pozvánkou členství.
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 

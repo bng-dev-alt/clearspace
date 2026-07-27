@@ -326,35 +326,54 @@ CREATE POLICY "Users can manage assignees of their projects"
         )
     );
 
--- 13. Project Invitations (Team Collaboration v1.2)
+-- 13. Workspace Invitations (Team Collaboration v1.3)
+-- Refactored from project-level to workspace-level (v1.2 had project_id).
+-- Idempotent: drop old column, add new one. Works safely on repeated runs.
 CREATE TABLE IF NOT EXISTS public.invitations (
     id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+    workspace_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     email TEXT NOT NULL,
     token TEXT UNIQUE NOT NULL,
     role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'expired')),
     invited_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    accepted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_invitations_project ON public.invitations(project_id);
+-- Migrate old project_id schema to workspace_id (v1.2 → v1.3).
+-- Idempotent: only runs if the column exists.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'invitations' AND column_name = 'project_id'
+    ) THEN
+        -- Backfill workspace_id from projects.user_id for existing rows.
+        UPDATE public.invitations inv
+        SET workspace_id = p.user_id
+        FROM public.projects p
+        WHERE inv.project_id = p.id AND inv.workspace_id IS NULL;
+
+        -- Drop the old column.
+        ALTER TABLE public.invitations DROP COLUMN project_id;
+    END IF;
+END $$;
+
+DROP INDEX IF EXISTS idx_invitations_project;
+CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON public.invitations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON public.invitations(email);
 
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view invitations for their email or projects" ON public.invitations;
-CREATE POLICY "Users can view invitations for their email or projects"
+CREATE POLICY "Users can view invitations for their email or workspace"
     ON public.invitations FOR SELECT
     USING (
         auth.jwt() ->> 'email' = email
-        OR EXISTS (
-            SELECT 1 FROM public.projects
-            WHERE public.projects.id = public.invitations.project_id
-            AND public.projects.user_id = auth.uid()
-        )
+        OR public.invitations.workspace_id = auth.uid()
     );
 
 DROP POLICY IF EXISTS "Project owners can manage invitations" ON public.invitations;
@@ -465,4 +484,253 @@ BEGIN
         ON CONFLICT (card_id, member_id) DO NOTHING;
     END LOOP;
 END $$;
+
+-- ============================================================
+-- 16. Membership-aware RLS + Invitation Accept (Team Collaboration v1.3)
+-- RLS was owner-only everywhere (see 58_collaboration_analysis_and_plan.md,
+-- part 2.1). This section widens read/write access to project members
+-- (via project_members -> workspace_members.profile_id) while keeping
+-- project deletion/archiving and member/invitation management owner-only.
+-- Placed at the end of the file (not inline with each table's original
+-- section) because the helper functions below depend on project_members
+-- and workspace_members, which are declared later in the file than the
+-- earliest policies they need to widen (projects, columns, cards).
+-- DROP POLICY + CREATE POLICY is idempotent, so this section supersedes
+-- the earlier, narrower policy definitions on every re-run.
+-- ============================================================
+
+-- Is the current user the owner of this project?
+CREATE OR REPLACE FUNCTION public.is_project_owner(p_project_id TEXT)
+RETURNS boolean AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.projects
+        WHERE public.projects.id = p_project_id
+        AND public.projects.user_id = auth.uid()
+    );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- Is the current user the owner OR an invited member of this project?
+-- SECURITY DEFINER so this bypasses RLS on project_members/workspace_members
+-- internally -- calling it FROM a policy on those same tables would
+-- otherwise recurse into their own RLS checks.
+CREATE OR REPLACE FUNCTION public.is_project_member(p_project_id TEXT)
+RETURNS boolean AS $$
+    SELECT public.is_project_owner(p_project_id)
+    OR EXISTS (
+        SELECT 1 FROM public.project_members pm
+        JOIN public.workspace_members wm ON wm.id = pm.member_id
+        WHERE pm.project_id = p_project_id
+        AND wm.profile_id = auth.uid()
+    );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- Can the current user see this workspace's contact list? True for the
+-- workspace owner, and for anyone who collaborates on at least one of
+-- that owner's projects (needed so an invited member can resolve/assign
+-- teammates on a shared board).
+CREATE OR REPLACE FUNCTION public.can_view_workspace(p_owner_id UUID)
+RETURNS boolean AS $$
+    SELECT p_owner_id = auth.uid()
+    OR EXISTS (
+        SELECT 1 FROM public.project_members pm
+        JOIN public.projects p ON p.id = pm.project_id
+        JOIN public.workspace_members me ON me.id = pm.member_id
+        WHERE p.user_id = p_owner_id
+        AND me.profile_id = auth.uid()
+    );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- Projects: members can read (not just the owner). Insert/update/delete
+-- stay owner-only (untouched) -- archiving/deleting is an owner action.
+DROP POLICY IF EXISTS "Users can view their own projects" ON public.projects;
+CREATE POLICY "Users can view their own projects"
+    ON public.projects FOR SELECT
+    USING (public.is_project_member(id));
+
+-- Columns: members can fully collaborate (create/rename/reorder/delete).
+DROP POLICY IF EXISTS "Users can view columns of their projects" ON public.columns;
+CREATE POLICY "Users can view columns of their projects"
+    ON public.columns FOR SELECT
+    USING (public.is_project_member(public.columns.project_id));
+
+DROP POLICY IF EXISTS "Users can manage columns of their projects" ON public.columns;
+CREATE POLICY "Users can manage columns of their projects"
+    ON public.columns FOR ALL
+    USING (public.is_project_member(public.columns.project_id));
+
+-- Cards: members can fully collaborate.
+DROP POLICY IF EXISTS "Users can view cards of their projects" ON public.cards;
+CREATE POLICY "Users can view cards of their projects"
+    ON public.cards FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.columns
+            WHERE public.columns.id = public.cards.column_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can manage cards of their projects" ON public.cards;
+CREATE POLICY "Users can manage cards of their projects"
+    ON public.cards FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.columns
+            WHERE public.columns.id = public.cards.column_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+-- Checklists / comments / activities / resources: same member-collaborate rule.
+DROP POLICY IF EXISTS "Users can manage checklists of their projects" ON public.task_checklists;
+CREATE POLICY "Users can manage checklists of their projects"
+    ON public.task_checklists FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.cards
+            JOIN public.columns ON public.columns.id = public.cards.column_id
+            WHERE public.cards.id = public.task_checklists.card_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can manage comments of their projects" ON public.task_comments;
+CREATE POLICY "Users can manage comments of their projects"
+    ON public.task_comments FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.cards
+            JOIN public.columns ON public.columns.id = public.cards.column_id
+            WHERE public.cards.id = public.task_comments.card_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can manage activities of their projects" ON public.task_activities;
+CREATE POLICY "Users can manage activities of their projects"
+    ON public.task_activities FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.cards
+            JOIN public.columns ON public.columns.id = public.cards.column_id
+            WHERE public.cards.id = public.task_activities.card_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can manage task resources of their projects" ON public.task_resources;
+CREATE POLICY "Users can manage task resources of their projects"
+    ON public.task_resources FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.cards
+            JOIN public.columns ON public.columns.id = public.cards.column_id
+            WHERE public.cards.id = public.task_resources.task_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can manage assignees of their projects" ON public.card_assignees;
+CREATE POLICY "Users can manage assignees of their projects"
+    ON public.card_assignees FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.cards
+            JOIN public.columns ON public.columns.id = public.cards.column_id
+            WHERE public.cards.id = public.card_assignees.card_id
+            AND public.is_project_member(public.columns.project_id)
+        )
+    );
+
+-- Activity logs: members can read and log activity, not just the owner.
+DROP POLICY IF EXISTS "Users can view activity logs of their projects" ON public.activity_logs;
+CREATE POLICY "Users can view activity logs of their projects"
+    ON public.activity_logs FOR SELECT
+    USING (public.is_project_member(public.activity_logs.project_id));
+
+DROP POLICY IF EXISTS "Users can insert activity logs for their projects" ON public.activity_logs;
+CREATE POLICY "Users can insert activity logs for their projects"
+    ON public.activity_logs FOR INSERT
+    WITH CHECK (public.is_project_member(public.activity_logs.project_id));
+
+-- Project members: a plain member may SEE the roster (needed for the
+-- members list / assignee picker); adding, changing role, or removing
+-- members stays owner-only via the original "manage" policy from
+-- section 10 (multiple permissive SELECT policies are OR'd together).
+DROP POLICY IF EXISTS "Members can view the roster of their projects" ON public.project_members;
+CREATE POLICY "Members can view the roster of their projects"
+    ON public.project_members FOR SELECT
+    USING (public.is_project_member(public.project_members.project_id));
+
+-- Workspace members: a collaborator may see the contact list of any
+-- workspace they've been invited into (to resolve/assign teammates),
+-- in addition to the owner managing their own list (section 9).
+DROP POLICY IF EXISTS "Collaborators can view workspaces they belong to" ON public.workspace_members;
+CREATE POLICY "Collaborators can view workspaces they belong to"
+    ON public.workspace_members FOR SELECT
+    USING (public.can_view_workspace(public.workspace_members.owner_id));
+
+-- Invitations: track when a pending invite was accepted.
+ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;
+
+-- Atomically accept a workspace invitation: validates the token, links the
+-- calling (just-signed-up) account to the workspace by creating a
+-- workspace_members row, and marks the invitation accepted -- all in one
+-- transaction. SECURITY DEFINER so it can write to the inviting owner's
+-- workspace_members, which the calling user otherwise can't touch (via RLS).
+-- Returns the workspace_id (owner_id) for confirmation.
+CREATE OR REPLACE FUNCTION public.accept_workspace_invitation(p_token TEXT, p_display_name TEXT)
+RETURNS UUID AS $$
+DECLARE
+    v_inv RECORD;
+    v_uid UUID;
+    v_email TEXT;
+    v_owner_id UUID;
+    v_member_id TEXT;
+    v_initials TEXT;
+BEGIN
+    v_uid := auth.uid();
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'Musíte být přihlášeni.';
+    END IF;
+
+    v_email := auth.jwt() ->> 'email';
+
+    SELECT * INTO v_inv FROM public.invitations WHERE token = p_token FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Pozvánka neexistuje.';
+    END IF;
+    IF v_inv.status <> 'pending' THEN
+        RAISE EXCEPTION 'Pozvánka již byla použita nebo zrušena.';
+    END IF;
+    IF v_inv.expires_at < now() THEN
+        UPDATE public.invitations SET status = 'expired' WHERE id = v_inv.id;
+        RAISE EXCEPTION 'Platnost pozvánky vypršela.';
+    END IF;
+    IF v_email IS NULL OR lower(v_inv.email) <> lower(v_email) THEN
+        RAISE EXCEPTION 'Pozvánka byla vystavena na jiný e-mail.';
+    END IF;
+
+    v_owner_id := v_inv.workspace_id;
+
+    SELECT id INTO v_member_id FROM public.workspace_members
+    WHERE owner_id = v_owner_id AND profile_id = v_uid;
+
+    IF v_member_id IS NULL THEN
+        v_member_id := 'member-' || replace(v_uid::text, '-', '') || '-' || substr(md5(random()::text), 1, 6);
+        v_initials := upper(left(coalesce(NULLIF(trim(p_display_name), ''), v_email, 'U'), 1));
+
+        INSERT INTO public.workspace_members (id, owner_id, profile_id, full_name, initials, avatar_color, email, workspace_role)
+        VALUES (v_member_id, v_owner_id, v_uid, coalesce(NULLIF(trim(p_display_name), ''), v_email), v_initials, '#209dd7', v_email, 'member');
+    END IF;
+
+    UPDATE public.invitations
+    SET status = 'accepted', accepted_at = now()
+    WHERE id = v_inv.id;
+
+    RETURN v_owner_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.accept_workspace_invitation(TEXT, TEXT) TO authenticated;
 

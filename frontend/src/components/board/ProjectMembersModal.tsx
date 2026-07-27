@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Check, Search, Settings2, Users, UserSearch } from 'lucide-react';
+import { X, Search, Settings2, Users, UserSearch, Check } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
 import { Button, EmptyState } from '../ui';
 

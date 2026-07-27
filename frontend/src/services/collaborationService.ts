@@ -15,10 +15,11 @@ export const collaborationService = {
   },
 
   /**
-   * Create an invitation for a project
+   * Create a workspace-level invitation (Team Collaboration v1.3).
+   * Invites a person to join the entire workspace by email, not a specific project.
    */
-  async createInvitation(
-    projectId: string,
+  async createWorkspaceInvitation(
+    workspaceOwnerId: string,
     email: string,
     role: 'owner' | 'member' = 'member',
     invitedBy?: string
@@ -32,7 +33,7 @@ export const collaborationService = {
         .from('invitations')
         .insert({
           id,
-          project_id: projectId,
+          workspace_id: workspaceOwnerId,
           email: email.toLowerCase().trim(),
           token,
           role,
@@ -46,7 +47,7 @@ export const collaborationService = {
       if (error) throw error;
       return {
         id: data.id,
-        projectId: data.project_id,
+        projectId: data.workspace_id, // Map workspace_id → projectId for now (UI uses projectId field)
         email: data.email,
         token: data.token,
         role: data.role,
@@ -60,7 +61,7 @@ export const collaborationService = {
     // Fallback for offline / dev mock
     const mockInv: ProjectInvitation = {
       id,
-      projectId,
+      projectId: workspaceOwnerId,
       email: email.toLowerCase().trim(),
       token,
       role,
@@ -73,20 +74,20 @@ export const collaborationService = {
   },
 
   /**
-   * Fetch pending invitations for a project
+   * Fetch pending workspace invitations for a workspace owner (Team Collaboration v1.3).
    */
-  async fetchProjectInvitations(projectId: string): Promise<ProjectInvitation[]> {
+  async fetchWorkspaceInvitations(workspaceOwnerId: string): Promise<ProjectInvitation[]> {
     if (hasSupabaseConfig && supabase) {
       const { data, error } = await supabase
         .from('invitations')
         .select('*')
-        .eq('project_id', projectId)
+        .eq('workspace_id', workspaceOwnerId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return (data || []).map((row) => ({
         id: row.id,
-        projectId: row.project_id,
+        projectId: row.workspace_id,
         email: row.email,
         token: row.token,
         role: row.role,
@@ -97,6 +98,30 @@ export const collaborationService = {
       }));
     }
     return [];
+  },
+
+  /**
+   * DEPRECATED: Fetch pending invitations for a project (v1.2 project-level).
+   * Use fetchWorkspaceInvitations for workspace-level (v1.3).
+   */
+  async fetchProjectInvitations(_projectId: string): Promise<ProjectInvitation[]> {
+    // No-op stub for backward compatibility; workspace-level invites don't filter by project.
+    return [];
+  },
+
+  /**
+   * DEPRECATED: Create an invitation for a specific project (v1.2).
+   * Use createWorkspaceInvitation for workspace-level (v1.3).
+   */
+  async createInvitation(
+    _projectId: string,
+    email: string,
+    role: 'owner' | 'member' = 'member',
+    invitedBy?: string
+  ): Promise<ProjectInvitation> {
+    // Stub for backward compatibility; projects no longer have direct invites.
+    // projectId is ignored; we use it as the workspaceOwnerId instead for stub purposes.
+    return this.createWorkspaceInvitation(_projectId, email, role, invitedBy);
   },
 
   /**
@@ -288,33 +313,62 @@ export const collaborationService = {
   },
 
   /**
-   * Accept an invitation token and register new member.
-   *
-   * POZOR (nedokončeno): zatím se pozvánka pouze označí jako přijatá.
-   * Vytvoření účtu a napojení člena na projekt vyžaduje service_role klíč
-   * na serveru -- proto jsou `displayName` a `password` prozatím nevyužité.
-   * Tvar API je ale záměrně finální, aby se volající kód nemusel měnit.
+   * Accept an invitation token (Team Collaboration v1.3): workspace-level.
+   * Creates the invited person's Supabase Auth account (signup, using the
+   * email the invitation was issued to), then atomically adds them to the
+   * workspace via the `accept_workspace_invitation` RPC. The RPC is SECURITY
+   * DEFINER so it can write to the inviting owner's workspace_members,
+   * which the newly-signed-up account otherwise can't access via RLS.
    */
-  async acceptInvitationToken(token: string, _displayName: string, _password?: string): Promise<{ success: boolean; projectId?: string }> {
+  async acceptInvitationToken(token: string, displayName: string, password: string): Promise<{ success: boolean; projectId?: string }> {
     if (hasSupabaseConfig && supabase) {
-      const { data: inv, error } = await supabase
+      const { data: inv, error: fetchError } = await supabase
         .from('invitations')
         .select('*')
         .eq('token', token)
         .single();
 
-      if (error || !inv) {
+      if (fetchError || !inv) {
         throw new Error('Pozvánka neexistuje nebo vypršela její platnost.');
       }
+      if (inv.status !== 'pending') {
+        throw new Error('Tato pozvánka už byla použita nebo zrušena.');
+      }
+      if (new Date(inv.expires_at) < new Date()) {
+        await supabase.from('invitations').update({ status: 'expired' }).eq('id', inv.id);
+        throw new Error('Platnost pozvánky vypršela. Požádejte vlastníka workspace o novou.');
+      }
 
-      await supabase
-        .from('invitations')
-        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-        .eq('id', inv.id);
+      // Pokud je uživatel už přihlášený (měl účet, dostal chybu "already",
+      // přihlásil se a vrátil se na odkaz), signup znovu nezkoušíme.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: inv.email,
+          password,
+          options: { data: { display_name: displayName } },
+        });
 
-      return { success: true, projectId: inv.project_id };
+        if (signUpError) {
+          if (signUpError.message?.toLowerCase().includes('already')) {
+            throw new Error('Tento e-mail už má založený účet ClearSpace. Přihlaste se prosím a pozvánku otevřete znovu.');
+          }
+          throw new Error(signUpError.message || 'Registraci se nepodařilo dokončit.');
+        }
+      }
+
+      const { data: workspaceId, error: acceptError } = await supabase.rpc('accept_workspace_invitation', {
+        p_token: token,
+        p_display_name: displayName,
+      });
+
+      if (acceptError) {
+        throw new Error(acceptError.message || 'Pozvánku se nepodařilo přijmout.');
+      }
+
+      return { success: true, projectId: workspaceId as string };
     }
 
-    return { success: true, projectId: 'demo-project' };
+    return { success: true, projectId: 'demo-workspace' };
   },
 };

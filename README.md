@@ -4,7 +4,7 @@ A calm, premium **AI workspace** for the work that moves your team forward — a
 
 > **Portfolio note.** This project was built by *directing an AI coding agent across ~29 documented releases*. My role was the engineering lead and product owner: architecture, auditing, QA, and the product decisions — not typing every line. The story of how it was built is as much the point as the product itself → see **[STORY.md](STORY.md)**.
 
-**Live demo:** _add your deploy URL here_ · **Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) · [STORY.md](STORY.md) · per-release notes in [`21`–`29_*_review.md`](.)
+**Live demo:** https://clearspace-ai.vercel.app/ · **Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) · [STORY.md](STORY.md) · per-release notes in [`21`–`29_*_review.md`](.)
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info } from 'lucide-react';
+import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History } from 'lucide-react';
 import { Column, TeamMember } from '../../types/kanban';
 import TagDropdown from './TagDropdown';
 
@@ -35,6 +35,7 @@ interface ToolbarProps {
   onToggleHero: () => void;
   teamMembers: TeamMember[];
   onManageTeam: () => void;
+  onOpenActivityFeed: () => void;
 }
 
 export default function Toolbar({
@@ -56,6 +57,7 @@ export default function Toolbar({
   onToggleHero,
   teamMembers,
   onManageTeam,
+  onOpenActivityFeed,
 }: ToolbarProps) {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -265,6 +267,34 @@ export default function Toolbar({
             data-testid="toolbar-toggle-hero-btn"
           >
             <Info size={18} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenActivityFeed}
+            className="toolbar-settings-btn"
+            title="Aktivita projektu"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: 'none',
+              background: 'none',
+              padding: '6px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              color: 'var(--gray-text)',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--dark-navy)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--gray-text)';
+            }}
+            data-testid="activity-feed-btn"
+          >
+            <History size={18} />
           </button>
 
           {/* Jeden inteligentní vstupní bod místo seznamu AI tlačítek.

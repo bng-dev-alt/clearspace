@@ -22,6 +22,7 @@ const AiProjectManagerModal = dynamic(() => import('../../../components/board/Ai
 const AiDailyBriefModal = dynamic(() => import('../../../components/board/AiDailyBriefModal'), { ssr: false });
 const AiCapacityPlannerModal = dynamic(() => import('../../../components/board/AiCapacityPlannerModal'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('../../../components/search/GlobalSearchModal'), { ssr: false });
+const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
 const AiVoiceCopilotBar = dynamic(() => import('../../../components/ai/AiVoiceCopilotBar'), { ssr: false });
 
 import { useKanbanBoard } from '../../../hooks/useKanbanBoard';
@@ -121,6 +122,7 @@ export default function ProjectBoardPage() {
   const [isDailyBriefOpen, setIsDailyBriefOpen] = useState(false);
   const [isCapacityPlannerOpen, setIsCapacityPlannerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isActivityFeedOpen, setIsActivityFeedOpen] = useState(false);
   const [isVoiceCopilotOpen, setIsVoiceCopilotOpen] = useState(false);
 
   // Global Keyboard shortcut listeners (Cmd+K for search, Cmd+Shift+V for Voice Copilot)
@@ -508,6 +510,7 @@ export default function ProjectBoardPage() {
         }}
         teamMembers={teamMembers}
         onManageTeam={() => setIsProjectMembersModalOpen(true)}
+        onOpenActivityFeed={() => setIsActivityFeedOpen(true)}
       />
 
       {(error || syncError) && (
@@ -874,6 +877,14 @@ export default function ProjectBoardPage() {
           projectMemberIds={teamMembers.map((m) => m.id)}
           onChangeMembers={setProjectMembers}
           onManageWorkspace={() => router.push('/team')}
+        />
+      )}
+
+      {isActivityFeedOpen && (
+        <ActivityFeedDrawer
+          isOpen={isActivityFeedOpen}
+          onClose={() => setIsActivityFeedOpen(false)}
+          projectId={projectId}
         />
       )}
 

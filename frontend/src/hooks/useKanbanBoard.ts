@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember } from '../types/kanban';
 import { kanbanService } from '../services/kanbanService';
+import { collaborationService } from '../services/collaborationService';
 import { workspaceService, ownerMemberFromProfile } from '../services/workspaceService';
 import { persistenceStatus } from '../services/persistence';
 import { toPrimaryAssignee, legacyAssigneeToMember, resolveBoardAssignees } from '../utils/assignees';
@@ -119,6 +120,25 @@ export function useKanbanBoard(projectId?: string) {
     };
   }, [activeProjectId, userId, profile]);
 
+  // Zápis do projektového activity feedu (Team Collaboration v1.3, Fáze 5).
+  // Fire-and-forget: chyba se nesmí propsat uživateli ani zpomalit hlavní
+  // operaci -- collaborationService.logActivity() už sama chybu jen logguje.
+  const logProjectActivity = useCallback((
+    actionType: string,
+    entityType: 'task' | 'column' | 'project' | 'member',
+    details?: Record<string, unknown>,
+    cardId?: string
+  ) => {
+    collaborationService.logActivity({
+      projectId: activeProjectId,
+      cardId,
+      actorName: profile?.display_name || user?.email || 'Uživatel',
+      actionType,
+      entityType,
+      details,
+    }).catch(() => {});
+  }, [activeProjectId, profile?.display_name, user?.email]);
+
   const addCard = useCallback((
     columnId: string,
     title: string,
@@ -163,8 +183,9 @@ export function useKanbanBoard(projectId?: string) {
 
     // Asynchronní uložení do databáze (s kontextem projektu)
     kanbanService.createCard(columnId, newCard, finalPosition, activeProjectId);
+    logProjectActivity('card_created', 'task', { title }, newCard.id);
     return newCard;
-  }, [activeProjectId, teamMembers]);
+  }, [activeProjectId, teamMembers, logProjectActivity]);
 
   const addActivity = useCallback((columnId: string, cardId: string, text: string) => {
     const newActivity: ActivityLog = {
@@ -427,6 +448,8 @@ export function useKanbanBoard(projectId?: string) {
   }, [addActivity]);
 
   const deleteCard = useCallback((columnId: string, cardId: string) => {
+    const cardTitle = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.title;
+
     // Optimistická aktualizace - označení jako archivovaný
     setColumns((prev) =>
       prev.map((col) => {
@@ -443,10 +466,14 @@ export function useKanbanBoard(projectId?: string) {
     // Asynchronní archivace v databázi/lokálně
     kanbanService.archiveCard(cardId, true);
     addActivity(columnId, cardId, 'Úkol byl archivován');
-  }, [addActivity]);
+    logProjectActivity('card_archived', 'task', { title: cardTitle }, cardId);
+  }, [addActivity, columns, logProjectActivity]);
 
   const moveCard = useCallback((cardId: string, sourceColumnId: string, destinationColumnId: string) => {
     if (sourceColumnId === destinationColumnId) return;
+
+    const sourceColName = columns.find((c) => c.id === sourceColumnId)?.name;
+    const destColName = columns.find((c) => c.id === destinationColumnId)?.name;
 
     let targetCard: Card | null = null;
     let finalPosition = 0;
@@ -474,8 +501,13 @@ export function useKanbanBoard(projectId?: string) {
     // Asynchronní přesun v databázi
     if (targetCard) {
       kanbanService.moveCard(cardId, sourceColumnId, destinationColumnId, finalPosition, activeProjectId);
+      logProjectActivity('card_moved', 'task', {
+        title: (targetCard as Card).title,
+        from: sourceColName,
+        to: destColName,
+      }, cardId);
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, columns, logProjectActivity]);
 
   const renameColumn = useCallback((columnId: string, newName: string) => {
     // Optimistická aktualizace lokálního stavu
@@ -492,11 +524,12 @@ export function useKanbanBoard(projectId?: string) {
     try {
       const newCol = await kanbanService.createColumn(activeProjectId, name, position);
       setColumns((prev) => [...prev, newCol]);
+      logProjectActivity('column_created', 'column', { name });
     } catch (err) {
       // Selhání je uživateli nahlášeno přes persistenceStatus (syncError)
       console.error('Failed to add column:', err);
     }
-  }, [activeProjectId, columns.length]);
+  }, [activeProjectId, columns.length, logProjectActivity]);
 
   const deleteColumn = useCallback(async (columnId: string, transferColumnId?: string) => {
     const colToDelete = columns.find((c) => c.id === columnId);
@@ -533,7 +566,8 @@ export function useKanbanBoard(projectId?: string) {
       }
       return updated;
     });
-  }, [activeProjectId, columns]);
+    logProjectActivity('column_deleted', 'column', { name: colToDelete.name });
+  }, [activeProjectId, columns, logProjectActivity]);
 
   const moveColumn = useCallback(async (columnId: string, direction: 'left' | 'right') => {
     const index = columns.findIndex((c) => c.id === columnId);
@@ -786,14 +820,20 @@ export function useKanbanBoard(projectId?: string) {
   // --- Členství projektu (výběr z workspace) ---
 
   const setProjectMembers = useCallback(async (memberIds: string[]) => {
+    const prevIds = teamMembers.map((m) => m.id);
     const nextMembers = workspaceMembers.filter((m) => memberIds.includes(m.id));
+    const added = nextMembers.filter((m) => !prevIds.includes(m.id));
+    const removed = teamMembers.filter((m) => !memberIds.includes(m.id));
+
     setTeamMembers(nextMembers);
     // Karty resolvuj proti nové množině členů projektu (odebraní zmizí z úkolů)
     setColumns((prevCols) => resolveBoardAssignees(prevCols, nextMembers));
     await kanbanService.setProjectMembers(activeProjectId, memberIds).catch((err) => {
       console.error('Failed to save project members:', err);
     });
-  }, [activeProjectId, workspaceMembers]);
+    added.forEach((m) => logProjectActivity('member_added', 'member', { name: m.fullName }));
+    removed.forEach((m) => logProjectActivity('member_removed', 'member', { name: m.fullName }));
+  }, [activeProjectId, workspaceMembers, teamMembers, logProjectActivity]);
 
   return {
     columns,

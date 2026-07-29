@@ -348,6 +348,14 @@ CREATE TABLE IF NOT EXISTS public.invitations (
 ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;
 
+ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
+
+-- Old (v1.2) policies reference project_id -- must be dropped BEFORE the
+-- migration below tries to drop that column, or Postgres refuses (column
+-- still depended on by these policy definitions).
+DROP POLICY IF EXISTS "Users can view invitations for their email or projects" ON public.invitations;
+DROP POLICY IF EXISTS "Project owners can manage invitations" ON public.invitations;
+
 -- Migrate old project_id schema to workspace_id (v1.2 → v1.3).
 -- Idempotent: only runs if the column exists.
 DO $$
@@ -372,9 +380,7 @@ CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON public.invitations(works
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON public.invitations(email);
 
-ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Users can view invitations for their email or projects" ON public.invitations;
+DROP POLICY IF EXISTS "Users can view invitations for their email or workspace" ON public.invitations;
 CREATE POLICY "Users can view invitations for their email or workspace"
     ON public.invitations FOR SELECT
     USING (
@@ -382,16 +388,10 @@ CREATE POLICY "Users can view invitations for their email or workspace"
         OR public.invitations.workspace_id = auth.uid()
     );
 
-DROP POLICY IF EXISTS "Project owners can manage invitations" ON public.invitations;
-CREATE POLICY "Project owners can manage invitations"
+DROP POLICY IF EXISTS "Workspace owners can manage invitations" ON public.invitations;
+CREATE POLICY "Workspace owners can manage invitations"
     ON public.invitations FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.projects
-            WHERE public.projects.id = public.invitations.project_id
-            AND public.projects.user_id = auth.uid()
-        )
-    );
+    USING (public.invitations.workspace_id = auth.uid());
 
 -- 14. Activity Logs (Team Collaboration v1.2)
 CREATE TABLE IF NOT EXISTS public.activity_logs (

@@ -331,7 +331,7 @@ CREATE POLICY "Users can manage assignees of their projects"
 -- Idempotent: drop old column, add new one. Works safely on repeated runs.
 CREATE TABLE IF NOT EXISTS public.invitations (
     id TEXT PRIMARY KEY,
-    workspace_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    workspace_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
     token TEXT UNIQUE NOT NULL,
     role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
@@ -341,6 +341,12 @@ CREATE TABLE IF NOT EXISTS public.invitations (
     accepted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- CREATE TABLE IF NOT EXISTS is a no-op when the table already exists from
+-- an earlier release (v1.2 had project_id/no workspace_id/no accepted_at) --
+-- these columns must be added explicitly, not just declared above.
+ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;
 
 -- Migrate old project_id schema to workspace_id (v1.2 → v1.3).
 -- Idempotent: only runs if the column exists.
@@ -669,9 +675,6 @@ DROP POLICY IF EXISTS "Collaborators can view workspaces they belong to" ON publ
 CREATE POLICY "Collaborators can view workspaces they belong to"
     ON public.workspace_members FOR SELECT
     USING (public.can_view_workspace(public.workspace_members.owner_id));
-
--- Invitations: track when a pending invite was accepted.
-ALTER TABLE public.invitations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;
 
 -- Atomically accept a workspace invitation: validates the token, links the
 -- calling (just-signed-up) account to the workspace by creating a

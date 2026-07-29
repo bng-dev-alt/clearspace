@@ -7,6 +7,8 @@ import { persistenceStatus } from '../services/persistence';
 import { toPrimaryAssignee, legacyAssigneeToMember, resolveBoardAssignees } from '../utils/assignees';
 import { INITIAL_COLUMNS } from '../data/dummyData';
 import { useAuth } from './useAuth';
+import { useRealtimeBoard } from './useRealtimeBoard';
+import { hasSupabaseConfig } from '../lib/supabase';
 
 export function useKanbanBoard(projectId?: string) {
   const { user, profile } = useAuth();
@@ -834,6 +836,109 @@ export function useKanbanBoard(projectId?: string) {
     added.forEach((m) => logProjectActivity('member_added', 'member', { name: m.fullName }));
     removed.forEach((m) => logProjectActivity('member_removed', 'member', { name: m.fullName }));
   }, [activeProjectId, workspaceMembers, teamMembers, logProjectActivity]);
+
+  // --- Realtime sync (Team Collaboration v1.3, Fáze 6) ---
+  // Cílené immutable aktualizace do Column[] -- ne plný refetch. Merge je
+  // idempotentní (nahrazení podle id), takže echo vlastní optimistické
+  // změny je neškodné (přepíše stejnými daty).
+  //
+  // Známé omezení: realtime payload z holé `cards` řady neobsahuje
+  // checklist/komentáře/aktivity/řešitele (ty žijí v join tabulkách bez
+  // odběru) -- update proto slučuje jen základní pole a zachovává, co má
+  // klient už lokálně načtené. Nová karta od někoho jiného se tedy objeví
+  // bez řešitelů, dokud se stránka znovu nenačte.
+  const onRealtimeCardChange = useCallback((
+    event: 'INSERT' | 'UPDATE' | 'DELETE',
+    newRow: { id: string; column_id: string; title: string; details: string | null; tag: string | null; priority: 'Low' | 'Medium' | 'High' | null; due_date: string | null; position: number; archived: boolean; created_at: string; updated_at: string } | null,
+    oldRow: { id: string } | null
+  ) => {
+    if (event === 'DELETE') {
+      const deletedId = oldRow?.id;
+      if (!deletedId) return;
+      setColumns((prev) => prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== deletedId) })));
+      return;
+    }
+    if (!newRow) return;
+
+    setColumns((prev) => {
+      // Karta už existuje lokálně -> jen sloučit základní pole (echo vlastní
+      // změny nebo update od kolegy), případně přesunout do jiného sloupce.
+      const existingColIndex = prev.findIndex((col) => col.cards.some((c) => c.id === newRow.id));
+      if (existingColIndex !== -1) {
+        const existingCard = prev[existingColIndex].cards.find((c) => c.id === newRow.id)!;
+        const merged: Card = {
+          ...existingCard,
+          title: newRow.title,
+          details: newRow.details || '',
+          tag: newRow.tag || undefined,
+          priority: newRow.priority || undefined,
+          dueDate: newRow.due_date || undefined,
+          archived: newRow.archived,
+          updatedAt: newRow.updated_at,
+        };
+        if (prev[existingColIndex].id === newRow.column_id) {
+          return prev.map((col, i) => (i === existingColIndex ? { ...col, cards: col.cards.map((c) => (c.id === newRow.id ? merged : c)) } : col));
+        }
+        // Přesunuto do jiného sloupce (kolega přetáhl kartu)
+        return prev.map((col) => {
+          if (col.id === prev[existingColIndex].id) {
+            return { ...col, cards: col.cards.filter((c) => c.id !== newRow.id) };
+          }
+          if (col.id === newRow.column_id) {
+            return { ...col, cards: [...col.cards, merged] };
+          }
+          return col;
+        });
+      }
+
+      // Nová karta od někoho jiného -- vlož do cílového sloupce, pokud existuje.
+      if (!prev.some((col) => col.id === newRow.column_id)) return prev;
+      const newCard: Card = {
+        id: newRow.id,
+        title: newRow.title,
+        details: newRow.details || '',
+        tag: newRow.tag || undefined,
+        priority: newRow.priority || undefined,
+        dueDate: newRow.due_date || undefined,
+        archived: newRow.archived,
+        createdAt: newRow.created_at,
+        updatedAt: newRow.updated_at,
+        assignees: [],
+      };
+      return prev.map((col) => (col.id === newRow.column_id ? { ...col, cards: [...col.cards, newCard] } : col));
+    });
+  }, []);
+
+  const onRealtimeColumnChange = useCallback((
+    event: 'INSERT' | 'UPDATE' | 'DELETE',
+    newRow: { id: string; name: string; project_id: string; position: number } | null,
+    oldRow: { id: string } | null
+  ) => {
+    if (event === 'DELETE') {
+      const deletedId = oldRow?.id;
+      if (!deletedId) return;
+      setColumns((prev) => prev.filter((col) => col.id !== deletedId));
+      return;
+    }
+    if (!newRow) return;
+
+    setColumns((prev) => {
+      const exists = prev.some((col) => col.id === newRow.id);
+      if (exists) {
+        return prev.map((col) => (col.id === newRow.id ? { ...col, name: newRow.name } : col));
+      }
+      // Nový sloupec od někoho jiného
+      return [...prev, { id: newRow.id, name: newRow.name, cards: [] }];
+    });
+  }, []);
+
+  useRealtimeBoard({
+    projectId: activeProjectId,
+    enabled: hasSupabaseConfig && Boolean(activeProjectId),
+    onCardChange: onRealtimeCardChange,
+    onColumnChange: onRealtimeColumnChange,
+    onActivityInsert: () => {}, // ActivityFeedDrawer se odebírá samostatně, jen když je otevřený
+  });
 
   return {
     columns,

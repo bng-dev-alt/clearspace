@@ -34,6 +34,7 @@ interface AiCapacityPlannerModalProps {
   onClose: () => void;
   columns: Column[];
   members: TeamMember[];
+  projectId: string;
   projectName: string;
   onUpdateCard: (columnId: string, cardId: string, updates: Partial<Card>) => void;
 }
@@ -43,6 +44,7 @@ export default function AiCapacityPlannerModal({
   onClose,
   columns,
   members,
+  projectId,
   projectName,
   onUpdateCard,
 }: AiCapacityPlannerModalProps) {
@@ -129,7 +131,7 @@ export default function AiCapacityPlannerModal({
         });
 
         await collaborationService.logActivity({
-          projectId: projectName,
+          projectId,
           actorName: 'AI Capacity Planner',
           actionType: 'reassign_task',
           entityType: 'task',

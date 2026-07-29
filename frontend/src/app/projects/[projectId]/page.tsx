@@ -842,6 +842,7 @@ export default function ProjectBoardPage() {
           isOpen={isAiPmOpen}
           onClose={() => setIsAiPmOpen(false)}
           columns={columns}
+          projectId={projectId}
           projectName={project?.name || 'Tento projekt'}
           onMoveCard={moveCard}
           onUpdateCard={editCard}
@@ -864,6 +865,7 @@ export default function ProjectBoardPage() {
           onClose={() => setIsCapacityPlannerOpen(false)}
           columns={columns}
           members={teamMembers}
+          projectId={projectId}
           projectName={project?.name || 'Tento projekt'}
           onUpdateCard={editCard}
         />

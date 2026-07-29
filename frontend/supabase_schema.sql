@@ -734,3 +734,41 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.accept_workspace_invitation(TEXT, TEXT) TO authenticated;
 
+-- ============================================================
+-- 17. Realtime (Team Collaboration v1.3, Fáze 6)
+-- Publishes columns/cards/activity_logs to Supabase Realtime so
+-- collaborators see each other's changes without a page refresh.
+-- REPLICA IDENTITY FULL is needed so UPDATE/DELETE payloads carry the
+-- full old row (e.g. which column a deleted card belonged to) -- the
+-- default (primary key only) isn't enough for the client to merge
+-- deletes/moves correctly.
+-- ============================================================
+
+ALTER TABLE public.columns REPLICA IDENTITY FULL;
+ALTER TABLE public.cards REPLICA IDENTITY FULL;
+ALTER TABLE public.activity_logs REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'columns'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.columns;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'cards'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.cards;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'activity_logs'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.activity_logs;
+    END IF;
+END $$;
+

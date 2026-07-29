@@ -31,6 +31,7 @@ interface AiProjectManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   columns: Column[];
+  projectId: string;
   projectName: string;
   onMoveCard: (cardId: string, sourceColumnId: string, destinationColumnId: string) => void;
   onUpdateCard: (columnId: string, cardId: string, updates: Partial<Card>) => void;
@@ -41,6 +42,7 @@ export default function AiProjectManagerModal({
   isOpen,
   onClose,
   columns,
+  projectId,
   projectName,
   onMoveCard,
   onUpdateCard,
@@ -142,7 +144,7 @@ export default function AiProjectManagerModal({
       }
 
       await collaborationService.logActivity({
-        projectId: projectName,
+        projectId,
         actorName: 'AI Project Manager',
         actionType: change.actionType.toLowerCase(),
         entityType: 'task',

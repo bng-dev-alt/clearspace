@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { X, History, PlusCircle, ArrowRightLeft, Archive, Columns3, Trash2, UserPlus, UserMinus, Sparkles } from 'lucide-react';
 import type { ProjectActivityLog } from '../../types/kanban';
 import { collaborationService } from '../../services/collaborationService';
+import { useRealtimeBoard } from '../../hooks/useRealtimeBoard';
 
 interface ActivityFeedDrawerProps {
   isOpen: boolean;
@@ -84,6 +85,38 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: Activ
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Živě doplňovat nové záznamy, dokud je panel otevřený (Fáze 6).
+  const handleActivityInsert = useCallback((row: {
+    id: string; project_id: string; card_id: string | null; actor_id: string | null;
+    actor_name: string; action_type: string; entity_type: 'task' | 'column' | 'project' | 'member';
+    details: Record<string, unknown> | null; created_at: string;
+  }) => {
+    setActivities((prev) => {
+      const next = prev ?? [];
+      if (next.some((a) => a.id === row.id)) return next;
+      const mapped: ProjectActivityLog = {
+        id: row.id,
+        projectId: row.project_id,
+        cardId: row.card_id ?? undefined,
+        actorId: row.actor_id ?? undefined,
+        actorName: row.actor_name,
+        actionType: row.action_type,
+        entityType: row.entity_type,
+        details: row.details ?? undefined,
+        createdAt: row.created_at,
+      };
+      return [mapped, ...next];
+    });
+  }, []);
+
+  useRealtimeBoard({
+    projectId,
+    enabled: isOpen && Boolean(projectId),
+    onCardChange: () => {},
+    onColumnChange: () => {},
+    onActivityInsert: handleActivityInsert,
+  });
 
   if (!isOpen) return null;
 

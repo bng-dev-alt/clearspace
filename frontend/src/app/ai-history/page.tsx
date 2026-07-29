@@ -4,17 +4,36 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/layout/Navbar';
 import { EmptyState } from '../../components/ui';
 import { aiHistoryService, AiHistoryRecord } from '../../services/ai/aiHistoryService';
+import { kanbanService } from '../../services/kanbanService';
 import { Clock, Sparkles, Folder, RotateCcw, AlertTriangle, Star, BarChart2, Eye, Download, Info, Check, Trash2, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function AiHistoryPage() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const userRole = profile?.workspace_role || 'owner';
   const isAdminOrOwner = userRole === 'owner' || userRole === 'admin';
   const [history, setHistory] = useState<AiHistoryRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<AiHistoryRecord | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Obnovení stavu je destruktivní bulk-přepis boardu -- na sdíleném
+  // projektu (Team Collaboration v1.3) ho smí spustit jen vlastník
+  // projektu, ne kdokoliv, kdo na svém zařízení náhodou má lokální
+  // AI History záznam pro cizí projekt (viz [[58_collaboration_analysis_and_plan]]).
+  const [projectOwners, setProjectOwners] = useState<Record<string, string | undefined>>({});
+  useEffect(() => {
+    kanbanService.fetchProjects(user?.id).then((projects) => {
+      const map: Record<string, string | undefined> = {};
+      projects.forEach((p) => { map[p.id] = p.user_id; });
+      setProjectOwners(map);
+    }).catch(() => {});
+  }, [user?.id]);
+
+  const canRestore = (projectId: string) => {
+    const ownerId = projectOwners[projectId];
+    return !ownerId || ownerId === user?.id;
+  };
 
   // Load history records
   const loadHistory = () => {
@@ -254,27 +273,30 @@ export default function AiHistoryPage() {
                         <Star size={16} fill={record.isFavorite ? 'var(--warning)' : 'none'} />
                       </button>
 
-                      {/* Restore Action Button */}
+                      {/* Restore Action Button -- jen vlastník projektu (bulk přepis boardu je destruktivní pro spolupracovníky) */}
                       <button
                         type="button"
-                        onClick={() => handleRestoreClick(record)}
+                        onClick={() => canRestore(record.snapshotBefore.projectId) && handleRestoreClick(record)}
+                        disabled={!canRestore(record.snapshotBefore.projectId)}
+                        title={canRestore(record.snapshotBefore.projectId) ? undefined : 'Obnovit smí jen vlastník projektu -- přepsal by board ostatním spolupracovníkům.'}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.35rem',
-                          background: 'var(--purple-secondary)',
-                          color: '#ffffff',
+                          background: canRestore(record.snapshotBefore.projectId) ? 'var(--purple-secondary)' : 'var(--border-color)',
+                          color: canRestore(record.snapshotBefore.projectId) ? '#ffffff' : 'var(--gray-text)',
                           border: 'none',
                           borderRadius: 'var(--radius-button)',
                           padding: '0.4rem 0.85rem',
                           fontSize: '0.75rem',
                           fontWeight: 700,
-                          cursor: 'pointer',
+                          cursor: canRestore(record.snapshotBefore.projectId) ? 'pointer' : 'not-allowed',
                           boxShadow: 'var(--shadow-sm)',
                           transition: 'var(--transition-base)',
                         }}
                         data-testid={`restore-btn-${record.id}`}
                         onMouseEnter={(e) => {
+                          if (!canRestore(record.snapshotBefore.projectId)) return;
                           e.currentTarget.style.filter = 'brightness(1.1)';
                           e.currentTarget.style.transform = 'translateY(-1px)';
                         }}

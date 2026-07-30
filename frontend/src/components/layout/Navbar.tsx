@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useTheme, ThemeChoice } from '../../contexts/ThemeContext';
 import { deriveInitials } from '../../services/workspaceService';
-import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, Search } from 'lucide-react';
+import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, LayoutDashboard, Search } from 'lucide-react';
 import AiModelSelector from '../ai/AiModelSelector';
 
 // ThemeToggle component...
@@ -49,8 +49,8 @@ export interface NavbarBoardActions {
   onOpenIntelligence: () => void;
   onNewTask: () => void;
   onOpenSearch?: () => void;
-  viewMode: 'board' | 'calendar';
-  onViewModeChange: (mode: 'board' | 'calendar') => void;
+  viewMode: 'board' | 'calendar' | 'dashboard';
+  onViewModeChange: (mode: 'board' | 'calendar' | 'dashboard') => void;
 }
 
 interface NavbarProps {
@@ -410,6 +410,14 @@ export default function Navbar({ boardActions }: NavbarProps) {
                     data-testid="mobile-menu-calendar"
                   >
                     <CalendarDays size={16} /> Kalendář
+                  </button>
+                  <button
+                    type="button"
+                    className={`mobile-menu-item ${boardActions.viewMode === 'dashboard' ? 'active' : ''}`}
+                    onClick={() => runBoardAction(() => boardActions.onViewModeChange('dashboard'))}
+                    data-testid="mobile-menu-dashboard"
+                  >
+                    <LayoutDashboard size={16} /> Dashboard
                   </button>
                 </div>
               </>

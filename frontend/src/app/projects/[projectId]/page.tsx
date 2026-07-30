@@ -23,6 +23,7 @@ const AiDailyBriefModal = dynamic(() => import('../../../components/board/AiDail
 const AiCapacityPlannerModal = dynamic(() => import('../../../components/board/AiCapacityPlannerModal'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('../../../components/search/GlobalSearchModal'), { ssr: false });
 const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
+const ProjectDashboardView = dynamic(() => import('../../../components/dashboardStats/ProjectDashboardView'), { ssr: false });
 const AiVoiceCopilotBar = dynamic(() => import('../../../components/ai/AiVoiceCopilotBar'), { ssr: false });
 
 import { useKanbanBoard } from '../../../hooks/useKanbanBoard';
@@ -33,7 +34,7 @@ import { Card, Assignee, Column as ColumnType, TeamMember } from '../../../types
 import { kanbanService, Project } from '../../../services/kanbanService';
 import { computeProjectIntelligence } from '../../../lib/projectIntelligence';
 import ProjectMembersModal from '../../../components/board/ProjectMembersModal';
-import { Plus, X, LayoutGrid, CalendarDays } from 'lucide-react';
+import { Plus, X, LayoutGrid, CalendarDays, LayoutDashboard } from 'lucide-react';
 
 export default function ProjectBoardPage() {
   const params = useParams();
@@ -158,11 +159,11 @@ export default function ProjectBoardPage() {
   // Výběr členů projektu (řádek avatarů). Správa identit workspace je na /team.
   const [isProjectMembersModalOpen, setIsProjectMembersModalOpen] = useState(false);
 
-  // Přepínač zobrazení projektu: kanban board vs kalendář (per-projekt)
-  const [viewMode, setViewMode] = useState<'board' | 'calendar'>('board');
+  // Přepínač zobrazení projektu: kanban board vs kalendář vs dashboard (per-projekt)
+  const [viewMode, setViewMode] = useState<'board' | 'calendar' | 'dashboard'>('board');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
-  const changeViewMode = useCallback((mode: 'board' | 'calendar') => {
+  const changeViewMode = useCallback((mode: 'board' | 'calendar' | 'dashboard') => {
     setViewMode(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem('board_view_mode', mode);
@@ -183,7 +184,7 @@ export default function ProjectBoardPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsHeroHidden(hidden);
       const storedView = localStorage.getItem('board_view_mode');
-      if (storedView === 'calendar' || storedView === 'board') {
+      if (storedView === 'calendar' || storedView === 'board' || storedView === 'dashboard') {
         setViewMode(storedView);
       }
     }
@@ -549,10 +550,27 @@ export default function ProjectBoardPage() {
             <CalendarDays size={14} />
             Kalendář
           </button>
+          <button
+            type="button"
+            className={`view-switch-btn ${viewMode === 'dashboard' ? 'active' : ''}`}
+            onClick={() => changeViewMode('dashboard')}
+            aria-pressed={viewMode === 'dashboard'}
+            data-testid="view-switch-dashboard"
+          >
+            <LayoutDashboard size={14} />
+            Dashboard
+          </button>
         </div>
       </div>
 
-      {viewMode === 'calendar' ? (
+      {viewMode === 'dashboard' ? (
+        <ProjectDashboardView
+          projectId={projectId}
+          projectName={project?.name || 'Tento projekt'}
+          columns={processedColumns}
+          teamMembers={teamMembers}
+        />
+      ) : viewMode === 'calendar' ? (
         <CalendarView
           columns={processedColumns}
           month={calendarMonth}

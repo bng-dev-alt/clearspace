@@ -48,6 +48,11 @@ function nameMatches(name: string, keywords: string[]): boolean {
   return keywords.some((k) => n.includes(k));
 }
 
+/** Sdílená konvence "je tenhle sloupec Hotovo?" -- používá i dashboardStats.ts. */
+export function isDoneColumnName(name: string): boolean {
+  return nameMatches(name, DONE_KEYWORDS);
+}
+
 function todayIso(now: Date): string {
   return now.toISOString().slice(0, 10);
 }

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Rozdělaný běh na stejné větvi nemá smysl dokončovat.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # Lint jen nad aplikací a testy (frontend/scripts jsou pomocné Node skripty
+      # na video, patří jim jiná pravidla).
+      - name: Lint
+        run: npx eslint src e2e
+
+      # `next build` typuje jen produkční kód; tohle projde i testy.
+      - name: Typecheck (včetně testů)
+        run: npx tsc --noEmit
+
+      # Gemini i Supabase jsou v testech mockované: žádné klíče, žádné kredity.
+      - name: Unit testy
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      - name: Playwright -- instalace prohlížeče
+        run: npx playwright install --with-deps chromium
+
+      # E2E běží v demo režimu (localStorage + mock auth), takže CI nepotřebuje
+      # Supabase klíče ani testovací účty a nesahá na žádnou databázi.
+      - name: E2E testy
+        run: npx playwright test
+
+      - name: Stopy z padlých E2E
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Izolovaná databáze: baseline + migrace + RLS/pozvánky/AI kvóty/restore, včetně
+  # upgradu databáze s "legacy" daty. Spouští jednorázový Postgres kontejner,
+  # nikdy se nepřipojuje k Supabase projektu.
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Databázové testy
+        run: frontend/supabase/tests/run.sh

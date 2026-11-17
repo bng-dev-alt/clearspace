@@ -329,7 +329,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // OAuth Mock / Preparation
+  // OAuth přes Supabase. V demo režimu žádné skutečné přihlášení neexistuje --
+  // dřív se tu tiše zakládal falešný účet se stejným heslem pro všechny.
   const loginWithOAuth = async (provider: 'google' | 'github') => {
     if (hasSupabaseConfig) {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -340,12 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
     } else {
-      // Mock OAuth
-      await register(
-        `${provider}-user@example.com`,
-        'oauth-password-placeholder',
-        `OAuth ${provider.charAt(0).toUpperCase() + provider.slice(1)}`
-      );
+      throw new Error('Přihlášení přes Google/GitHub vyžaduje Supabase a v demo režimu není dostupné.');
     }
   };
 

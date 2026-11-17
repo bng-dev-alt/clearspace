@@ -9,7 +9,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const router = useRouter();
   const pathname = usePathname();
 
-  const isPublicPath = pathname === '/login' || pathname === '/register';
+  // /accept-invite musí být dostupná i nepřihlášenému (pozvaný si tam zakládá účet).
+  const isPublicPath = pathname === '/login' || pathname === '/register' || pathname === '/accept-invite';
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicPath) {

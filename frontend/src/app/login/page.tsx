@@ -7,6 +7,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { LogIn, Mail, Lock } from 'lucide-react';
 import { Button } from '../../components/ui';
 
+// Google/GitHub tlačítka se ukážou jen když je provider v Supabase skutečně zapnutý
+// (jinak končila "Unsupported provider"). Zapíná se NEXT_PUBLIC_ENABLE_OAUTH=1.
+const oauthEnabled = process.env.NEXT_PUBLIC_ENABLE_OAUTH === '1';
+
 export default function LoginPage() {
   const { login, loginWithOAuth } = useAuth();
   const router = useRouter();
@@ -294,6 +298,8 @@ export default function LoginPage() {
             </Button>
           </form>
 
+          {oauthEnabled && (
+          <>
           {/* Social login divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0' }}>
             <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }} />
@@ -319,6 +325,9 @@ export default function LoginPage() {
               GitHub
             </Button>
           </div>
+
+          </>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 500, color: 'var(--gray-text)' }}>
             Nemáte účet?&nbsp;

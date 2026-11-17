@@ -13,7 +13,6 @@ import { collaborationService } from '../../services/collaborationService';
 import Button from '../../components/ui/Button';
 
 import UserDetailModal from '../../components/team/UserDetailModal';
-import ResetPasswordModal from '../../components/team/ResetPasswordModal';
 
 export default function TeamPage() {
   const { members, projectCounts, isLoading, ownerProfileId, addMember, editMember, deleteMember } = useWorkspaceMembers();
@@ -25,12 +24,10 @@ export default function TeamPage() {
   const [editing, setEditing] = useState<TeamMember | null>(null);
 
   const [detailMember, setDetailMember] = useState<TeamMember | null>(null);
-  const [resetMember, setResetMember] = useState<TeamMember | null>(null);
 
   // Pozvání e-mailem (Team Collaboration v1.3) -- workspace-level
   const canInvite = Boolean(user?.id && hasSupabaseConfig);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'member' | 'owner'>('member');
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
@@ -70,7 +67,7 @@ export default function TeamPage() {
     setIsInviting(true);
     setInviteError(null);
     try {
-      const inv = await collaborationService.createWorkspaceInvitation(user.id, email, inviteRole, user.id);
+      const inv = await collaborationService.createWorkspaceInvitation(user.id, email, 'member', user.id);
       setInvitations((prev) => [inv, ...prev]);
       setInviteEmail('');
     } catch (err) {
@@ -182,16 +179,6 @@ export default function TeamPage() {
               style={{ flex: 1, fontSize: '0.8rem' }}
               data-testid="workspace-invite-email-input"
             />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as 'member' | 'owner')}
-              className="cs-input"
-              style={{ fontSize: '0.8rem', width: '110px' }}
-              data-testid="workspace-invite-role-select"
-            >
-              <option value="member">Člen</option>
-              <option value="owner">Vlastník</option>
-            </select>
             <Button type="submit" variant="primary" size="sm" disabled={isInviting} data-testid="workspace-invite-send-btn">
               {isInviting ? 'Odesílám...' : 'Pozvat'}
             </Button>
@@ -222,15 +209,25 @@ export default function TeamPage() {
                     {inv.email}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyLink(inv.id, inv.token)}
-                      title="Kopírovat odkaz na pozvánku"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-text)', display: 'flex' }}
-                      data-testid={`copy-workspace-invite-link-${inv.id}`}
-                    >
-                      {copiedId === inv.id ? <Check size={14} color="#107c41" /> : <Copy size={14} />}
-                    </button>
+                    {inv.token ? (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(inv.id, inv.token)}
+                        title="Kopírovat odkaz na pozvánku"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-text)', display: 'flex' }}
+                        data-testid={`copy-workspace-invite-link-${inv.id}`}
+                      >
+                        {copiedId === inv.id ? <Check size={14} color="#107c41" /> : <Copy size={14} />}
+                      </button>
+                    ) : (
+                      <span
+                        title="Odkaz se zobrazuje jen při vytvoření pozvánky. Pro nový odkaz pozvěte znovu (původní pozvánka se zruší)."
+                        style={{ color: 'var(--gray-text)', fontSize: '0.65rem' }}
+                        data-testid={`invite-link-hidden-${inv.id}`}
+                      >
+                        odkaz skrytý
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleRevoke(inv.id)}
@@ -286,7 +283,6 @@ export default function TeamPage() {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onViewDetail={(m) => setDetailMember(m)}
-            onResetPassword={(m) => setResetMember(m)}
           />
         )}
       </main>
@@ -308,13 +304,6 @@ export default function TeamPage() {
         />
       )}
 
-      {resetMember && (
-        <ResetPasswordModal
-          isOpen={!!resetMember}
-          onClose={() => setResetMember(null)}
-          member={resetMember}
-        />
-      )}
     </div>
   );
 }

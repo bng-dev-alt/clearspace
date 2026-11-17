@@ -1,9 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import UserDetailModal from '../components/team/UserDetailModal';
-import ResetPasswordModal from '../components/team/ResetPasswordModal';
-import { collaborationService } from '../services/collaborationService';
 import { TeamMember } from '../types/kanban';
 
 describe('Team Management & Roles Unit Tests', () => {
@@ -24,23 +22,5 @@ describe('Team Management & Roles Unit Tests', () => {
     expect(screen.getByTestId('user-detail-modal')).toBeInTheDocument();
     expect(screen.getByText('Karel Svoboda')).toBeInTheDocument();
     expect(screen.getByText('karel@example.com')).toBeInTheDocument();
-  });
-
-  it('renders ResetPasswordModal and submits new password for Owner', async () => {
-    const spyReset = vi.spyOn(collaborationService, 'resetUserPassword').mockResolvedValueOnce(true);
-
-    render(<ResetPasswordModal isOpen={true} onClose={vi.fn()} member={mockMember} actorName="Owner" />);
-
-    expect(screen.getByTestId('reset-password-modal')).toBeInTheDocument();
-
-    const input = screen.getByTestId('reset-password-input');
-    fireEvent.change(input, { target: { value: 'Secret123!' } });
-
-    const submitBtn = screen.getByTestId('submit-reset-password-btn');
-    fireEvent.click(submitBtn);
-
-    await waitFor(() => {
-      expect(spyReset).toHaveBeenCalledWith('m-100', 'karel@example.com', 'Secret123!', 'Owner');
-    });
   });
 });

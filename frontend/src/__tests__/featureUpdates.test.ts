@@ -5,25 +5,31 @@ import { aiService } from '../services/ai/aiService';
 
 describe('Feature Updates Integration Tests', () => {
   describe('Team Collaboration Service', () => {
-    it('generates secure 32-character invite tokens', () => {
+    it('generates 256-bit hex invite tokens from the CSPRNG (demo mode only)', () => {
       const token = collaborationService.generateToken();
-      expect(token).toHaveLength(32);
-      expect(token).toMatch(/^[a-zA-Z0-9]+$/);
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      expect(collaborationService.generateToken()).not.toBe(token);
     });
 
-    it('creates an invitation object with correct properties', async () => {
-      const inv = await collaborationService.createInvitation('proj-1', 'test@example.com', 'member', 'owner-1');
-      expect(inv).toBeDefined();
-      expect(inv.projectId).toBe('proj-1');
+    it('does not use Math.random for tokens', () => {
+      const spy = vi.spyOn(Math, 'random');
+      collaborationService.generateToken();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('creates a member-role invitation in demo mode (owner role cannot be invited)', async () => {
+      const inv = await collaborationService.createWorkspaceInvitation('ws-1', 'Test@Example.com', 'owner', 'owner-1');
+      expect(inv.projectId).toBe('ws-1');
       expect(inv.email).toBe('test@example.com');
       expect(inv.status).toBe('pending');
-      expect(inv.token).toHaveLength(32);
+      expect(inv.role).toBe('member');
+      expect(inv.token).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('accepts an invitation token in demo mode without Supabase configured', async () => {
-      const res = await collaborationService.acceptInvitationToken('any-token', 'Jan Novák', 'heslo123');
+      const res = await collaborationService.acceptInvitationToken('any-token', 'a@b.cz', 'Jan Novák', 'heslo123');
       expect(res.success).toBe(true);
-      expect(res.projectId).toBeDefined();
     });
 
     it('logs project activity events correctly', async () => {

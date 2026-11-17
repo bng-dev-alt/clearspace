@@ -1,25 +1,47 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, CheckCircle2, AlertCircle, Lock, User, ArrowRight } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertCircle, Lock, User, Mail, ArrowRight } from 'lucide-react';
 import { collaborationService } from '../../services/collaborationService';
+import { useAuth } from '../../hooks/useAuth';
+
+type Preview = Awaited<ReturnType<typeof collaborationService.previewInvitation>>;
 
 function AcceptInviteForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const token = searchParams.get('token') || '';
 
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  // Token je k dispozici hned při prvním renderu, takže chybějící token
-  // stačí odvodit v inicializaci -- žádný efekt navíc.
   const [error, setError] = useState<string | null>(
     token ? null : 'Neplatný nebo chybějící pozvánkový token v adrese.'
   );
   const [success, setSuccess] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+
+  // Anonymní náhled: jen stav, maskovaný e-mail a jméno zvoucího.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    collaborationService.previewInvitation(token).then((p) => {
+      if (!cancelled) setPreview(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const finishAccepted = () => {
+    setSuccess(true);
+    setTimeout(() => router.push('/'), 1500);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,26 +49,40 @@ function AcceptInviteForm() {
       setError('Zadejte prosím své celé jméno.');
       return;
     }
-    if (!password.trim() || password.length < 6) {
-      setError('Heslo musí obsahovat alespoň 6 znaků.');
-      return;
+    if (!user) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+        setError('Zadejte e-mail, na který pozvánka přišla.');
+        return;
+      }
+      if (!password.trim() || password.length < 6) {
+        setError('Heslo musí obsahovat alespoň 6 znaků.');
+        return;
+      }
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const res = await collaborationService.acceptInvitationToken(token, displayName.trim(), password.trim());
-      setSuccess(true);
-      setTimeout(() => {
-        router.push(res.projectId ? `/projects/${res.projectId}` : '/');
-      }, 1500);
+      if (user) {
+        await collaborationService.acceptInvitationAsSignedInUser(token, displayName.trim());
+        finishAccepted();
+      } else {
+        const res = await collaborationService.acceptInvitationToken(token, email.trim(), displayName.trim(), password);
+        if (res.needsEmailConfirmation) {
+          setNeedsConfirmation(true);
+        } else {
+          finishAccepted();
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nepodařilo se přihlásit z pozvánky.');
+      setError(err instanceof Error ? err.message : 'Nepodařilo se přijmout pozvánku.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const blocked = preview !== null && preview.state !== 'valid';
 
   return (
     <div
@@ -90,11 +126,36 @@ function AcceptInviteForm() {
             Přijetí pozvánky do týmu
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--gray-text)', margin: 0 }}>
-            ClearSpace Kanban – Nastavte si svůj profil a heslo
+            ClearSpace Kanban – Pozvánka do workspace
           </p>
         </div>
 
-        {success ? (
+        {blocked ? (
+          <div
+            style={{ padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '10px', textAlign: 'center' }}
+            data-testid="accept-invite-unavailable"
+          >
+            <AlertCircle size={28} style={{ margin: '0 auto 0.5rem', color: 'var(--danger)' }} />
+            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>
+              {preview?.state === 'expired'
+                ? 'Platnost pozvánky vypršela. Požádejte vlastníka workspace o novou.'
+                : preview?.state === 'used'
+                  ? 'Tato pozvánka už byla použita nebo zrušena.'
+                  : 'Pozvánka neexistuje nebo není platná.'}
+            </p>
+          </div>
+        ) : needsConfirmation ? (
+          <div
+            style={{ padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '10px', textAlign: 'center' }}
+            data-testid="accept-invite-confirm-email"
+          >
+            <Mail size={28} style={{ margin: '0 auto 0.5rem' }} />
+            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Potvrďte svůj e-mail</p>
+            <p style={{ margin: '0.4rem 0 0', fontSize: '0.82rem', color: 'var(--gray-text)' }}>
+              Poslali jsme vám potvrzovací odkaz. Po potvrzení se vrátíte sem a pozvánku dokončíte.
+            </p>
+          </div>
+        ) : success ? (
           <div
             style={{
               padding: '1.25rem',
@@ -108,7 +169,7 @@ function AcceptInviteForm() {
           >
             <CheckCircle2 size={32} style={{ margin: '0 auto 0.5rem' }} />
             <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 800 }}>Pozvánka úspěšně přijata!</h3>
-            <p style={{ margin: 0, fontSize: '0.85rem' }}>Přesměrováváme vás přímo na projektovou nástěnku...</p>
+            <p style={{ margin: 0, fontSize: '0.85rem' }}>Přesměrováváme vás na přehled projektů...</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
@@ -127,6 +188,40 @@ function AcceptInviteForm() {
                 }}
               >
                 <AlertCircle size={18} /> {error}
+              </div>
+            )}
+
+            {preview?.state === 'valid' && (
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--gray-text)' }} data-testid="accept-invite-preview">
+                {preview.inviterName ? `${preview.inviterName} vás zve` : 'Byli jste pozváni'} do svého workspace
+                {preview.maskedEmail ? ` (pozvánka pro ${preview.maskedEmail})` : ''}.
+              </p>
+            )}
+
+            {!user && !authLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label htmlFor="accept-invite-email" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--dark-navy)' }}>
+                  E-mail, na který pozvánka přišla *
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: '0.85rem', color: 'var(--gray-text)' }} />
+                  <input
+                    id="accept-invite-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 0.85rem 0.65rem 2.4rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                    }}
+                    data-testid="accept-invite-email-input"
+                  />
+                </div>
               </div>
             )}
 
@@ -154,6 +249,7 @@ function AcceptInviteForm() {
               </div>
             </div>
 
+            {!user && !authLoading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--dark-navy)' }}>
                 Nové přístupové heslo *
@@ -177,10 +273,11 @@ function AcceptInviteForm() {
                 />
               </div>
             </div>
+            )}
 
             <button
               type="submit"
-              disabled={isLoading || !token}
+              disabled={isLoading || !token || preview === null}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -190,7 +287,7 @@ function AcceptInviteForm() {
                 borderRadius: '8px',
                 fontSize: '0.9rem',
                 fontWeight: 700,
-                cursor: isLoading || !token ? 'not-allowed' : 'pointer',
+                cursor: isLoading || !token || preview === null ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -199,7 +296,7 @@ function AcceptInviteForm() {
               }}
               data-testid="accept-invite-submit-btn"
             >
-              {isLoading ? 'Aktivuji účet...' : 'Aktivovat účet a vstoupit'} <ArrowRight size={16} />
+              {isLoading ? 'Zpracovávám...' : user ? 'Přijmout pozvánku' : 'Vytvořit účet a přijmout pozvánku'} <ArrowRight size={16} />
             </button>
           </form>
         )}

@@ -13,6 +13,10 @@ import { INITIAL_COLUMNS } from '../../data/dummyData';
  *
  * Kód, který sloupce hledá podle koncovky (`endsWith('column-3')`), dál
  * funguje -- prefix se přidává zleva.
+ *
+ * Používá se pro seedování v DATABÁZI. Demo režim (localStorage, board je
+ * klíčovaný projektem v prohlížeči) žádné globální klíče nemá a drží si
+ * původní holá ID -- na těch stojí e2e testy (`column-count-column-1`).
  */
 export const scopedSeedId = (projectId: string, baseId: string): string =>
   `${projectId}-${baseId}`;

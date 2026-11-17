@@ -71,9 +71,8 @@ describe('seed IDs are unique per project', () => {
     expect(inserts.cards ?? []).toHaveLength(0);
   });
 
-  test('local (demo) board of two default projects does not share ids', () => {
-    const a = localStore.getBoard('project-default-user-a').flatMap((c) => [c.id, ...c.cards.map((k) => k.id)]);
-    const b = localStore.getBoard('project-default-user-b').flatMap((c) => [c.id, ...c.cards.map((k) => k.id)]);
-    expect(a.filter((id) => b.includes(id))).toHaveLength(0);
+  test('demo (localStorage) boards keep the plain ids that e2e and the stats code rely on', () => {
+    const board = localStore.getBoard('project-default-user-a');
+    expect(board.map((c) => c.id)).toEqual(['column-1', 'column-2', 'column-3', 'column-4', 'column-5']);
   });
 });

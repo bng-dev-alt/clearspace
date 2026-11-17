@@ -50,8 +50,8 @@ GEMINI_API_KEY=...            # enables the AI Studio features
 GEMINI_MODEL=gemini-2.5-flash
 ```
 
-- **Supabase:** run [`frontend/supabase_schema.sql`](frontend/supabase_schema.sql) in your project's SQL editor (idempotent, safe to re-run). The app auto-switches to Supabase persistence when the two `NEXT_PUBLIC_SUPABASE_*` vars are present.
-- **AI:** without `GEMINI_API_KEY`, the AI features degrade gracefully with a clear message; everything else works.
+- **Supabase:** apply [`frontend/supabase_schema.sql`](frontend/supabase_schema.sql) (the *baseline*) once, then every file in [`frontend/supabase/migrations/`](frontend/supabase/migrations) in filename order. The baseline refuses to run again once migrations exist (re-running it would undo security hardening). **The AI endpoints and invitations require the migrations**: without them the AI gateway fails closed (HTTP 503). Test everything first against a throwaway database: `frontend/supabase/tests/run.sh` (needs Docker; never connects to a real project). In Supabase, enable *Confirm email* so invitations are bound to a verified address. The app auto-switches to Supabase persistence when the two `NEXT_PUBLIC_SUPABASE_*` vars are present.
+- **AI:** every `/api/ai/*` call requires a signed-in Supabase user and goes through one gateway (membership check, per-user and global rate limits, daily token budget, server-chosen model). Without `GEMINI_API_KEY` the AI features return a clear message; AI is not available in demo mode. Limits: `AI_RATE_PER_USER_PER_MINUTE`, `AI_RATE_GLOBAL_PER_MINUTE`, `AI_DAILY_TOKEN_BUDGET_PER_USER` (an estimate-based throttle, not a hard spending cap — also set a quota/budget in Google Cloud).
 
 ## Scripts
 

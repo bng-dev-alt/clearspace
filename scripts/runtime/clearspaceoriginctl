@@ -1,0 +1,107 @@
+#!/bin/bash
+# ClearSpace V1 ("origin") local runtime control.
+#
+# Thin wrapper around launchd for the LaunchAgent defined next to this
+# script (com.luffast.clearspace-origin.dev.plist), same pattern as
+# clearspace-v2's own clearspacectl. STOP uses `launchctl bootout`, not
+# `launchctl stop`: KeepAlive means a plain `stop` would just be
+# relaunched within seconds.
+set -euo pipefail
+
+# SAFETY: this agent runs `next dev` for the OLD ClearSpace V1 on port 3130.
+# A Cloudflare Tunnel hostname route (clearspace-origin.luffast.com) may point
+# at that port, which would publish an unauthenticated dev server together
+# with the Gemini key loaded from frontend/.env.local. It was taken offline
+# on 2026-11-17 (P0). Starting it again is therefore opt-in, per invocation.
+# (`stop`, `status` and `logs` always work.)
+
+LABEL="com.luffast.clearspace-origin.dev"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLIST_SRC="$SCRIPT_DIR/$LABEL.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LOG_DIR="$HOME/Library/Logs/ClearSpaceOrigin"
+DOMAIN="gui/$(id -u)"
+PORT=3130
+
+usage() {
+  echo "Usage: clearspaceoriginctl {start|stop|restart|status|logs}"
+  exit 1
+}
+
+ensure_installed() {
+  mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
+  if [ "$(readlink "$PLIST_DST" 2>/dev/null || true)" != "$PLIST_SRC" ]; then
+    ln -sf "$PLIST_SRC" "$PLIST_DST"
+    echo "linked $PLIST_DST -> $PLIST_SRC"
+  fi
+}
+
+is_loaded() {
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1
+}
+
+cmd_start() {
+  if [ "${CLEARSPACE_ALLOW_PUBLIC_ORIGIN:-}" != "1" ]; then
+    echo "REFUSED: starting this agent can expose an unprotected dev server" >&2
+    echo "through the Cloudflare hostname route that targets port $PORT." >&2
+    echo "Remove/disable that route first, then re-run with" >&2
+    echo "  CLEARSPACE_ALLOW_PUBLIC_ORIGIN=1 clearspaceoriginctl start" >&2
+    echo "For local work use Start_ClearSpace.command (port 3000, not tunnelled)." >&2
+    return 1
+  fi
+  ensure_installed
+  if is_loaded; then
+    echo "$LABEL is already loaded -- use 'restart' to pick up plist changes."
+    return 0
+  fi
+  launchctl bootstrap "$DOMAIN" "$PLIST_DST"
+  launchctl enable "$DOMAIN/$LABEL"
+  sleep 1
+  cmd_status
+  echo "local:  http://localhost:$PORT"
+}
+
+cmd_stop() {
+  if ! is_loaded; then
+    echo "$LABEL is not loaded."
+    return 0
+  fi
+  launchctl bootout "$DOMAIN/$LABEL"
+  echo "stopped."
+}
+
+cmd_restart() {
+  cmd_stop || true
+  sleep 1
+  cmd_start
+}
+
+cmd_status() {
+  if ! is_loaded; then
+    echo "NOT LOADED"
+    return 0
+  fi
+  local info pid last_exit
+  info="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null)"
+  pid="$(echo "$info" | awk '/^\tpid = /{print $3; exit}')"
+  if [ -n "${pid:-}" ]; then
+    echo "RUNNING (pid $pid, port $PORT)"
+  else
+    last_exit="$(echo "$info" | awk '/last exit code/{print; exit}')"
+    echo "LOADED but not currently running (${last_exit:-no exit info yet}) -- see 'clearspaceoriginctl logs'"
+  fi
+}
+
+cmd_logs() {
+  echo "Tailing $LOG_DIR/dev.{out,err}.log (Ctrl-C to stop)..."
+  tail -n 60 -f "$LOG_DIR/dev.out.log" "$LOG_DIR/dev.err.log"
+}
+
+case "${1:-}" in
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  restart) cmd_restart ;;
+  status) cmd_status ;;
+  logs) cmd_logs ;;
+  *) usage ;;
+esac

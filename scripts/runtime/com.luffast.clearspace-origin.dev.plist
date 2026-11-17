@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DISABLED BY DEFAULT (security, 2026-11-17): do not load this agent while a
+  Cloudflare hostname route targets localhost:3130 -- it would publish an
+  unprotected dev server. clearspaceoriginctl refuses to start it unless
+  CLEARSPACE_ALLOW_PUBLIC_ORIGIN=1 is set.
+
+  ClearSpace V1 ("origin") local runtime -- the pre-redesign app, revived
+  for reference/demo purposes, reachable at https://clearspace-origin.luffast.com
+  through the same Cloudflare Tunnel as the V2 dev runtime (a Public
+  Hostname route to http://localhost:3130 was added in the Zero Trust
+  dashboard, since this tunnel is token-managed with no local config.yml).
+
+  Forces demo mode (localStorage + mock auth) via NEXT_PUBLIC_FORCE_DEMO,
+  even though frontend/.env.local has real Supabase credentials on file --
+  this revival is meant to be a harmless, self-contained look at the old
+  app, not a live connection to whatever that hosted project currently is.
+
+  Per-user LaunchAgent, same pattern as clearspace-v2's own
+  com.luffast.clearspace.dev.plist. Installed as a symlink into
+  ~/Library/LaunchAgents by scripts/runtime/clearspaceoriginctl; this repo
+  copy is the source of truth. Managed with
+  `clearspaceoriginctl start|stop|restart|status|logs` -- never edit the
+  copy under ~/Library/LaunchAgents directly.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.luffast.clearspace-origin.dev</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/beng/Apps/ClearSpace/V1/frontend/node_modules/.bin/next</string>
+    <string>dev</string>
+    <string>-p</string>
+    <string>3130</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/beng/Apps/ClearSpace/V1/frontend</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>NEXT_PUBLIC_FORCE_DEMO</key>
+    <string>1</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/beng/Library/Logs/ClearSpaceOrigin/dev.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/beng/Library/Logs/ClearSpaceOrigin/dev.err.log</string>
+</dict>
+</plist>

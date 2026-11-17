@@ -1,5 +1,6 @@
 import { Column } from '../../types/kanban';
 import { INITIAL_COLUMNS, DEFAULT_MEMBERS } from '../../data/dummyData';
+import { buildSeedBoard } from './seedBoard';
 import type { Project } from '../kanbanService';
 
 /**
@@ -111,14 +112,9 @@ export const localStore = {
     const stored = localStorage.getItem(boardKey(projectId));
     if (stored) return JSON.parse(stored);
 
-    const isDefault = isDefaultProject(projectId);
-    const seededBoard = INITIAL_COLUMNS.map((col) => ({
-      id: isDefault ? col.id : `${projectId}-${col.id}`,
-      name: col.name,
-      cards: isDefault
-        ? col.cards.map((card) => ({ ...card }))
-        : [], // Nové boardy začínají prázdné
-    }));
+    // Výchozí projekt dostane ukázkové karty, nové boardy začínají prázdné.
+    // ID jsou vždy s prefixem projektu (viz seedBoard.ts).
+    const seededBoard = buildSeedBoard(projectId, isDefaultProject(projectId));
 
     localStorage.setItem(boardKey(projectId), JSON.stringify(seededBoard));
     return seededBoard;

@@ -1,7 +1,8 @@
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import { Column, Card, ChecklistItem, Comment, ActivityLog, TeamMember } from '../types/kanban';
-import { INITIAL_COLUMNS, DEFAULT_MEMBERS } from '../data/dummyData';
+import { DEFAULT_MEMBERS } from '../data/dummyData';
 import { localStore, isDefaultProject } from './storage/localStore';
+import { buildSeedBoard } from './storage/seedBoard';
 import { persistenceStatus } from './persistence';
 
 // Výchozí členství nového projektu = všichni výchozí členové workspace.
@@ -521,31 +522,34 @@ export const kanbanService = {
       await supabase.from('columns').delete().in('id', oldColIds);
     }
 
-    const isDefault = isDefaultProject(projectId);
-    const colInserts = INITIAL_COLUMNS.map((col, index) => ({
-      id: isDefault ? col.id : `${projectId}-${col.id}`,
-      project_id: projectId,
-      name: col.name,
-      position: index,
-    }));
+    // Karty seedovat jen u výchozího projektu. ID jsou vždy s prefixem
+    // projektu -- columns.id a cards.id jsou globální primární klíče, holé
+    // 'column-1' / 'card-1' by kolidovaly mezi uživateli (viz seedBoard.ts).
+    const shouldSeedCards = !isEmpty && isDefaultProject(projectId);
+    const seeded = buildSeedBoard(projectId, shouldSeedCards);
 
-    const { error: colError } = await supabase.from('columns').insert(colInserts);
+    const { error: colError } = await supabase.from('columns').insert(
+      seeded.map((col, index) => ({
+        id: col.id,
+        project_id: projectId,
+        name: col.name,
+        position: index,
+      }))
+    );
     if (colError) throw colError;
 
-    // Karty seedovat jen u výchozího projektu
-    const shouldSeedCards = !isEmpty && isDefault;
-
     if (shouldSeedCards) {
+      const now = new Date().toISOString();
       const cardInserts: Array<Record<string, unknown>> = [];
-      INITIAL_COLUMNS.forEach((col) => {
+      seeded.forEach((col) => {
         col.cards.forEach((card, cardIndex) => {
           cardInserts.push({
             id: card.id,
             column_id: col.id,
             ...cardToDbFields(card),
             position: cardIndex,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            created_at: now,
+            updated_at: now,
           });
         });
       });
@@ -556,11 +560,7 @@ export const kanbanService = {
       }
     }
 
-    return INITIAL_COLUMNS.map((col) => ({
-      id: isDefault ? col.id : `${projectId}-${col.id}`,
-      name: col.name,
-      cards: shouldSeedCards ? col.cards.map((card) => ({ ...card })) : [],
-    }));
+    return seeded;
   },
 
   async updateColumnName(columnId: string, name: string, projectId?: string): Promise<void> {

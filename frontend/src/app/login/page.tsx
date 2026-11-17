@@ -1,21 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import { LogIn, Mail, Lock } from 'lucide-react';
 import { Button } from '../../components/ui';
-import { supabase, hasSupabaseConfig } from '../../lib/supabase';
-import { isLoopbackHost } from '../../lib/devLogin';
 
 // Google/GitHub tlačítka se ukážou jen když je provider v Supabase skutečně zapnutý
 // (jinak končila "Unsupported provider"). Zapíná se NEXT_PUBLIC_ENABLE_OAUTH=1.
 const oauthEnabled = process.env.NEXT_PUBLIC_ENABLE_OAUTH === '1';
 
-// Vývojové přihlášení (lib/devLogin.ts): tlačítko existuje jen ve vývojovém buildu s NEXT_PUBLIC_DEV_LOGIN=1.
-// `process.env.NODE_ENV` se v produkčním buildu nahradí konstantou, takže se větev i řetězce z bundlu vyřadí.
-const devLoginBuild = process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEV_LOGIN === '1';
+// Vývojové přihlášení (lib/devLogin.ts): komponenta se importuje JEN ve vývojovém buildu. `process.env.NODE_ENV`
+// je v produkci konstanta, takže se větev i dynamický import vyřadí a v bundlu po tlačítku nezbude ani řetězec.
+const DevLoginButton =
+  process.env.NODE_ENV === 'development'
+    ? dynamic(() => import('../../components/auth/DevLoginButton'), { ssr: false })
+    : null;
 
 export default function LoginPage() {
   const { login, loginWithOAuth } = useAuth();
@@ -25,28 +27,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDevLogin, setShowDevLogin] = useState(false);
-  useEffect(() => {
-    if (devLoginBuild && hasSupabaseConfig && isLoopbackHost(window.location.host)) setShowDevLogin(true);
-  }, []);
-
-  const handleDevLogin = async () => {
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/dev/login', { method: 'POST', headers: { 'x-clearspace-dev-login': '1' } });
-      if (!res.ok) throw new Error('Dev přihlášení není dostupné (zkontrolujte .env.local).');
-      const { access_token, refresh_token } = await res.json();
-      const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-      if (sessionError) throw sessionError;
-      router.push('/');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Dev přihlášení selhalo.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
@@ -325,17 +305,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {showDevLogin && (
-            <button
-              type="button"
-              data-testid="dev-login-btn"
-              onClick={handleDevLogin}
-              disabled={isSubmitting}
-              style={{ marginTop: '0.75rem', width: '100%', padding: '0.6rem', fontSize: '0.8rem', fontWeight: 600, border: '1px dashed var(--border-color)', borderRadius: '8px', background: 'transparent', color: 'var(--gray-text)', cursor: 'pointer' }}
-            >
-              Dev přihlášení (jen lokálně)
-            </button>
-          )}
+          {DevLoginButton && <DevLoginButton onError={setError} />}
 
           {oauthEnabled && (
           <>

@@ -30,7 +30,8 @@ export default defineConfig({
     // Port musí být explicitní: `next dev` jinak startuje na 3000 a pokud je
     // volný, Playwright na 3001 marně čeká. Dřív to procházelo jen náhodou,
     // když byl 3000 obsazený a Next si sám vybral 3001.
-    command: `npm run dev -- -p ${port}`,
+    // -H 127.0.0.1: the test server must never be reachable from the network.
+    command: `npm run dev -- -p ${port} -H 127.0.0.1`,
     url: baseUrl,
     reuseExistingServer: !process.env.CI,
     // Studený start Turbopacku (prázdná .next cache) se do výchozích 60 s nevejde.

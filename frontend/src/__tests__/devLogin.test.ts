@@ -45,9 +45,10 @@ describe('dev login fails closed', () => {
     ['same-site (not same-origin) fetch', { 'sec-fetch-site': 'same-site' }],
     ['missing marker header', { 'x-clearspace-dev-login': '' }],
   ])('refuses: %s', (_n, extra) => {
-    const h = goodHeaders(extra as Record<string, string>);
-    if (extra['host'] === '') h.delete('host');
-    if (extra['x-clearspace-dev-login'] === '') h.delete('x-clearspace-dev-login');
+    const e = extra as Record<string, string>;
+    const h = goodHeaders(e);
+    if (e['host'] === '') h.delete('host');
+    if (e['x-clearspace-dev-login'] === '') h.delete('x-clearspace-dev-login');
     expect(devLoginRefusal(GOOD_ENV, h)).not.toBeNull();
   });
 

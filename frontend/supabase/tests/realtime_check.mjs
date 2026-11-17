@@ -42,14 +42,14 @@ try {
   const up = await A.from('cards').update({ title: 'after' }).eq('id', `${P}-k`); if (up.error) throw up.error;
   for (let i = 0; i < 20 && evA.length === 0; i++) await sleep(500);
   await sleep(3000); // give a leaking channel time to leak
-  evA.some((p) => p.eventType === 'UPDATE' && p.new?.title === 'after') ? ok('member receives the card UPDATE via Realtime') : bad(`member got no UPDATE (events: ${evA.length})`);
+  if (evA.some((p) => p.eventType === 'UPDATE' && p.new?.title === 'after')) ok('member receives the card UPDATE via Realtime'); else bad(`member got no UPDATE (events: ${evA.length})`);
   const leaks = (list) => list.filter((p) => (p.new && Object.keys(p.new).length) || (p.old && Object.keys(p.old).length));
-  evB.length && console.log('  (non-member payload kinds:', evB.map((p) => (p.errors ? 'errors:' + JSON.stringify(p.errors) : 'data')).join(','), ')');
-  leaks(evB).length === 0 ? ok('non-member receives NO row data via Realtime (RLS applies)') : bad(`non-member received row data (${leaks(evB).length})`);
+  if (evB.length) console.log('  (non-member payload kinds:', evB.map((p) => (p.errors ? 'errors:' + JSON.stringify(p.errors) : 'data')).join(','), ')');
+  if (leaks(evB).length === 0) ok('non-member receives NO row data via Realtime (RLS applies)'); else bad(`non-member received row data (${leaks(evB).length})`);
   // Realtime may deliver an ERROR notice (payload.errors, empty new/old) to a role that may not read the table;
   // that is a refusal, not a leak. A leak is any payload carrying row data.
-  evAnon.length && console.log('  (anon payload kinds:', evAnon.map((p) => (p.errors ? 'errors:' + JSON.stringify(p.errors) : 'data')).join(','), ')');
-  leaks(evAnon).length === 0 ? ok('anon receives NO row data via Realtime') : bad(`anon received row data (${leaks(evAnon).length})`);
+  if (evAnon.length) console.log('  (anon payload kinds:', evAnon.map((p) => (p.errors ? 'errors:' + JSON.stringify(p.errors) : 'data')).join(','), ')');
+  if (leaks(evAnon).length === 0) ok('anon receives NO row data via Realtime'); else bad(`anon received row data (${leaks(evAnon).length})`);
   for (const c of chs) await c.unsubscribe();
 } catch (e) { bad(`error: ${e.message ?? e}`); }
 finally {

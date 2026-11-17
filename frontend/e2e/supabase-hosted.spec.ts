@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- REST/GoTrue JSON of arbitrary shape in a verification spec */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
 /**

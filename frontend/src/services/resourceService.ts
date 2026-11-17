@@ -132,7 +132,7 @@ export const resourceService = {
           size: row.size,
           uploadedBy: row.uploaded_by,
           createdAt: row.created_at,
-          downloadUrl: urlByPath.get(row.storage_path),
+          downloadUrl: urlByPath.get(row.storage_path) ?? undefined,
         };
       });
     }

@@ -40,14 +40,18 @@ Files, in this order:
 
 1. Supabase dashboard: confirm a recent backup / Point-in-Time-Recovery window exists, **or** make a manual dump:
    ```bash
-   # DB_URL = the project's connection string. Keep it out of shell history and logs.
-   pg_dump "$DB_URL" --format=custom --schema=public --schema=auth --file=clearspace-pre-migration.dump
-   pg_restore --list clearspace-pre-migration.dump | head      # readable?
-   shasum -a 256 clearspace-pre-migration.dump
+   # DB_URL = the project's *session pooler* connection string (direct db.<ref> hosts are IPv6-only).
+   # Keep it out of shell history and logs. psql/pg_dump are not installed on the dev machine: use the
+   # same-version client from the cached image (see HOSTED_SUPABASE_READINESS.md section 5).
+   docker run --rm -e DB_URL -v "$BACKUP_DIR:/out" public.ecr.aws/supabase/postgres:17.6.1.147 \
+     sh -c 'pg_dump "$DB_URL" --format=custom --no-owner --schema=public --schema=auth --file=/out/clearspace-pre-migration.dump'
+   docker run --rm -v "$BACKUP_DIR:/out" public.ecr.aws/supabase/postgres:17.6.1.147 pg_restore --list /out/clearspace-pre-migration.dump | head   # readable?
+   shasum -a 256 "$BACKUP_DIR/clearspace-pre-migration.dump"
    ```
    `auth` must be included: `profiles` and `workspace_members` reference `auth.users`.
 2. Store the dump **outside the repository**. Never commit it (it contains user data).
-3. Record row counts for the post-check: `profiles, workspace_members, projects, columns, cards, task_*, project_members, invitations, activity_logs, task_resources`.
+   Storage **objects** are not part of a database dump; copy them separately if the project has any.
+3. Record row counts for the post-check (`frontend/supabase/inspect_hosted.sql`, section 3, gives exact counts, read-only): `profiles, workspace_members, projects, columns, cards, task_*, project_members, invitations, activity_logs, task_resources`.
 4. **Stop condition:** if you cannot restore the dump into a scratch database successfully, do not proceed.
 
 ## 4. Rehearsal on a copy
@@ -56,6 +60,11 @@ Restore the dump into a scratch database (local Postgres / throwaway Supabase) a
 For a local stack you can use the recipe in [Runtime verification stack](#runtime-verification-stack).
 
 ## 5. Pre-checks (read-only queries on the target)
+
+Run `frontend/supabase/inspect_hosted.sql` first (metadata and counts only, read-only session). The migrations'
+own **preflight** then refuses, changing nothing, when a required column/type/helper is missing or when the
+migrating role does not own the objects it alters; it prints how many pending invitations will be expired.
+The queries below remain the manual cross-check.
 
 ```sql
 -- schema matches the baseline?  (all rows must exist)
@@ -169,7 +178,9 @@ Stop (and do not continue to the next step) when any of these happens:
 | 12 parallel quota reservations (psql) and 8 parallel HTTP reservations | both | exactly the limit passed |
 | Login, session persistence, logout, invitation accept in a browser; *Confirm email* ON and OFF; Mailpit link | Playwright against the local stack | verified |
 | AI gateway auth/limits at runtime **without any Gemini key** | dev server on the local stack | verified (provider step fails closed, ledger rows `failed/ai_unavailable`) |
-| The real production/staging schema, owner roles, extension placement, Dashboard settings | — | **NOT VERIFIED** (no access; run section 5) |
+| Drifted schema (missing/renamed columns), non-owner role | drift scenarios D1–D5 | verified: refused with a precise message, database unchanged |
+| Baseline + migrations + all SQL suites as the hosted role model (non-superuser `postgres`) on `supabase/postgres:17.6.1.147` | scenario E | verified |
+| The real production/staging schema, owner roles, extension placement, Dashboard settings | — | **NOT VERIFIED** (the hosted project is paused; run section 5 after it is restored) |
 | Supabase **Realtime** with the changed policies, **Storage** bucket policies | not part of the local stack | **NOT VERIFIED** |
 | `ALTER DEFAULT PRIVILEGES … REVOKE … FROM anon` effect for objects created by roles other than the migrating one | — | **NOT VERIFIED** on hosted Supabase |
 | Hosted PostgREST/GoTrue versions differ from the local CLI images | — | residual risk |

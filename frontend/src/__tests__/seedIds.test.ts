@@ -7,12 +7,15 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
  */
 
 const inserts: Record<string, Array<Record<string, unknown>>> = {};
+const calls: string[] = [];
+let duplicate = false;
 
 vi.mock('../lib/supabase', () => {
   const chain = (table: string) => ({
     select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }),
-    delete: () => ({ in: () => Promise.resolve({ error: null }) }),
+    delete: () => { calls.push(`delete:${table}`); return { in: () => Promise.resolve({ error: null }) }; },
     insert: (rows: Array<Record<string, unknown>> | Record<string, unknown>) => {
+      if (duplicate) return Promise.resolve({ error: { code: '23505', message: 'duplicate key' } });
       inserts[table] = [...(inserts[table] ?? []), ...(Array.isArray(rows) ? rows : [rows])];
       return Promise.resolve({ error: null });
     },
@@ -27,6 +30,7 @@ import { localStore } from '../services/storage/localStore';
 describe('seed IDs are unique per project', () => {
   beforeEach(() => {
     for (const k of Object.keys(inserts)) delete inserts[k];
+    calls.length = 0;
     localStorage.clear();
   });
 
@@ -55,6 +59,14 @@ describe('seed IDs are unique per project', () => {
     expect(new Set(cardIds).size).toBe(cardIds.length);
     expect(colIds.every((id) => !/^column-\d+$/.test(id))).toBe(true);
     expect(cardIds.every((id) => !/^card-\d+$/.test(id))).toBe(true);
+  });
+
+  test('seeding never deletes and tolerates a concurrent seed (23505) without failing', async () => {
+    await kanbanService.seedInitialData('project-default-user-c');
+    expect(calls.some((c) => c.startsWith('delete:'))).toBe(false);
+    duplicate = true; // every insert now answers "already exists"
+    await expect(kanbanService.seedInitialData('project-default-user-c')).resolves.toBeDefined();
+    duplicate = false;
   });
 
   test('seeded cards point at the seeded (scoped) column of the same project', async () => {

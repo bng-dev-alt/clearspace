@@ -27,6 +27,10 @@ export function useKanbanBoard(projectId?: string) {
 
   // Inicializujeme sloupce s projektovými ID, aby se předešlo hydration shiftům
   const getInitialColumns = (): Column[] => {
+    // Supabase mode: never show (or let the user act on) demo/local columns before the DATABASE board has
+    // loaded. Their ids ('column-1') are not the project-scoped ids stored in the DB, so a card added in that
+    // window was refused by RLS (403) and the optimistic card vanished. Verified against the hosted project.
+    if (hasSupabaseConfig) return [];
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(`kanban_board_${activeProjectId}`);
       if (stored) return JSON.parse(stored);
@@ -179,23 +183,17 @@ export function useKanbanBoard(projectId?: string) {
       updatedAt: new Date().toISOString(),
     };
 
-    // Optimistická aktualizace lokálního stavu
-    let finalPosition = 0;
+    // Position from the current state (an updater-assigned variable is not set yet when it is read below).
+    const finalPosition = columns.find((col) => col.id === columnId)?.cards.length ?? 0;
     setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          finalPosition = col.cards.length;
-          return { ...col, cards: [...col.cards, newCard] };
-        }
-        return col;
-      })
+      prev.map((col) => (col.id === columnId ? { ...col, cards: [...col.cards, newCard] } : col))
     );
 
     // Asynchronní uložení do databáze (s kontextem projektu)
     kanbanService.createCard(columnId, newCard, finalPosition, activeProjectId);
     logProjectActivity('card_created', 'task', { title }, newCard.id);
     return newCard;
-  }, [activeProjectId, teamMembers, logProjectActivity]);
+  }, [activeProjectId, teamMembers, logProjectActivity, columns]);
 
   const addActivity = useCallback((columnId: string, cardId: string, text: string) => {
     const newActivity: ActivityLog = {
@@ -232,34 +230,27 @@ export function useKanbanBoard(projectId?: string) {
     cardId: string,
     updates: Partial<Card>
   ) => {
-    let finalCard: Card | null = null;
-    let originalCard: Card | null = null;
+    // Persisted values come from the CURRENT state, not from inside the setColumns updater (React runs an
+    // updater lazily; a variable assigned there is still null when checked, so the DB write was skipped --
+    // reproduced on the hosted project for the drag&drop move, same pattern here).
+    const originalCard: Card | null = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId) ?? null;
+    if (!originalCard) return;
+    const syncedUpdates = { ...updates };
+    if (updates.assignees !== undefined) {
+      syncedUpdates.assignee = toPrimaryAssignee(updates.assignees);
+    } else if (updates.assignee !== undefined) {
+      syncedUpdates.assignees = updates.assignee
+        ? [legacyAssigneeToMember(updates.assignee)]
+        : [];
+    }
+    const finalCard: Card = { ...originalCard, ...syncedUpdates };
 
     setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          return {
-            ...col,
-            cards: col.cards.map((c) => {
-              if (c.id === cardId) {
-                originalCard = c;
-                const syncedUpdates = { ...updates };
-                if (updates.assignees !== undefined) {
-                  syncedUpdates.assignee = toPrimaryAssignee(updates.assignees);
-                } else if (updates.assignee !== undefined) {
-                  syncedUpdates.assignees = updates.assignee
-                    ? [legacyAssigneeToMember(updates.assignee)]
-                    : [];
-                }
-                finalCard = { ...c, ...syncedUpdates };
-                return finalCard;
-              }
-              return c;
-            }),
-          };
-        }
-        return col;
-      })
+      prev.map((col) =>
+        col.id === columnId
+          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, ...syncedUpdates } : c)) }
+          : col
+      )
     );
 
     if (finalCard) {
@@ -295,7 +286,7 @@ export function useKanbanBoard(projectId?: string) {
         addActivity(columnId, cardId, `Řešitel změněn na: ${updates.assignee?.name || 'Nepřiřazeno'}`);
       }
     }
-  }, [activeProjectId, addActivity]);
+  }, [activeProjectId, addActivity, columns]);
 
   const addChecklistItem = useCallback((columnId: string, cardId: string, text: string) => {
     const newItem: ChecklistItem = {
@@ -329,101 +320,55 @@ export function useKanbanBoard(projectId?: string) {
   }, [addActivity]);
 
   const toggleChecklistItem = useCallback((columnId: string, cardId: string, itemId: string) => {
-    let itemToUpdate: ChecklistItem | null = null;
+    const current = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId);
+    if (!current) return;
+    const itemToUpdate: ChecklistItem = { ...current, completed: !current.completed };
 
     setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          return {
-            ...col,
-            cards: col.cards.map((c) => {
-              if (c.id === cardId) {
-                const updatedChecklist = (c.checklist || []).map((item) => {
-                  if (item.id === itemId) {
-                    itemToUpdate = { ...item, completed: !item.completed };
-                    return itemToUpdate;
-                  }
-                  return item;
-                });
-                return { ...c, checklist: updatedChecklist };
-              }
-              return c;
-            }),
-          };
-        }
-        return col;
-      })
+      prev.map((col) =>
+        col.id === columnId
+          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: (c.checklist || []).map((item) => (item.id === itemId ? { ...item, completed: itemToUpdate.completed } : item)) } : c)) }
+          : col
+      )
     );
 
-    if (itemToUpdate) {
-      kanbanService.updateChecklistItem(itemToUpdate);
-      const statusText = (itemToUpdate as ChecklistItem).completed ? 'splněna' : 'označena jako nesplněná';
-      addActivity(columnId, cardId, `Položka checklistu "${(itemToUpdate as ChecklistItem).text}" byla ${statusText}`);
-    }
-  }, [addActivity]);
+    kanbanService.updateChecklistItem(itemToUpdate);
+    const statusText = itemToUpdate.completed ? 'splněna' : 'označena jako nesplněná';
+    addActivity(columnId, cardId, `Položka checklistu "${itemToUpdate.text}" byla ${statusText}`);
+  }, [addActivity, columns]);
 
   const updateChecklistItemText = useCallback((columnId: string, cardId: string, itemId: string, text: string) => {
-    let itemToUpdate: ChecklistItem | null = null;
+    const current = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId);
+    if (!current) return;
+    const itemToUpdate: ChecklistItem = { ...current, text };
 
     setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          return {
-            ...col,
-            cards: col.cards.map((c) => {
-              if (c.id === cardId) {
-                const updatedChecklist = (c.checklist || []).map((item) => {
-                  if (item.id === itemId) {
-                    itemToUpdate = { ...item, text };
-                    return itemToUpdate;
-                  }
-                  return item;
-                });
-                return { ...c, checklist: updatedChecklist };
-              }
-              return c;
-            }),
-          };
-        }
-        return col;
-      })
+      prev.map((col) =>
+        col.id === columnId
+          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: (c.checklist || []).map((item) => (item.id === itemId ? { ...item, text } : item)) } : c)) }
+          : col
+      )
     );
 
-    if (itemToUpdate) {
-      kanbanService.updateChecklistItem(itemToUpdate);
-    }
-  }, []);
+    kanbanService.updateChecklistItem(itemToUpdate);
+  }, [columns]);
 
   const deleteChecklistItem = useCallback((columnId: string, cardId: string, itemId: string) => {
-    let deletedItemText = '';
+    const deletedItemText = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId)?.text ?? '';
 
     setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          return {
-            ...col,
-            cards: col.cards.map((c) => {
-              if (c.id === cardId) {
-                const found = (c.checklist || []).find((i) => i.id === itemId);
-                if (found) deletedItemText = found.text;
-                return {
-                  ...c,
-                  checklist: (c.checklist || []).filter((item) => item.id !== itemId),
-                };
-              }
-              return c;
-            }),
-          };
-        }
-        return col;
-      })
+      prev.map((col) =>
+        col.id === columnId
+          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: (c.checklist || []).filter((item) => item.id !== itemId) } : c)) }
+          : col
+      )
     );
 
     kanbanService.deleteChecklistItem(itemId);
     if (deletedItemText) {
       addActivity(columnId, cardId, `Odstraněna položka checklistu: ${deletedItemText}`);
     }
-  }, [addActivity]);
+  }, [addActivity, columns]);
 
   const addComment = useCallback((columnId: string, cardId: string, authorName: string, content: string) => {
     const newComment: Comment = {
@@ -482,41 +427,35 @@ export function useKanbanBoard(projectId?: string) {
   const moveCard = useCallback((cardId: string, sourceColumnId: string, destinationColumnId: string) => {
     if (sourceColumnId === destinationColumnId) return;
 
-    const sourceColName = columns.find((c) => c.id === sourceColumnId)?.name;
-    const destColName = columns.find((c) => c.id === destinationColumnId)?.name;
+    const sourceCol = columns.find((c) => c.id === sourceColumnId);
+    const destCol = columns.find((c) => c.id === destinationColumnId);
+    const sourceColName = sourceCol?.name;
+    const destColName = destCol?.name;
 
-    let targetCard: Card | null = null;
-    let finalPosition = 0;
+    // Everything the persistence call needs is derived from the CURRENT state here, not from inside the
+    // setColumns updater: React runs an updater lazily (during render), so a variable assigned there was
+    // still null when `if (targetCard)` ran and the move was silently NOT written to the database
+    // (found on the hosted project: the drop moved the card on screen, the row stayed in its column).
+    const targetCard: Card | undefined = sourceCol?.cards.find((card) => card.id === cardId);
+    if (!targetCard) return;
+    const finalPosition = destCol ? destCol.cards.length : 0;
 
     // Optimistická aktualizace lokálního stavu
-    setColumns((prev) => {
-      const sourceCol = prev.find((col) => col.id === sourceColumnId);
-      const cardToMove = sourceCol?.cards.find((card) => card.id === cardId);
-      if (!cardToMove) return prev;
-
-      targetCard = cardToMove;
-
-      return prev.map((col) => {
-        if (col.id === sourceColumnId) {
-          return { ...col, cards: col.cards.filter((card) => card.id !== cardId) };
-        }
-        if (col.id === destinationColumnId) {
-          finalPosition = col.cards.length;
-          return { ...col, cards: [...col.cards, cardToMove] };
-        }
+    setColumns((prev) =>
+      prev.map((col) => {
+        if (col.id === sourceColumnId) return { ...col, cards: col.cards.filter((card) => card.id !== cardId) };
+        if (col.id === destinationColumnId) return { ...col, cards: [...col.cards, targetCard] };
         return col;
-      });
-    });
+      })
+    );
 
     // Asynchronní přesun v databázi
-    if (targetCard) {
-      kanbanService.moveCard(cardId, sourceColumnId, destinationColumnId, finalPosition, activeProjectId);
-      logProjectActivity('card_moved', 'task', {
-        title: (targetCard as Card).title,
-        from: sourceColName,
-        to: destColName,
-      }, cardId);
-    }
+    kanbanService.moveCard(cardId, sourceColumnId, destinationColumnId, finalPosition, activeProjectId);
+    logProjectActivity('card_moved', 'task', {
+      title: targetCard.title,
+      from: sourceColName,
+      to: destColName,
+    }, cardId);
   }, [activeProjectId, columns, logProjectActivity]);
 
   const renameColumn = useCallback((columnId: string, newName: string) => {

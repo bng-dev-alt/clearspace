@@ -8,7 +8,13 @@ import { mapDbCard, boardToRestorePayload } from './boardMapping';
 import type { DbCard } from './boardMapping';
 
 // Výchozí členství nového projektu = všichni výchozí členové workspace.
-const DEFAULT_MEMBER_IDS = DEFAULT_MEMBERS.map((m) => m.id);
+const DEMO_MEMBER_IDS = DEFAULT_MEMBERS.map((m) => m.id);
+/**
+ * Member ids a NEW project starts with. Demo mode has the demo roster (member-1..4). With a real account those
+ * ids do not exist in the user's workspace, so the board showed NO assignable members at all (verified on the
+ * hosted project). Left undefined, the board derives "all workspace members" (the owner) and persists that.
+ */
+const defaultMemberIds = (): string[] | undefined => (hasSupabaseConfig ? undefined : DEMO_MEMBER_IDS);
 
 export interface Project {
   id: string;
@@ -148,6 +154,9 @@ async function syncDbCardAssignees(cardId: string, assignees?: TeamMember[]): Pr
   if (insErr) throw insErr;
 }
 
+/** Postgres unique_violation: for seed inserts it means a concurrent run already created the same rows. */
+const isDuplicateKey = (error: { code?: string } | null | undefined) => error?.code === '23505';
+
 export const kanbanService = {
   // --- Project Operations ---
   async fetchProjects(userId?: string): Promise<Project[]> {
@@ -172,14 +181,17 @@ export const kanbanService = {
           id: `project-default-${userId}`,
           name: 'Vývoj MVP',
           user_id: userId,
-          memberIds: DEFAULT_MEMBER_IDS,
+          memberIds: defaultMemberIds(),
         };
 
+        // Idempotent: two concurrent first loads (React strict-mode double mount, two tabs) both reach this
+        // point; the loser's INSERT fails with 23505 which means "somebody already created it" -- not an error.
+        // (ON CONFLICT DO NOTHING / upsert is NOT usable here: PostgREST's upsert path is refused by RLS.)
         const { error: insertError } = await supabase
           .from('projects')
           .insert(projectToDbRow(defaultProj));
 
-        if (insertError) throw insertError;
+        if (insertError && !isDuplicateKey(insertError)) throw insertError;
 
         await this.seedInitialData(defaultProj.id);
         return [defaultProj];
@@ -198,7 +210,7 @@ export const kanbanService = {
       name,
       created_at: new Date().toISOString(),
       user_id: userId,
-      memberIds: DEFAULT_MEMBER_IDS,
+      memberIds: defaultMemberIds(),
     };
 
     if (!hasSupabaseConfig) {
@@ -285,7 +297,7 @@ export const kanbanService = {
             id: projectId,
             name: 'Vývoj MVP',
             created_at: new Date().toISOString(),
-            memberIds: DEFAULT_MEMBER_IDS,
+            memberIds: defaultMemberIds(),
           };
         }
         return null;
@@ -382,18 +394,10 @@ export const kanbanService = {
   async seedInitialData(projectId: string, isEmpty = false): Promise<Column[]> {
     if (!hasSupabaseConfig) return localStore.getBoard(projectId);
 
-    // Smazat staré sloupce (karty se smažou kaskádou)
-    const { data: oldCols } = await supabase
-      .from('columns')
-      .select('id')
-      .eq('project_id', projectId);
-
-    if (oldCols && oldCols.length > 0) {
-      const oldColIds = oldCols.map((c) => c.id);
-      await supabase.from('cards').delete().in('column_id', oldColIds);
-      await supabase.from('columns').delete().in('id', oldColIds);
-    }
-
+    // NOTE: seeding NEVER deletes. It used to wipe the project's columns (and, by cascade, cards) before
+    // inserting; with two concurrent first loads the second run deleted the first run's fresh board and the
+    // inserts then collided (23505 / RLS 403 on the next card). Seed rows have deterministic, project-scoped
+    // ids, so tolerating 23505 makes the operation idempotent and race-safe.
     // Karty seedovat jen u výchozího projektu. ID jsou vždy s prefixem
     // projektu -- columns.id a cards.id jsou globální primární klíče, holé
     // 'column-1' / 'card-1' by kolidovaly mezi uživateli (viz seedBoard.ts).
@@ -408,7 +412,8 @@ export const kanbanService = {
         position: index,
       }))
     );
-    if (colError) throw colError;
+    // 23505: a concurrent seed already inserted the same deterministic rows (all-or-nothing per statement).
+    if (colError && !isDuplicateKey(colError)) throw colError;
 
     if (shouldSeedCards) {
       const now = new Date().toISOString();
@@ -428,7 +433,7 @@ export const kanbanService = {
 
       if (cardInserts.length > 0) {
         const { error: cardError } = await supabase.from('cards').insert(cardInserts);
-        if (cardError) throw cardError;
+        if (cardError && !isDuplicateKey(cardError)) throw cardError;
       }
     }
 

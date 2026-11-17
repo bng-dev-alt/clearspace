@@ -1,6 +1,6 @@
 # Approval package 2 — A4 (Vercel env), A5 (staged deploy + promote), A6 (bounded AI test, firewall, merge)
 
-Prepared 2026-11-17 on `consolidation/security-foundation`. **Nothing in this document has been executed.** Follows [APPROVAL_PACKAGE.md](APPROVAL_PACKAGE.md) (A1–A3 are done).
+Prepared 2026-11-17 on `consolidation/security-foundation`. **A4 has been executed (see the execution record at the end); A4b–A6b have not.** Follows [APPROVAL_PACKAGE.md](APPROVAL_PACKAGE.md) (A1–A3 are done).
 Each approval is separate. Order: **A4 → (A4b by you) → A5 → A6 → A6b**. Stop at the first failed gate; later steps depend on earlier ones.
 
 ## Facts verified read-only while preparing (re-check right before each step)
@@ -147,3 +147,34 @@ curl -4 -s -o /dev/null -w 'after restore: %{http_code}\n' -X POST https://clear
 - E-mail delivery (D2): custom SMTP, needed before anyone but you can register; Supabase plan/backups (Free has none).
 - Dev account `dev-login@example.test`: delete before the project is public (or keep knowingly).
 - Re-enabling Git-triggered deployments: delete `frontend/vercel.json` in a normal commit when you want them.
+
+
+---
+
+## Execution record — A4 (2026-11-17) — **PASS**
+
+Pre-checks (read-only): project `clearspace` (`prj_yFGiOmACsu4iILF6nb6Q0aDgG8gg`, scope `bng-dev-alt-webadvisor`, GitHub `bng-dev-alt/clearspace`, Root Directory `frontend`); domains `clearspace-ai.vercel.app` + redirect alias `cearspace.vercel.app`;
+env before = 4 variables (`GEMINI_*`, `NEXT_PUBLIC_SUPABASE_*`), each production+preview, all `sensitive`; rollback file present; HEAD `efed982`, tree clean, `main` `ff615c3`.
+
+What was done (only on that project):
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` **replaced** with the new project's URL and **anon** key (JWT checked before sending: `role=anon`, `ref=twjlnsxjtuntujarwner`), Production + Preview, **same variable ids**.
+- Added `AI_RATE_PER_USER_PER_MINUTE=3`, `AI_RATE_GLOBAL_PER_MINUTE=10`, `AI_DAILY_TOKEN_BUDGET_PER_USER=50000` (Production + Preview).
+- `GEMINI_API_KEY` / `GEMINI_MODEL` untouched (still `sensitive`, last updated 2026-07-20).
+
+**Deviation from the command in A4 above, and why:** `vercel env update … --sensitive` is **refused** for any `NEXT_PUBLIC_` name ("exposes this value to anyone visiting your site, so it cannot be a Secret") and a Secret cannot be converted by `update`.
+The two failed attempts changed nothing. They were replaced with `vercel env add NAME --environment production,preview --type config --value … --force --yes` (stdin/shell variable, never printed). Consequence: these two variables are now plain **Config** (type `encrypted` in the API) instead of `sensitive`;
+this is harmless — both values are public by design and are embedded in every client bundle — and it makes them verifiable. Use `--type config --force` (not `--sensitive`) for any future change of `NEXT_PUBLIC_*`.
+
+Verification (names, environments, values compared as booleans — no secret printed):
+| Check | Result |
+|---|---|
+| Variables now | 7: `AI_DAILY_TOKEN_BUDGET_PER_USER`, `AI_RATE_GLOBAL_PER_MINUTE`, `AI_RATE_PER_USER_PER_MINUTE`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL` — each Production + Preview |
+| Supabase identity | URL == `https://twjlnsxjtuntujarwner.supabase.co`; anon JWT `role=anon`, `ref=twjlnsxjtuntujarwner`; the old ref `bjycwqfessddbfocrggt` appears in neither value |
+| AI limits | `3 / 10 / 50000` |
+| Forbidden names (`FORCE_DEMO`, `DEV_LOGIN`, service/DB-password, `ENABLE_OAUTH`) | none |
+| Nothing else changed | newest deployment still `dpl_6HzXV3gf` (2026-07-30); firewall `1 active, 0 inactive`; `/api/ai/chat` → 403, Cloudflare origin → 302; `main` `ff615c3`; live site still serves the old bundle (old ref) — the new values take effect only with the A5 deployment |
+
+**Rollback of A4:** `vercel env add NEXT_PUBLIC_SUPABASE_URL/…_ANON_KEY --environment production,preview --type config --value <old> --force` with the values in `/Volumes/WORKSPACE/_G2_BACKUP/20261117-vercel-old-public-env/old_public_env.txt`; `vercel env rm AI_…` for the three additions. No running service depends on them yet.
+
+**Next — A4b (yours):** create the V1-only Gemini key (own Google project, ideally no billing account, restricted to the Generative Language API) and set it in your own terminal before A5:
+`vercel env update GEMINI_API_KEY --environment production --sensitive -p clearspace --scope bng-dev-alt-webadvisor` (hidden prompt; it keeps both environments), and `GEMINI_MODEL` only if needed. (`--sensitive` works here because the name has no `NEXT_PUBLIC_` prefix.)

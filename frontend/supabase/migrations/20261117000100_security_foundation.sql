@@ -30,7 +30,9 @@
 DO $$
 DECLARE
     v_missing TEXT := '';
+    v_pending BIGINT;
     t TEXT;
+    c TEXT;
 BEGIN
     FOREACH t IN ARRAY ARRAY['profiles', 'projects', 'columns', 'cards', 'workspace_members',
                              'project_members', 'invitations', 'activity_logs', 'task_resources',
@@ -57,9 +59,60 @@ BEGIN
     IF (SELECT count(*) FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role')) <> 3 THEN
         v_missing := v_missing || ' roles:anon/authenticated/service_role';
     END IF;
-    IF v_missing <> '' THEN
-        RAISE EXCEPTION 'Preflight failed -- the database does not match the baseline this migration expects. Missing:%. Apply supabase_schema.sql first / check the extensions schema. Nothing was changed.', v_missing;
+
+    -- The base tables projects/columns/cards were created outside this repository, so the columns
+    -- this migration (and the policies/functions it writes) relies on are verified, not assumed.
+    FOREACH c IN ARRAY ARRAY[
+        'profiles.id', 'profiles.display_name', 'projects.id', 'projects.user_id',
+        'workspace_members.id', 'workspace_members.owner_id', 'workspace_members.profile_id',
+        'workspace_members.full_name', 'workspace_members.initials', 'workspace_members.avatar_color',
+        'workspace_members.email', 'workspace_members.workspace_role', 'workspace_members.created_at',
+        'project_members.project_id', 'project_members.member_id',
+        'activity_logs.project_id', 'activity_logs.actor_id',
+        'invitations.id', 'invitations.email', 'invitations.role', 'invitations.status',
+        'invitations.invited_by', 'invitations.expires_at', 'invitations.accepted_at', 'invitations.created_at']
+    LOOP
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public' AND table_name = split_part(c, '.', 1)
+                         AND column_name = split_part(c, '.', 2)) THEN
+            v_missing := v_missing || ' col:' || c;
+        END IF;
+    END LOOP;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+               AND table_name = 'projects' AND column_name = 'id' AND data_type <> 'text') THEN
+        v_missing := v_missing || ' type:projects.id(text expected)';
     END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+               AND table_name = 'profiles' AND column_name = 'id' AND data_type <> 'uuid') THEN
+        v_missing := v_missing || ' type:profiles.id(uuid expected)';
+    END IF;
+    IF to_regprocedure('public.is_project_owner(text)') IS NULL THEN v_missing := v_missing || ' fn:is_project_owner'; END IF;
+    IF to_regprocedure('public.can_view_workspace(uuid)') IS NULL THEN v_missing := v_missing || ' fn:can_view_workspace'; END IF;
+
+    -- ALTER FUNCTION / ALTER TABLE / CREATE POLICY need ownership: a hosted project's SQL editor runs
+    -- as `postgres`, which does not own objects created by other roles (e.g. supabase_admin).
+    FOREACH c IN ARRAY ARRAY['public.handle_new_user()', 'public.is_project_owner(text)',
+                             'public.is_project_member(text)', 'public.can_view_workspace(uuid)']
+    LOOP
+        IF to_regprocedure(c) IS NOT NULL AND NOT pg_has_role(current_user,
+               (SELECT proowner FROM pg_proc WHERE oid = to_regprocedure(c)::oid), 'USAGE') THEN
+            v_missing := v_missing || ' owner:' || c;
+        END IF;
+    END LOOP;
+    FOREACH t IN ARRAY ARRAY['profiles', 'workspace_members', 'project_members', 'activity_logs', 'invitations']
+    LOOP
+        IF to_regclass('public.' || t) IS NOT NULL AND NOT pg_has_role(current_user,
+               (SELECT relowner FROM pg_class WHERE oid = to_regclass('public.' || t)::oid), 'USAGE') THEN
+            v_missing := v_missing || ' owner:public.' || t;
+        END IF;
+    END LOOP;
+
+    IF v_missing <> '' THEN
+        RAISE EXCEPTION 'Preflight failed -- the database does not match the baseline this migration expects (or the migrating role does not own the objects). Missing/not owned:%. Apply supabase_schema.sql first / check the extensions schema and run as the owning role. Nothing was changed.', v_missing;
+    END IF;
+
+    SELECT count(*) INTO v_pending FROM public.invitations WHERE status = 'pending';
+    RAISE NOTICE 'Preflight ok. Pending invitations that will be expired (owners must re-invite): %', v_pending;
 END $$;
 
 -- ------------------------------------------------------------

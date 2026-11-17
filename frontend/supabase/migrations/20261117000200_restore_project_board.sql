@@ -13,6 +13,43 @@
 -- Idempotent (CREATE OR REPLACE). Apply after 20261117000100.
 -- ============================================================
 
+-- Preflight. A plpgsql body is not checked against the tables when the function is created, so a
+-- missing column would only surface when somebody restores a board. Verify them now instead.
+DO $$
+DECLARE
+    v_missing TEXT := '';
+    c TEXT;
+BEGIN
+    -- (two branches, not one OR: the table may not exist yet and must not even be planned then)
+    IF to_regclass('public.clearspace_migrations') IS NULL THEN
+        v_missing := v_missing || ' migration:20261117000100_security_foundation(apply it first)';
+    ELSIF NOT EXISTS (SELECT 1 FROM public.clearspace_migrations WHERE version = '20261117000100_security_foundation') THEN
+        v_missing := v_missing || ' migration:20261117000100_security_foundation(apply it first)';
+    END IF;
+    IF to_regprocedure('public.is_project_owner(text)') IS NULL THEN v_missing := v_missing || ' fn:is_project_owner'; END IF;
+    FOREACH c IN ARRAY ARRAY[
+        'columns.id', 'columns.project_id', 'columns.name', 'columns.position',
+        'cards.id', 'cards.column_id', 'cards.title', 'cards.details', 'cards.tag', 'cards.priority',
+        'cards.assignee_name', 'cards.assignee_initials', 'cards.assignee_color', 'cards.assignees',
+        'cards.due_date', 'cards.position', 'cards.archived', 'cards.created_at', 'cards.updated_at',
+        'task_checklists.id', 'task_checklists.card_id', 'task_checklists.text', 'task_checklists.completed',
+        'task_comments.id', 'task_comments.card_id', 'task_comments.author_name', 'task_comments.content',
+        'task_comments.created_at',
+        'task_activities.id', 'task_activities.card_id', 'task_activities.text', 'task_activities.created_at',
+        'card_assignees.card_id', 'card_assignees.member_id', 'card_assignees.position',
+        'workspace_members.id']
+    LOOP
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public' AND table_name = split_part(c, '.', 1)
+                         AND column_name = split_part(c, '.', 2)) THEN
+            v_missing := v_missing || ' col:' || c;
+        END IF;
+    END LOOP;
+    IF v_missing <> '' THEN
+        RAISE EXCEPTION 'Preflight failed -- restore_project_board cannot be installed. Missing:%. Nothing was changed.', v_missing;
+    END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.restore_project_board(p_project_id TEXT, p_board JSONB)
 RETURNS JSONB
 LANGUAGE plpgsql

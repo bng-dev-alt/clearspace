@@ -42,7 +42,7 @@ Deployments then happen **only** by explicit CLI command. Facts and caveats:
 
 | # | Decision | Default recommendation |
 |---|---|---|
-| D1 | Does the data in the old Supabase project matter? | **No → Track C**: new empty Supabase project (baseline + migrations). If yes → Track A (restore the old project, back up, migrate it). |
+| D1 | Does the data in the old Supabase project matter? | **DECIDED 2026-11-17: Track C** — new empty project `ClearSpace V1` (`twjlnsxjtuntujarwner`) is created and migrated, see [NEW_SUPABASE_PROJECT.md](NEW_SUPABASE_PROJECT.md). Track A (restore the old project) is dropped; the old project is left untouched. R2/R4 and the data part of R6 no longer apply. |
 | D2 | Plan for the Supabase project (Free pauses idle projects and has no backups) | Pro if the app is to be used for real; otherwise accept Free + manual dumps. |
 | D3 | *Confirm email* ON | **ON** (invitations are bound to verified e-mails). |
 | D4 | Gemini: new key in a billing-less Google project (hard cap) vs billing + quotas | billing-less (see rotation doc). |

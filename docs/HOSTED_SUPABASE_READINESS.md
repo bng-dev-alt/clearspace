@@ -4,6 +4,10 @@ Status of the production-readiness preparation (P4, phases 1–4). Snapshot: 202
 `consolidation/security-foundation`. **Nothing here touched the hosted project**: it could not be queried (it is
 paused) and resuming it is a production state change that needs approval.
 
+> **Update 2026-11-17:** the owner chose a new project; it was created, migrated and checked — see
+> [NEW_SUPABASE_PROJECT.md](NEW_SUPABASE_PROJECT.md). This document now describes the **old** project (still paused, untouched)
+> and the generic backup/restore procedure.
+
 Legend: **VERIFIED** = observed first-hand · **INFERRED** = derived from repo/history · **NOT VERIFIED** = could not be checked ·
 **BLOCKED** = needs an approval or an action by the owner first.
 

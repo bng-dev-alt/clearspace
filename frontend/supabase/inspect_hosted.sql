@@ -4,10 +4,18 @@
 -- Run it before anything else on the target (and again after the migrations) and attach the output to
 -- the release record. It is designed to be pasted into the SQL editor or run with psql in a read-only session:
 --
---   PGOPTIONS='-c default_transaction_read_only=on' psql "$DB_URL" -X -f frontend/supabase/inspect_hosted.sql
+--   psql "$DB_URL" -X -f frontend/supabase/inspect_hosted.sql
+--
+-- Read-only is enforced by the first statement below, NOT by PGOPTIONS: the Supabase pooler (Supavisor)
+-- drops startup options, so `PGOPTIONS='-c default_transaction_read_only=on'` silently does nothing there
+-- (verified against a real hosted project: the setting still read `off`).
 --
 -- Do NOT use ON_ERROR_STOP: a missing object (for example a table that never existed) is itself a finding
 -- and the remaining sections should still run.
+
+SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+\echo '== 0. session is read-only (must say "on")'
+show transaction_read_only;
 
 \echo '== 1. server / role'
 select version();
@@ -85,4 +93,4 @@ select version from supabase_migrations.schema_migrations order by 1;
 
 \echo '== 16. database size and settings that matter'
 select pg_size_pretty(pg_database_size(current_database())) as database_size;
-select name, setting from pg_settings where name in ('server_version', 'max_connections', 'statement_timeout', 'default_transaction_read_only');
+select name, setting from pg_settings where name in ('server_version', 'max_connections', 'statement_timeout', 'default_transaction_read_only', 'transaction_read_only');

@@ -8,7 +8,7 @@
 #             suites must work as that role, twice (idempotent), and a role that does not own the objects
 #             must be refused.
 
-M1="${MIGRATIONS[0]}"; M2="${MIGRATIONS[1]}"
+M1="${MIGRATIONS[0]}"; M2="${MIGRATIONS[1]}"; M3="${MIGRATIONS[2]}"
 
 apply_as() { # $1 = role, $2 = db, $3 = file ; prints stderr+notices, returns psql's status
   docker exec -i -e PGPASSWORD=sectest -e PGOPTIONS='-c client_min_messages=notice' "$NAME" \
@@ -61,13 +61,13 @@ for _ in 1 2 3 4 5; do
   sleep 1
 done
 for f in 00_auth_shims.sql 01_helpers.sql; do psql_admin -d cs_e -f - < "$HERE/$f" >/dev/null; done
-for f in "$BASELINE" "$M1" "$M2"; do
+for f in "$BASELINE" "$M1" "$M2" "$M3"; do
   out=$(apply_as postgres cs_e "$f") || { echo "FAIL: $(basename "$f") as role postgres: $out"; exit 1; }
   echo "$out" | grep -E "Preflight ok" || true
 done
-for f in "$M1" "$M2"; do
+for f in "$M1" "$M2" "$M3"; do
   apply_as postgres cs_e "$f" >/dev/null || { echo "FAIL: idempotent re-run of $(basename "$f") as postgres"; exit 1; }
 done
 echo "ok - applied twice as postgres"
-[ "$(psql_admin -d cs_e -At -c "select count(*) from public.clearspace_migrations")" = "2" ] || { echo "FAIL: migration markers"; exit 1; }
+[ "$(psql_admin -d cs_e -At -c "select count(*) from public.clearspace_migrations")" = "3" ] || { echo "FAIL: migration markers"; exit 1; }
 for t in "$HERE"/[1-9]*.test.sql; do run_test cs_e "$t"; done

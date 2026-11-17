@@ -45,7 +45,7 @@ export default function AiCapacityPlannerModal({
   columns,
   members,
   projectId,
-  projectName,
+  projectName: _projectName,
   onUpdateCard,
 }: AiCapacityPlannerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -58,9 +58,7 @@ export default function AiCapacityPlannerModal({
     setError(null);
     try {
       const response = await aiClient.fetchAi('/api/ai/capacity-planning', 'AI Capacity Planning', {
-        columns,
         members,
-        context: { projectName },
       });
 
       if (response && response.parsed) {

@@ -9,6 +9,7 @@ import { INITIAL_COLUMNS } from '../data/dummyData';
 import { useAuth } from './useAuth';
 import { useRealtimeBoard } from './useRealtimeBoard';
 import { hasSupabaseConfig } from '../lib/supabase';
+import { aiClient } from '../services/ai/aiClient';
 
 export function useKanbanBoard(projectId?: string) {
   const { user, profile } = useAuth();
@@ -16,6 +17,13 @@ export function useKanbanBoard(projectId?: string) {
   const activeProjectId = projectId === 'project-default' || !projectId
     ? `project-default-${userId}`
     : projectId;
+
+  // AI endpointy dostanou id projektu, ve kterém uživatel pracuje (server ověří
+  // členství a načte kontext sám). Používá se rozlišené id, ne 'project-default'.
+  useEffect(() => {
+    aiClient.setActiveProject(activeProjectId);
+    return () => aiClient.setActiveProject(null);
+  }, [activeProjectId]);
 
   // Inicializujeme sloupce s projektovými ID, aby se předešlo hydration shiftům
   const getInitialColumns = (): Column[] => {

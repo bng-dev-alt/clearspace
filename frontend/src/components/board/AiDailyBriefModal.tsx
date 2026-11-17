@@ -21,7 +21,7 @@ interface AiDailyBriefModalProps {
   projectName: string;
 }
 
-export default function AiDailyBriefModal({ isOpen, onClose, columns, projectName }: AiDailyBriefModalProps) {
+export default function AiDailyBriefModal({ isOpen, onClose, columns: _columns, projectName }: AiDailyBriefModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brief, setBrief] = useState<DailyBriefData | null>(null);
@@ -31,8 +31,6 @@ export default function AiDailyBriefModal({ isOpen, onClose, columns, projectNam
     setError(null);
     try {
       const response = await aiClient.fetchAi('/api/ai/daily-brief', 'AI Daily Brief', {
-        columns,
-        context: { projectName },
       });
 
       if (response && response.parsed) {

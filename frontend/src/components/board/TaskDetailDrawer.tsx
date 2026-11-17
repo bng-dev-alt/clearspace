@@ -145,9 +145,6 @@ export default function TaskDetailDrawer({
     try {
       const data = await aiClient.fetchAi('/api/ai/improve', 'Improve Task', {
         card,
-        context: {
-          columns,
-        },
       });
 
       if (!data.parsed) {

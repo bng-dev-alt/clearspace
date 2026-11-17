@@ -45,7 +45,7 @@ interface GenerateSprintModalProps {
 export default function GenerateSprintModal({
   isOpen,
   onClose,
-  projectName,
+  projectName: _projectName,
   existingTasks,
 }: GenerateSprintModalProps) {
   const router = useRouter();
@@ -63,14 +63,10 @@ export default function GenerateSprintModal({
     setStep('loading');
     setError(null);
 
-    // Get non-archived tasks in the backlog / active columns
-    const activeTasks = existingTasks.filter(t => !t.archived);
-
+    // Otevřené úkoly (bez archivovaných a hotových) vybírá server z boardu projektu.
     try {
       const data = await aiClient.fetchAi('/api/ai/generate-sprint', 'Sprint Planning', {
-        cards: activeTasks,
         context: {
-          projectName,
           metadata: {
             requestedLength: sprintLength,
             requestedCapacity: teamCapacity,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ShieldAlert, AlertTriangle, AlertCircle, Info, Check, ShieldCheck, HelpCircle, Activity } from 'lucide-react';
 import { Column } from '../../types/kanban';
+import { aiClient } from '../../services/ai/aiClient';
 
 interface RiskAnalysisModalProps {
   isOpen: boolean;
@@ -29,7 +30,8 @@ interface RiskAnalysisData {
   topAiRecommendations: string[];
 }
 
-export default function RiskAnalysisModal({ isOpen, onClose, projectName, columns }: RiskAnalysisModalProps) {
+// `columns` zůstává v props kvůli stávajícím volajícím; analýzu dělá server nad načteným boardem.
+export default function RiskAnalysisModal({ isOpen, onClose, projectName }: RiskAnalysisModalProps) {
   const [step, setStep] = useState<'loading' | 'error' | 'preview'>('loading');
   const [data, setData] = useState<RiskAnalysisData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,28 +40,9 @@ export default function RiskAnalysisModal({ isOpen, onClose, projectName, column
     setStep('loading');
     setError(null);
     try {
-      const response = await fetch('/api/ai/risk-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          projectName,
-          columns,
-          context: {
-            project: { name: projectName },
-            columns
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Nepodařilo se provést analýzu rizik.');
-      }
-
-      const result = await response.json();
-      if (!result.parsed) {
+      // Přes aiClient: přihlášení (Bearer), projekt a logování spotřeby řeší jedno místo.
+      const result = await aiClient.fetchAi('/api/ai/risk-analysis', 'AI Risk Analysis', {});
+      if (!result || !result.parsed) {
         throw new Error('AI vrátila neplatnou strukturu odpovědi.');
       }
 
@@ -78,7 +61,6 @@ export default function RiskAnalysisModal({ isOpen, onClose, projectName, column
       // eslint-disable-next-line react-hooks/set-state-in-effect
       runAnalysis();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;

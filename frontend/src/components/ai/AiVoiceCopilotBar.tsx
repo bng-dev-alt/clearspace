@@ -37,7 +37,7 @@ export default function AiVoiceCopilotBar({
   onClose,
   columns,
   members: _members = [],
-  projectName,
+  projectName: _projectName,
   onAddCard,
   onMoveCard,
   onUpdateCard,
@@ -135,8 +135,6 @@ export default function AiVoiceCopilotBar({
     try {
       const response = await aiClient.fetchAi('/api/ai/voice-action', 'Gemini Multimodal Voice Action', {
         ...payload,
-        columns,
-        context: { projectName },
       });
 
       if (response && response.parsed) {

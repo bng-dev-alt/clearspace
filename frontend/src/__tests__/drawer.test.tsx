@@ -5,6 +5,20 @@ import TaskDetailDrawer from '../components/board/TaskDetailDrawer';
 import { Card } from '../types/kanban';
 
 // Mock auth hook
+// aiClient mluví s /api/ai/* přes přihlášení Supabase (v testech není). UI chování
+// testujeme proti pass-through, které jen předá požadavek na (mockovaný) fetch.
+vi.mock('../services/ai/aiClient', () => ({
+  aiClient: {
+    setActiveProject: () => {},
+    fetchAi: async (endpoint: string, _feature: string, body: Record<string, unknown>) => {
+      const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI error');
+      return data;
+    },
+  },
+}));
+
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     profile: { display_name: 'Testovací Uživatel', email: 'test@example.com' },

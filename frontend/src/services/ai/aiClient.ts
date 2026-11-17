@@ -1,6 +1,15 @@
 import { aiAnalyticsService } from './aiAnalyticsService';
+import { supabase, hasSupabaseConfig } from '../../lib/supabase';
+
+// Projekt, ve kterém uživatel právě pracuje. Nastavuje ho stránka projektu;
+// server z něj načte kontext (nevěří boardu poslanému z prohlížeče) a ověří členství.
+let activeProjectId: string | null = null;
 
 export const aiClient = {
+  setActiveProject(projectId: string | null) {
+    activeProjectId = projectId;
+  },
+
   /**
    * Helper to perform fetch calls to `/api/ai/*` routes and automatically log usage.
    */
@@ -14,21 +23,28 @@ export const aiClient = {
     let errorMsg = '';
     let responseData: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-    // Attach user selected model preference if available in localStorage
-    let modelOverride = body.modelOverride;
-    if (!modelOverride && typeof window !== 'undefined') {
-      const savedModel = localStorage.getItem('selected_ai_model');
-      if (savedModel) {
-        modelOverride = savedModel;
-      }
-    }
-    const finalBody = { ...body, modelOverride };
-
     try {
+      // AI běží jen pro přihlášené uživatele Supabase (server ověřuje JWT).
+      // Demo režim identitu nemá, proto se do sítě vůbec nevolá.
+      if (!hasSupabaseConfig) {
+        throw new Error('AI funkce vyžadují přihlášení přes Supabase a v demo režimu nejsou dostupné.');
+      }
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error('Pro použití AI se musíte přihlásit.');
+      }
+
+      // Model, limity ani kontext projektu nevolí klient -- určuje je server.
+      const finalBody = activeProjectId && body.projectId === undefined
+        ? { ...body, projectId: activeProjectId }
+        : body;
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(finalBody),
       });

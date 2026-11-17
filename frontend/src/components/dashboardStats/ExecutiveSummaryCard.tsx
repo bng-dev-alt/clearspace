@@ -27,7 +27,7 @@ interface ExecutiveSummaryCardProps {
  * návštěvě stránky. Místo toho: první tlačítko "Vygenerovat", výsledek
  * zůstává v paměti komponenty, "Aktualizovat" pro nové shrnutí.
  */
-export default function ExecutiveSummaryCard({ columns, projectName }: ExecutiveSummaryCardProps) {
+export default function ExecutiveSummaryCard({ columns: _columns, projectName: _projectName }: ExecutiveSummaryCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brief, setBrief] = useState<DailyBriefData | null>(null);
@@ -37,8 +37,6 @@ export default function ExecutiveSummaryCard({ columns, projectName }: Executive
     setError(null);
     try {
       const response = await aiClient.fetchAi('/api/ai/daily-brief', 'AI Daily Brief', {
-        columns,
-        context: { projectName },
       });
       if (response && response.parsed) {
         setBrief(response.parsed as DailyBriefData);

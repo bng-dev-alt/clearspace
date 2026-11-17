@@ -130,7 +130,6 @@ export default function ProjectIntelligenceDrawer({
     try {
       const data = await aiClient.fetchAi('/api/ai/chat', 'Project Intelligence Chat', {
         messages: nextMessages,
-        context: { columns },
       });
       const answer =
         data && typeof data.content === 'string' && data.content.trim()

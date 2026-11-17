@@ -43,7 +43,7 @@ export default function AiProjectManagerModal({
   onClose,
   columns,
   projectId,
-  projectName,
+  projectName: _projectName,
   onMoveCard,
   onUpdateCard,
   onAddCard,
@@ -58,8 +58,6 @@ export default function AiProjectManagerModal({
     setError(null);
     try {
       const response = await aiClient.fetchAi('/api/ai/project-manager', 'AI Project Manager', {
-        columns,
-        context: { projectName },
       });
 
       if (response && response.parsed) {

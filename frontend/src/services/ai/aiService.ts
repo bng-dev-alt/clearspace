@@ -2,6 +2,7 @@ import { providerFactory } from './providerFactory';
 import { promptBuilder } from './promptBuilder';
 import { AiRequest, AiResponse, AiModelConfig, AiContext, AiMessage } from './types';
 import { Card, Column, TeamMember } from '../../types/kanban';
+import { AiProviderError, AiErrorCode } from '../../lib/ai/errors';
 import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema } from './schemas';
 
 // Jednoduché lokální logování AI requestů na serveru
@@ -23,28 +24,22 @@ function logAiRequest(
 }
 
 export const aiService = {
-  // Převede systémové chybové kódy na uživatelsky čitelné texty
-  getFriendlyError(err: Error): string {
-    const msg = err.message;
-    if (msg.includes('GEMINI_API_KEY_MISSING')) {
-      return 'Není nastaven API klíč pro Gemini. Konfigurujte prosím GEMINI_API_KEY v souboru .env.local.';
+  // Převede chybu providera na klasifikovanou chybu s BEZPEČNÝM textem pro klienta.
+  // Surová zpráva providera (může obsahovat detaily konfigurace) se nikdy nevrací.
+  classifyError(err: Error): AiProviderError {
+    const msg = err.message || '';
+    const map: Array<[string, AiErrorCode, string]> = [
+      ['GEMINI_API_KEY_MISSING', 'ai_unavailable', 'AI služba není na serveru nakonfigurována.'],
+      ['GEMINI_INVALID_API_KEY', 'ai_unavailable', 'AI služba je dočasně nedostupná (konfigurace serveru).'],
+      ['GEMINI_RATE_LIMIT', 'rate_limited', 'Byl překročen limit dotazů pro Gemini. Zkuste to prosím za chvíli.'],
+      ['GEMINI_OVERLOADED', 'ai_overloaded', 'Model Gemini je momentálně přetížený (vysoká poptávka). Zkuste to prosím za chvíli znovu.'],
+      ['GEMINI_TIMEOUT', 'ai_timeout', 'Požadavek na Gemini vypršel (timeout). Zkuste to prosím znovu.'],
+      ['GEMINI_NETWORK_ERROR', 'ai_unavailable', 'Chyba síťového připojení k Gemini. Zkuste to prosím znovu.'],
+    ];
+    for (const [needle, code, text] of map) {
+      if (msg.includes(needle)) return new AiProviderError(code, text);
     }
-    if (msg.includes('GEMINI_INVALID_API_KEY')) {
-      return 'API klíč pro Gemini je neplatný. Zkontrolujte prosím konfiguraci.';
-    }
-    if (msg.includes('GEMINI_RATE_LIMIT')) {
-      return 'Byl překročen limit dotazů pro Gemini. Zkuste to prosím za chvíli.';
-    }
-    if (msg.includes('GEMINI_OVERLOADED')) {
-      return 'Model Gemini je momentálně přetížený (vysoká poptávka). Zkuste to prosím za chvíli znovu.';
-    }
-    if (msg.includes('GEMINI_TIMEOUT')) {
-      return 'Požadavek na Gemini vypršel (timeout). Zkuste to prosím znovu.';
-    }
-    if (msg.includes('GEMINI_NETWORK_ERROR')) {
-      return 'Chyba síťového připojení k Gemini. Zkontrolujte prosím připojení k internetu.';
-    }
-    return `Chyba AI služby: ${msg}`;
+    return new AiProviderError('ai_failed', 'Služba AI selhala. Zkuste to prosím znovu.');
   },
 
   // Společná obálka pro vykonání požadavků přes zvoleného providera s logováním a ošetřením chyb
@@ -65,17 +60,17 @@ export const aiService = {
     } catch (err: unknown) {
       const error = err as Error;
       logAiRequest(actionName, config.model, startTime, false, { error: error.message });
-      throw new Error(this.getFriendlyError(error));
+      throw this.classifyError(error);
     }
   },
 
   // 1. AI Chat
   async executeChat(req: AiRequest): Promise<AiResponse> {
+    // Model, teplota i strop tokenů určuje server -- `req.config` od klienta se ignoruje.
     const config: AiModelConfig = {
-      model: req.config?.model || process.env.GEMINI_MODEL || 'gemini-3.5-flash',
-      temperature: req.config?.temperature ?? 0.7,
-      maxTokens: req.config?.maxTokens ?? 2000,
-      systemPrompt: req.config?.systemPrompt,
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      temperature: 0.7,
+      maxTokens: 2000,
     };
     const messages = promptBuilder.buildChatPrompt(req.messages, req.context);
     return this._execute('chat', messages, config);

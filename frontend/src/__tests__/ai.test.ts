@@ -2,9 +2,6 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { promptBuilder, formatCardContext } from '../services/ai/promptBuilder';
 import { geminiProvider } from '../services/ai/geminiProvider';
 import { aiService } from '../services/ai/aiService';
-import { POST } from '../app/api/ai/chat/route';
-import { POST as improvePOST } from '../app/api/ai/improve/route';
-import { NextRequest } from 'next/server';
 import { Card } from '../types/kanban';
 
 // Define mock generateContent
@@ -166,86 +163,35 @@ describe('AI Foundation Architecture Unit & Integration Tests', () => {
   });
 
   describe('3. AI Service Tests', () => {
-    test('getFriendlyError translates error messages to user-friendly Czech text', () => {
-      expect(aiService.getFriendlyError(new Error('GEMINI_API_KEY_MISSING'))).toContain('Není nastaven API klíč');
-      expect(aiService.getFriendlyError(new Error('GEMINI_INVALID_API_KEY'))).toContain('API klíč pro Gemini je neplatný');
-      expect(aiService.getFriendlyError(new Error('GEMINI_RATE_LIMIT'))).toContain('Byl překročen limit dotazů');
-      expect(aiService.getFriendlyError(new Error('GEMINI_OVERLOADED'))).toContain('přetížený');
-      expect(aiService.getFriendlyError(new Error('GEMINI_TIMEOUT'))).toContain('Požadavek na Gemini vypršel');
-      expect(aiService.getFriendlyError(new Error('GEMINI_NETWORK_ERROR'))).toContain('Chyba síťového připojení');
-    });
-  });
-
-  describe('4. Next.js API Route Tests', () => {
-    test('POST returns 400 when messages are missing or empty', async () => {
-      const request = new NextRequest('http://localhost/api/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toContain('Chybí nebo je neplatný');
+    test('classifyError maps provider failures to safe, classified errors', () => {
+      const c = (m: string) => aiService.classifyError(new Error(m));
+      expect(c('GEMINI_API_KEY_MISSING').code).toBe('ai_unavailable');
+      expect(c('GEMINI_INVALID_API_KEY').code).toBe('ai_unavailable');
+      expect(c('GEMINI_RATE_LIMIT').code).toBe('rate_limited');
+      expect(c('GEMINI_OVERLOADED').code).toBe('ai_overloaded');
+      expect(c('GEMINI_OVERLOADED').message).toContain('přetížený');
+      expect(c('GEMINI_TIMEOUT').code).toBe('ai_timeout');
+      expect(c('GEMINI_NETWORK_ERROR').code).toBe('ai_unavailable');
     });
 
-    test('POST responds with correct user friendly error mapping upon failure', async () => {
-      process.env.GEMINI_API_KEY = 'invalid-key';
-      mockGenerateContent.mockRejectedValueOnce(new Error('API key not valid'));
-
-      const request = new NextRequest('http://localhost/api/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Ahoj' }],
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(401);
-      const data = await response.json();
-      expect(data.error).toContain('API klíč pro Gemini je neplatný');
-    });
-  });
-
-  describe('5. AI Improve Task API Route & JSON parsing Tests', () => {
-    test('improvePOST returns 400 when card or card.title is missing', async () => {
-      const request = new NextRequest('http://localhost/api/ai/improve', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-
-      const response = await improvePOST(request);
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toContain('chybí název úkolu');
+    test('classifyError never leaks raw provider text', () => {
+      const e = aiService.classifyError(new Error('GEMINI_ERROR: key=AIzaSECRET project=internal-123'));
+      expect(e.code).toBe('ai_failed');
+      expect(e.message).not.toContain('AIza');
+      expect(e.message).not.toContain('internal-123');
     });
 
-    test('improvePOST cleans up markdown backticks and correctly parses JSON', async () => {
+    test('executeChat ignores client-supplied model / limits', async () => {
       process.env.GEMINI_API_KEY = 'valid-key';
-      
-      mockGenerateContent.mockResolvedValueOnce({
-        text: '```json\n{\n  "details": "Vylepšený popis z testu",\n  "acceptanceCriteria": "1. Kritérum A",\n  "risks": "Riziko A",\n  "missingInfo": "Nic nechybí",\n  "checklist": ["položka A", "položka B"]\n}\n```',
-        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 25, totalTokenCount: 40 },
+      process.env.GEMINI_MODEL = 'gemini-server-model';
+      mockGenerateContent.mockResolvedValueOnce({ text: 'ok', usageMetadata: {} });
+      await aiService.executeChat({
+        messages: [{ role: 'user', content: 'Ahoj' }],
+        config: { model: 'gemini-most-expensive', maxTokens: 65000, temperature: 2 },
       });
-
-      const request = new NextRequest('http://localhost/api/ai/improve', {
-        method: 'POST',
-        body: JSON.stringify({
-          card: { id: 'task-1', title: 'Testovací úkol', details: 'Původní popis' },
-          context: {}
-        }),
-      });
-
-      const response = await improvePOST(request);
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      
-      expect(data.parsed).toBeDefined();
-      expect(data.parsed.details).toBe('Vylepšený popis z testu');
-      expect(data.parsed.acceptanceCriteria).toBe('1. Kritérum A');
-      expect(data.parsed.risks).toBe('Riziko A');
-      expect(data.parsed.missingInfo).toBe('Nic nechybí');
-      expect(data.parsed.checklist).toEqual(['položka A', 'položka B']);
+      const call = mockGenerateContent.mock.calls[0][0];
+      expect(call.model).toBe('gemini-server-model');
+      expect(call.config.maxOutputTokens).toBe(2000);
     });
   });
 

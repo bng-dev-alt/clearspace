@@ -93,10 +93,7 @@ export default function GenerateTasksModal({
 
     try {
       const data = await aiClient.fetchAi('/api/ai/generate-backlog', 'Generate Tasks', {
-        projectName,
         projectDescription,
-        columns,
-        existingTasks,
         options: {
           taskCount,
           detailLevel,

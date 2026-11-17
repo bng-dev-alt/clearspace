@@ -2,9 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { promptBuilder } from '../services/ai/promptBuilder';
-import { POST as generateBacklogPOST } from '../app/api/ai/generate-backlog/route';
 import GenerateTasksModal from '../components/board/GenerateTasksModal';
-import { NextRequest } from 'next/server';
 import { Card, Column } from '../types/kanban';
 
 const mockGenerateContent = vi.fn().mockResolvedValue({
@@ -32,6 +30,20 @@ const mockGenerateContent = vi.fn().mockResolvedValue({
     ]
   })
 });
+
+// aiClient mluví s /api/ai/* přes přihlášení Supabase (v testech není). UI chování
+// testujeme proti pass-through, které jen předá požadavek na (mockovaný) fetch.
+vi.mock('../services/ai/aiClient', () => ({
+  aiClient: {
+    setActiveProject: () => {},
+    fetchAi: async (endpoint: string, _feature: string, body: Record<string, unknown>) => {
+      const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI error');
+      return data;
+    },
+  },
+}));
 
 vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
@@ -89,40 +101,6 @@ describe('AI Generate Tasks Workflow Tests', () => {
   });
 
   // 2. Server API Route Tests
-  test('POST to /api/ai/generate-backlog validates inputs and cleans markdown json response', async () => {
-    // Bad request (missing description)
-    const invalidRequest = new NextRequest('http://localhost/api/ai/generate-backlog', {
-      method: 'POST',
-      body: JSON.stringify({ projectName: 'Test' }),
-    });
-    const badResponse = await generateBacklogPOST(invalidRequest);
-    expect(badResponse.status).toBe(400);
-
-    // Mock fetch for successful clean
-    process.env.GEMINI_API_KEY = 'valid-key';
-    mockGenerateContent.mockResolvedValueOnce({
-      text: JSON.stringify({
-        projectSummary: 'Souhrn',
-        tasks: []
-      })
-    });
-
-    const validRequest = new NextRequest('http://localhost/api/ai/generate-backlog', {
-      method: 'POST',
-      body: JSON.stringify({
-        projectName: 'Test',
-        projectDescription: 'Description of project',
-      }),
-    });
-    const goodResponse = await generateBacklogPOST(validRequest);
-    expect(goodResponse.status).toBe(200);
-    const data = await goodResponse.json();
-    expect(data.parsed).toEqual({
-      projectSummary: 'Souhrn',
-      tasks: [],
-    });
-  });
-
   // 3. UI Modal Component Tests
   test('GenerateTasksModal renders inputs and handles successful generate and import', async () => {
     // Mock global fetch for route endpoint

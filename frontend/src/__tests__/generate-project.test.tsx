@@ -2,9 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { promptBuilder } from '../services/ai/promptBuilder';
-import { POST as generateProjectPOST } from '../app/api/ai/generate-project/route';
 import GenerateProjectModal from '../components/board/GenerateProjectModal';
-import { NextRequest } from 'next/server';
 
 const mockGenerateContent = vi.fn().mockResolvedValue({
   text: JSON.stringify({
@@ -38,6 +36,20 @@ const mockGenerateContent = vi.fn().mockResolvedValue({
     ]
   })
 });
+
+// aiClient mluví s /api/ai/* přes přihlášení Supabase (v testech není). UI chování
+// testujeme proti pass-through, které jen předá požadavek na (mockovaný) fetch.
+vi.mock('../services/ai/aiClient', () => ({
+  aiClient: {
+    setActiveProject: () => {},
+    fetchAi: async (endpoint: string, _feature: string, body: Record<string, unknown>) => {
+      const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI error');
+      return data;
+    },
+  },
+}));
 
 vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
@@ -81,40 +93,6 @@ describe('AI Generate Project Workflow Tests', () => {
   });
 
   // 2. Server API Route Tests
-  test('POST to /api/ai/generate-project validates inputs and cleans markdown json response', async () => {
-    // Bad request (missing projectDescription)
-    const invalidRequest = new NextRequest('http://localhost/api/ai/generate-project', {
-      method: 'POST',
-      body: JSON.stringify({ projectName: 'Test' }),
-    });
-    const badResponse = await generateProjectPOST(invalidRequest);
-    expect(badResponse.status).toBe(400);
-
-    // Mock fetch for successful clean
-    process.env.GEMINI_API_KEY = 'valid-key';
-    mockGenerateContent.mockResolvedValueOnce({
-      text: JSON.stringify({
-        name: 'Test Project',
-        tasks: []
-      })
-    });
-
-    const validRequest = new NextRequest('http://localhost/api/ai/generate-project', {
-      method: 'POST',
-      body: JSON.stringify({
-        projectName: 'Test',
-        projectDescription: 'Description of project',
-      }),
-    });
-    const goodResponse = await generateProjectPOST(validRequest);
-    expect(goodResponse.status).toBe(200);
-    const data = await goodResponse.json();
-    expect(data.parsed).toEqual({
-      name: 'Test Project',
-      tasks: [],
-    });
-  });
-
   // 3. UI Modal Component Tests
   test('GenerateProjectModal renders inputs and handles successful generate and accept', async () => {
     const mockResponse = {

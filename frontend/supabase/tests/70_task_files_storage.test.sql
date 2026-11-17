@@ -6,6 +6,9 @@ DECLARE
   b uuid := test.mkuser('st-b@example.test');
   c uuid := test.mkuser('st-c@example.test');
   n int;
+  -- the REAL Storage service blocks SQL deletes on storage.objects (trigger storage.protect_delete); the stand-in
+  -- used by the plain-Postgres harness does not. Delete policies are exercised through the API in storage_real_stack.sh.
+  v_real boolean := to_regprocedure('storage.protect_delete()') IS NOT NULL;
 BEGIN
   -- bucket configuration
   PERFORM test.ok((select public from storage.buckets where id='task-resources') = false, 'bucket task-resources is private');
@@ -34,19 +37,32 @@ BEGIN
   PERFORM test.reset(); PERFORM test.act_as(b, 'st-b@example.test');
   PERFORM test.ok((select count(*) from storage.objects where name like 'tasks/st1-k1/%') = 0, 'non-member sees no files of the project');
   PERFORM test.throws($q$insert into storage.objects (bucket_id, name, owner) values ('task-resources','tasks/st1-k1/evil.png', auth.uid())$q$, '42501', 'non-member cannot upload to a foreign card');
-  delete from storage.objects where name = 'tasks/st1-k1/res-1.png';
-  GET DIAGNOSTICS n = ROW_COUNT;
-  PERFORM test.ok(n = 0, 'non-member delete affects 0 files');
+  IF NOT v_real THEN
+    delete from storage.objects where name = 'tasks/st1-k1/res-1.png';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    PERFORM test.ok(n = 0, 'non-member delete affects 0 files');
+  ELSE
+    PERFORM test.ok(true, 'non-member delete: policy covered by storage_real_stack.sh (real Storage blocks SQL deletes)');
+  END IF;
 
   -- anon: nothing
   PERFORM test.reset(); PERFORM test.act_as_anon();
-  PERFORM test.throws($q$select count(*) from storage.objects$q$, '42501', 'anon has no privilege on storage.objects');
+  -- the real Storage grants anon table privileges (RLS hides the rows); the stand-in grants none -> both mean "nothing visible"
+  BEGIN
+    SELECT count(*) INTO n FROM storage.objects;
+  EXCEPTION WHEN insufficient_privilege THEN n := 0;
+  END;
+  PERFORM test.ok(n = 0, 'anon sees no task files');
 
   -- a member added to the project gains access; a non-member workspace colleague does not
   PERFORM test.reset(); PERFORM test.act_as(a, 'st-a@example.test');
   PERFORM test.ok((select count(*) from storage.objects where name = 'tasks/st1-k1/res-1.png') = 1, 'owner still sees the file');
-  delete from storage.objects where name = 'tasks/st1-k1/res-1.png';
-  GET DIAGNOSTICS n = ROW_COUNT;
-  PERFORM test.ok(n = 1, 'owner can delete the file');
+  IF NOT v_real THEN
+    delete from storage.objects where name = 'tasks/st1-k1/res-1.png';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    PERFORM test.ok(n = 1, 'owner can delete the file');
+  ELSE
+    PERFORM test.ok(true, 'owner delete: covered by storage_real_stack.sh (real Storage blocks SQL deletes)');
+  END IF;
   PERFORM test.reset();
 END $$;

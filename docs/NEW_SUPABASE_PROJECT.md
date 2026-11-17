@@ -63,3 +63,15 @@ must be set to the final site URL at release); SMTP (the default Supabase mailer
 * Still separate approvals: Vercel env vars (`NEXT_PUBLIC_SUPABASE_URL/ANON_KEY` → new project, Gemini key), the staged
   deploy and promote, firewall changes, merge to `main`, Auth URL configuration, custom SMTP if wanted.
 * The old project's host stays baked into the **currently deployed** build until that new deployment replaces it.
+
+## 6. P5 update (2026-11-17): connected, verified, and how to work with it
+
+* The consolidation worktree's git-ignored `frontend/.env.local` points at the new project (URL + **anon** key, mode 600); nothing privileged is in it.
+  `NEXT_PUBLIC_*` values never contain the database password (that lives only in the macOS Keychain item `ClearSpace V1 – Supabase Database`).
+* Start the app on loopback only: `cd frontend && npm run dev -- -p 3410 -H 127.0.0.1` (Next allows one dev server per directory; never port 3130).
+* **Dev login:** run `frontend/scripts/dev-login-setup.sh` once (creates `dev-login@example.test`, confirmed; writes `DEV_LOGIN_*` + two flags into `.env.local`), restart the dev server, then press
+  *Dev přihlášení (jen lokálně)* on `/login`. The session is stored and refreshed by supabase-js, so it persists across reloads and tabs. The endpoint is a 404 unless it is a development build, loopback, no tunnel headers,
+  flag set and not on Vercel; production bundles contain none of it (`frontend/scripts/check-production-bundle.sh`).
+* **Re-verify against the hosted project:** with a dev server running, `frontend/scripts/hosted-verify.sh` (creates three disposable accounts through the admin API, runs the Realtime check and 16 browser/API tests,
+  deletes exactly those accounts, prints leftover counts). If Playwright's own Chromium revision is missing, set `PW_CHROMIUM_PATH` to an installed one.
+* Gaps from §4 that are now closed: RLS behaviour for signed-in users (hosted spec), Realtime publication + behaviour (verified). Still open: Auth Site/redirect URLs and SMTP (R2), the Storage bucket (migration 400, R6).

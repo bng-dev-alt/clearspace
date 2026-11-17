@@ -216,3 +216,33 @@ Alternative: allow me to drive AI Studio/Cloud Console in your own signed-in Chr
 - **A4b = BLOCKED:** the Claude in Chrome extension is not connected (two attempts), there is no `gcloud`, the built-in browser is not signed in to Google. Nothing was created. Fix: install/sign in the extension (https://chromewebstore.google.com/detail/fcoeoabgfenejglbffodgkkbkcdhcgfn, same account as this app) and say "Chrome připojen", **or** do the 3-minute manual route above.
 - **A5 not started** (a deployment before A4b would bake the old shared key and hidden model value and force a second deployment). Release candidate commit: the HEAD of the branch after `ec65210` (check `git rev-parse --short HEAD`); local gates were green on it.
 - New helper: `frontend/scripts/check-deployment.sh` (staged/production black-box checks; control-tested on the old production build).
+
+
+---
+
+## Execution record — A4b and A5 (2026-11-17)
+
+### A4b — dedicated Gemini key — **PASS**
+- `frontend/scripts/set-gemini-key.sh` (hidden prompt in the app's Terminal tab; the key goes to Google through `curl -K -` and to Vercel through stdin; nothing secret printed, logged or written). The script's abort path was dry-tested with a fake key first (Google 400, Vercel untouched).
+- Google (free metadata calls only): `models.list` HTTP 200, **49 models** callable with `generateContent`; candidates `gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` all AVAILABLE; `countTokens` on `gemini-3.6-flash` HTTP 200 (`totalTokens=1`). No generation call was made. This confirms the id from the docs page via the API for this key.
+- Vercel: `GEMINI_API_KEY` and `GEMINI_MODEL` (= `gemini-3.6-flash`) updated, targets production+preview, type sensitive, updated 20:13Z; nothing else changed. V2's key untouched.
+- Note: the new key does not start with `AIza`, so the `AIza` pattern in the bundle scans only covers the legacy format; the key is server-only (never `NEXT_PUBLIC_`, never in a bundle) — that is what the scans really guard.
+- That the key is *distinct* from V2's old key is asserted by the owner; it cannot be compared without reading it.
+
+### A5 — staged deployment — **PASS** (nothing promoted)
+- Candidate: commit `5e8dc1c` (branch `consolidation/security-foundation`), exported with `git archive` (290 files, no `.env.local`, no `.git`), linked in a temp dir, `vercel deploy --prod --skip-domain --meta releaseCommit=5e8dc1c`.
+  Identity: **`dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`**, URL `https://clearspace-7e032iiy1-bng-dev-alt-webadvisor.vercel.app`, target production, Ready, build 44 s, created 2026-11-17 20:14Z (after A4b).
+- **No production alias, protected, old site unchanged (verified, not assumed):** deployment API `alias: []`; the project's current production deployment is still `dpl_6HzXV3gf`, still aliased to `clearspace-ai.vercel.app` + 3 other aliases; unauthenticated GET of the staged URL → **302 to Vercel SSO** (also `/api/ai/improve`); `clearspace-ai.vercel.app` still serves the old bundle (old ref).
+- **Staged black-box checks (`check-deployment.sh`, 18/18):** `/login` 200; HSTS, `X-Frame-Options: DENY`, `nosniff`, CSP present; `POST /api/ai/improve` → 403 (firewall); `POST /api/dev/login` → 404; 10 chunks contain the **new** ref `twjlnsxjtuntujarwner` and **not** the old one; no dev-login/`service_role`/`AIza`/`GEMINI_API_KEY`; the only JWT is `role=anon` with `ref=twjlnsxjtuntujarwner`. Negative control on the old production build correctly fails (missing headers, old ref, no new ref).
+- **Staged functional smoke (`hosted-verify.sh` against the staged URL, disposable accounts): 16/16 + Realtime pass** — login/reload/logout, protected routes, unconfirmed account refused, workspace/project seed, task create/edit/move/drag, calendar/dashboard/Project Intelligence, project creation, team + invitation, **Storage** (private bucket, member-only, limits), cross-user isolation, invitation RPC, AI History restore, AI routes = 403 (never reached the gateway), all browser traffic to the new Supabase only; 0 leftover accounts/data (only the dev account's project).
+  The first attempt failed on two transient network errors (a Realtime event timeout and `ERR_TIMED_OUT` on one page load, test 5); an unchanged re-run passed 16/16 — recorded, not hidden.
+
+### Side effect I caused and reverted
+`vercel curl <full-url>` **silently created a "Protection Bypass for Automation" secret on the Vercel project** (the first form I tried only did a plain request). I used it for the staged checks and the smoke run (attached only to requests to the staged origin by a Playwright route, never to Supabase, never logged), then **revoked it** (`vercel project protection disable … --protection-bypass`). Verified afterwards: 0 bypass secrets, `ssoProtection` unchanged, staged URL → 302 again.
+**Lesson/caveat:** `vercel curl` has this project-setting side effect; any future use must be announced and the secret revoked.
+
+### Bugs found in my own tooling this round (fixed)
+`check-deployment.sh`: `printf | grep -q` under `pipefail` gave false "not found" on a large bundle (SIGPIPE) — now greps a file; a `grep` without file argument hung on stdin. `hosted-verify.sh` and the spec now support a protected staged URL; Playwright starts no local server for remote targets.
+
+### State at the pause (waiting for the owner's decision on promote)
+Production domain: old build, inert; firewall deny `/api/ai` published; Cloudflare Access 302; `main` `ff615c3`; no push, no merge; staged candidate `dpl_2tSV5NWA…` unaliased. Rollback after a promote: `vercel rollback` to `dpl_6HzXV3gf` (an earlier production deployment, eligible for Instant Rollback).

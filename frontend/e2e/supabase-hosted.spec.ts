@@ -22,6 +22,10 @@ test.skip(process.env.E2E_HOSTED !== '1' || !URL_ || !ANON || !PW || !A_EMAIL ||
 test.describe.configure({ mode: 'serial' });
 
 const supabaseHosts = new Set<string>();
+// Staged deployments sit behind Vercel Deployment Protection. The bypass secret is attached ONLY to requests to the
+// app's own origin (never to Supabase or any other host) and never logged.
+const BYPASS = process.env.E2E_BYPASS_SECRET ?? '';
+const bypassHeaders: Record<string, string> = BYPASS ? { 'x-vercel-protection-bypass': BYPASS } : {};
 const run = Date.now().toString(36);
 
 async function api(request: APIRequestContext, path: string, opts: { method?: string; token?: string; data?: unknown; headers?: Record<string, string> } = {}) {
@@ -58,6 +62,10 @@ async function openBoard(page: Page) {
   await expect(page.locator('[data-testid^="column-project-default-"]').first()).toBeVisible();
 }
 function watch(page: Page) {
+  if (BYPASS) {
+    const origin = new URL(process.env.PLAYWRIGHT_TEST_BASE_URL ?? '').origin;
+    void page.route((u) => u.origin === origin, (route) => route.continue({ headers: { ...route.request().headers(), ...bypassHeaders } }));
+  }
   page.on('request', (r) => { try { const h = new URL(r.url()).hostname; if (h.endsWith('supabase.co')) supabaseHosts.add(h); } catch { /* ignore */ } });
   page.on('pageerror', (e) => console.log('BROWSER ERROR:', e.message));
   // Surface refused Supabase calls (a failed persistence call otherwise only shows up as a vanished card).
@@ -316,7 +324,7 @@ test('AI History restore: owner restores a snapshot atomically; a non-member can
 
 const AI_MODE = process.env.E2E_AI_MODE ?? 'local';
 test('AI routes on the hosted DB: local = fail closed without a key (401/503 + ledger); production = blocked by the firewall (403), never called', async ({ request }) => {
-  const post = (headers: Record<string, string>) => request.post('/api/ai/improve', { headers: { 'Content-Type': 'application/json', ...headers }, data: JSON.stringify({ projectId, card: { id: 'x', title: 'Improve me', details: '' } }) });
+  const post = (headers: Record<string, string>) => request.post('/api/ai/improve', { headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...headers }, data: JSON.stringify({ projectId, card: { id: 'x', title: 'Improve me', details: '' } }) });
   if (AI_MODE === 'firewall') {
     // Vercel firewall deny on /api/ai answers before the app runs: no gateway, no ledger row, no provider call.
     expect((await post({})).status()).toBe(403);

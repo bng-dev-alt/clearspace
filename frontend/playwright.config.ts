@@ -26,7 +26,8 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  // Remote targets (production domain / staged deployment) need no local server.
+  webServer: !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(baseUrl) ? undefined : {
     // Port musí být explicitní: `next dev` jinak startuje na 3000 a pokud je
     // volný, Playwright na 3001 marně čeká. Dřív to procházelo jen náhodou,
     // když byl 3000 obsazený a Next si sám vybral 3001.

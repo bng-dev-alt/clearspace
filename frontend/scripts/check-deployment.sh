@@ -18,12 +18,12 @@ fail=0
 ok() { echo "ok   - $1"; }; bad() { echo "FAIL - $1"; fail=1; }
 get() { # path [curl args...]   (body or headers to stdout)
   local p=$1; shift
-  if [ "$MODE" = vercel ]; then "$V" curl "$p" --deployment "${DEPLOYMENT:?set DEPLOYMENT}" --scope "$SCOPE" --yes -- -s "$@" 2>/dev/null
+  if [ "$MODE" = vercel ]; then "$V" curl "${DEPLOYMENT:?set DEPLOYMENT}$p" --scope "$SCOPE" --yes -- -s "$@" 2>/dev/null
   else curl -s "$@" "$BASE$p"; fi
 }
 status() { # method path [extra curl args]
   local m=$1 p=$2; shift 2
-  if [ "$MODE" = vercel ]; then "$V" curl "$p" --deployment "$DEPLOYMENT" --scope "$SCOPE" --yes -- -s -o /dev/null -w '%{http_code}' -X "$m" "$@" 2>/dev/null
+  if [ "$MODE" = vercel ]; then "$V" curl "$DEPLOYMENT$p" --scope "$SCOPE" --yes -- -s -o /dev/null -w '%{http_code}' -X "$m" "$@" 2>/dev/null
   else curl -s -o /dev/null -w '%{http_code}' -X "$m" "$@" "$BASE$p"; fi
 }
 
@@ -39,14 +39,16 @@ code=$(status POST /api/dev/login -H 'x-clearspace-dev-login: 1'); [ "$code" = 4
 echo "== client bundle"
 CHUNKS=$(get /login | grep -oE '/_next/static/[^"]+\.js' | sort -u)
 [ -n "$CHUNKS" ] && ok "found $(echo "$CHUNKS" | wc -l | tr -d ' ') script chunks" || bad "no script chunks found (blocked by protection?)"
-ALL=$(for c in $CHUNKS; do get "$c"; done)
-has() { printf '%s' "$ALL" | grep -qF -- "$1"; }
+BUNDLE=$(mktemp); trap 'rm -f "$BUNDLE"' EXIT
+for c in $CHUNKS; do get "$c" >> "$BUNDLE"; done
+# grep a FILE: `printf | grep -q` under pipefail reports "not found" when grep exits early (SIGPIPE) on a large bundle
+has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
 for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
-roles=$(printf '%s' "$ALL" | grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' | sort -u | python3 -c "
+roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "
 import sys,base64,json
 for l in sys.stdin:
     p=l.strip().split('.')[1]; p+='='*(-len(p)%4)

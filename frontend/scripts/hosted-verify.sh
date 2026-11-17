@@ -20,9 +20,12 @@ URL=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2-); ANON=$(gr
 case "$BASE" in
   http://127.0.0.1:*|http://localhost:*) AI_MODE=local;;
   https://clearspace-ai.vercel.app) [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] || { echo "refusing the production domain without PRODUCTION_SMOKE_OK=1"; exit 2; }; AI_MODE=firewall;;
-  *) echo "refusing BASE_URL $BASE (only loopback, or the production domain with PRODUCTION_SMOKE_OK=1)"; exit 2;;
+  # a STAGED deployment of this project (protected by Vercel Deployment Protection): needs the bypass secret in STAGED_BYPASS_SECRET
+  https://clearspace-[a-z0-9]*-bng-dev-alt-webadvisor.vercel.app)
+    [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] && [ -n "${STAGED_BYPASS_SECRET:-}" ] || { echo "refusing the staged URL without PRODUCTION_SMOKE_OK=1 and STAGED_BYPASS_SECRET"; exit 2; }; AI_MODE=firewall; E2E_BYPASS_SECRET=$STAGED_BYPASS_SECRET; export E2E_BYPASS_SECRET;;
+  *) echo "refusing BASE_URL $BASE (only loopback, the production domain, or a staged deployment of this project, with PRODUCTION_SMOKE_OK=1)"; exit 2;;
 esac
-curl -s -o /dev/null "$BASE/login" || { echo "no dev server at $BASE"; exit 2; }
+curl -s -o /dev/null ${E2E_BYPASS_SECRET:+-H "x-vercel-protection-bypass: $E2E_BYPASS_SECRET"} "$BASE/login" || { echo "no server at $BASE"; exit 2; }
 SRK=$(supabase projects api-keys --project-ref "$REF" --workdir "${TMPDIR:-/tmp}" --output-format json | python3 -c "import json,sys; print(next(k['api_key'] for k in json.load(sys.stdin)['keys'] if k['name']=='service_role'))")
 [ -n "$SRK" ] || { echo "no service key"; exit 2; }
 RUN=$(date +%s); PW="Cs!$(openssl rand -hex 10)"

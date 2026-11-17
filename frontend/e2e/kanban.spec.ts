@@ -31,6 +31,20 @@ async function settled(page: Page, selector: string) {
   );
 }
 
+/**
+ * Kalendář se otevírá na AKTUÁLNÍM měsíci, ale demo seed (INITIAL_COLUMNS) má pevné
+ * termíny v červenci 2026. Testy kalendáře proto zmrazí čas v tomto měsíci --
+ * jinak procházejí jen v červenci a kdykoli jindy hlásí "žádné karty v mřížce".
+ * `setFixedTime` mění jen Date (ne časovače), takže animace a čekání běží normálně.
+ */
+const SEED_MONTH_NOW = new Date('2026-07-15T12:00:00');
+
+async function freezeToSeedMonth(page: Page) {
+  await page.clock.setFixedTime(SEED_MONTH_NOW);
+  await page.reload();
+  await expect(page.locator('.app-container')).toHaveAttribute('data-hydrated', 'true');
+}
+
 test.describe('Clearspace board E2E', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => console.log('BROWSER ERROR:', err.message));
@@ -118,6 +132,7 @@ test.describe('Clearspace board E2E', () => {
   });
 
   test('kalendář zůstává na desktopu read-only (dny nejsou klikací)', async ({ page }) => {
+    await freezeToSeedMonth(page);
     await page.getByTestId('view-switch-calendar').click();
     await expect(page.getByTestId('calendar-grid')).toBeVisible();
     // Mobilní dotyková vrstva ani tečky na desktopu neexistují v layoutu.
@@ -224,6 +239,7 @@ test.describe('Clearspace mobilní navigace', () => {
   });
 
   test('kalendář je kompaktní: tečky místo názvů, klepnutí na den rozbalí seznam', async ({ page }) => {
+    await freezeToSeedMonth(page);
     await page.getByTestId('navbar-burger').click();
     await page.getByTestId('mobile-menu-calendar').click();
 

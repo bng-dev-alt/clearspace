@@ -24,5 +24,6 @@ BEGIN
   PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.guard_workspace_member_identity()', 'EXECUTE'), 'guard trigger function is not an RPC');
   PERFORM test.ok(has_function_privilege('authenticated', 'public.is_project_member(text)', 'EXECUTE'), 'RLS helpers stay executable for authenticated');
   PERFORM test.ok((select count(*) from information_schema.role_table_grants where table_schema='public' and grantee='anon') = 0, 'anon holds no table privileges in public');
-  PERFORM test.ok((select bool_and(c.relrowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r'), 'RLS enabled on every public table');
+  PERFORM test.ok(coalesce((select string_agg(c.relname, ',') from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity), '') = '',
+    'RLS enabled on every public table (offenders: ' || coalesce((select string_agg(c.relname, ',') from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity), 'none') || ')');
 END $$;

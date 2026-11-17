@@ -37,7 +37,7 @@ newdb() { # $1 = name
     if psql_admin -d postgres -c "CREATE DATABASE $1 TEMPLATE postgres" 2>/dev/null; then break; fi
     sleep 1
   done
-  psql_admin -d "$1" -f - < "$HERE/00_setup.sql" >/dev/null
+  for f in 00_auth_shims.sql 01_helpers.sql; do psql_admin -d "$1" -f - < "$HERE/$f" >/dev/null; done
 }
 apply() { # $1 = db, $2.. = files ; each file in a single transaction
   local db=$1; shift
@@ -71,6 +71,13 @@ echo "--- baseline re-run after migrations must be REFUSED"
 if psql_admin -d cs_a -f - < "$BASELINE" >/dev/null 2>&1; then echo "FAIL: baseline re-run was not refused"; exit 1; fi
 echo "ok - baseline refused"
 for t in "$HERE"/[1-9]*.test.sql; do run_test cs_a "$t"; done
+
+echo "== Scenario C: migration on a database WITHOUT the baseline must fail early and change nothing"
+newdb cs_c
+if out=$(apply cs_c "${MIGRATIONS[@]}" 2>&1); then echo "FAIL: migration ran without the baseline"; exit 1; fi
+echo "$out" | grep -q "Preflight failed" || { echo "FAIL: no clear preflight message: $out"; exit 1; }
+[ "$(psql_admin -d cs_c -At -c "select count(*) from pg_tables where schemaname='public'")" = "0" ] || { echo "FAIL: preflight left objects behind"; exit 1; }
+echo "ok - preflight refused the migration, nothing was created"
 
 source "$HERE/legacy_upgrade.sh"
 source "$HERE/concurrency.sh"

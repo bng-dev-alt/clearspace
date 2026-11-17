@@ -25,6 +25,44 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
+-- 0a. Preflight: fail EARLY and CLEARLY (nothing is changed when this raises)
+-- ------------------------------------------------------------
+DO $$
+DECLARE
+    v_missing TEXT := '';
+    t TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['profiles', 'projects', 'columns', 'cards', 'workspace_members',
+                             'project_members', 'invitations', 'activity_logs', 'task_resources',
+                             'task_checklists', 'task_comments', 'task_activities', 'card_assignees']
+    LOOP
+        IF to_regclass('public.' || t) IS NULL THEN v_missing := v_missing || ' table:' || t; END IF;
+    END LOOP;
+    IF to_regprocedure('public.handle_new_user()') IS NULL THEN v_missing := v_missing || ' fn:handle_new_user'; END IF;
+    IF to_regprocedure('public.is_project_member(text)') IS NULL THEN v_missing := v_missing || ' fn:is_project_member'; END IF;
+    IF to_regprocedure('extensions.digest(text,text)') IS NULL THEN v_missing := v_missing || ' fn:extensions.digest(pgcrypto)'; END IF;
+    IF to_regprocedure('extensions.gen_random_bytes(integer)') IS NULL THEN v_missing := v_missing || ' fn:extensions.gen_random_bytes(pgcrypto)'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'email_confirmed_at') THEN
+        v_missing := v_missing || ' col:auth.users.email_confirmed_at';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'invitations' AND column_name = 'workspace_id') THEN
+        v_missing := v_missing || ' col:invitations.workspace_id(v1.3 schema expected)';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'invitations' AND column_name = 'token') THEN
+        v_missing := v_missing || ' col:invitations.token';
+    END IF;
+    IF (SELECT count(*) FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role')) <> 3 THEN
+        v_missing := v_missing || ' roles:anon/authenticated/service_role';
+    END IF;
+    IF v_missing <> '' THEN
+        RAISE EXCEPTION 'Preflight failed -- the database does not match the baseline this migration expects. Missing:%. Apply supabase_schema.sql first / check the extensions schema. Nothing was changed.', v_missing;
+    END IF;
+END $$;
+
+-- ------------------------------------------------------------
 -- 0. Migration marker (also makes the baseline refuse to be re-run)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.clearspace_migrations (
@@ -39,8 +77,17 @@ REVOKE ALL ON public.clearspace_migrations FROM PUBLIC, anon, authenticated;
 --    Teammates' names/emails are available through workspace_members, which
 --    is already scoped by can_view_workspace().
 -- ------------------------------------------------------------
-DROP POLICY IF EXISTS "Allow public read access to profiles" ON public.profiles;
-DROP POLICY IF EXISTS "Users can read their own profile" ON public.profiles;
+-- Drop EVERY existing SELECT policy on profiles (not just the one we know by name): a leftover
+-- permissive policy from an older release would silently keep the table open (policies are OR-ed).
+DO $$
+DECLARE p RECORD;
+BEGIN
+    FOR p IN SELECT policyname FROM pg_policies
+             WHERE schemaname = 'public' AND tablename = 'profiles' AND cmd IN ('SELECT', 'ALL')
+    LOOP
+        EXECUTE format('DROP POLICY %I ON public.profiles', p.policyname);
+    END LOOP;
+END $$;
 CREATE POLICY "Users can read their own profile"
     ON public.profiles FOR SELECT
     TO authenticated
@@ -173,11 +220,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS invitations_one_pending_per_email
 -- Clients may read invitation metadata of their own workspace and revoke
 -- pending ones. They can never read token material nor INSERT directly
 -- (creation goes through create_workspace_invitation()).
-DROP POLICY IF EXISTS "Users can view invitations for their email or workspace" ON public.invitations;
-DROP POLICY IF EXISTS "Workspace owners can manage invitations" ON public.invitations;
-DROP POLICY IF EXISTS "Workspace owners can view invitations" ON public.invitations;
-DROP POLICY IF EXISTS "Workspace owners can revoke pending invitations" ON public.invitations;
-DROP POLICY IF EXISTS "Workspace owners can delete invitations" ON public.invitations;
+-- Replace ALL policies on invitations (incl. leftovers of the v1.2 project-level model).
+DO $$
+DECLARE p RECORD;
+BEGIN
+    FOR p IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'invitations'
+    LOOP
+        EXECUTE format('DROP POLICY %I ON public.invitations', p.policyname);
+    END LOOP;
+END $$;
 
 CREATE POLICY "Workspace owners can view invitations"
     ON public.invitations FOR SELECT TO authenticated

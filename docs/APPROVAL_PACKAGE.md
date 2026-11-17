@@ -1,6 +1,6 @@
 # Approval package — first three production-affecting steps (R1, R2, R6)
 
-Prepared 2026-11-17 for branch `consolidation/security-foundation`. **Nothing below has been executed.** Each approval is independent
+Prepared 2026-11-17 for branch `consolidation/security-foundation`. **Status: A1, A2 and A3 were approved and executed — see the execution record at the end.** The text below is the original package. Each approval is independent
 (a yes to A1 does not cover A2 or A3) and has: what changes, the exact commands, the gate, how to undo it, and a sentence you can paste to approve it.
 Order: **A1 → A2 → A3**. A2 and A3 do not depend on A1 and can be approved in any order, but A1 must pass before anything is pushed to GitHub (§ "After A3").
 
@@ -120,3 +120,20 @@ and delete the (empty) bucket through the Storage API/dashboard — SQL deletes 
 | **A6 Bounded AI test + firewall state** (R11–R12) and **merge to `main`** | A5 green, Gemini key | A5 |
 
 Do **not** merge to `main` or push this branch before A1 has passed.
+
+
+---
+
+## Execution record (2026-11-17)
+
+| Step | Result | Evidence |
+|---|---|---|
+| **A1 deploy guard** | **PASS** | Safety first: Vercel API shows `productionBranch = main`, GitHub-linked, no deploy hooks, no ignored-build command; the pushed ref was a non-`main` orphan branch holding only `frontend/vercel.json` (byte-identical, sha256 `b2ca3677c797f600…`), one commit `24410c7`, no workflows. After the push: **0** Vercel deployments for the branch, **0** commit statuses, **0** check runs, **0** GitHub deployments, newest deployment unchanged, `main` stayed `ff615c3`. Positive control: `main`'s head commit *does* carry a `Vercel — Deployment has completed` status, so the integration is live and would have reported. Branch deleted; remote heads = `main` only |
+| **A2 Auth URLs** | **PASS** | Management API (CLI login token held in a shell variable) on `twjlnsxjtuntujarwner` only. Full config diffed before/after (244 keys): exactly `site_url` `http://localhost:3000` → `https://clearspace-ai.vercel.app` and `uri_allow_list` `""` → `https://clearspace-ai.vercel.app/**`. Confirm email still on (`mailer_autoconfirm=false`), sign-ups enabled, SMTP unchanged |
+| **A3 migration 400** | **PASS** | Checksum `b79b9ec4c5833fb4…` identical to the commit that introduced it; DB state matched the package (100–300, 0 buckets, 0 storage policies, 15/15 RLS). **Backup** (outside the repo, mode 600, with SHA256SUMS): `/Volumes/WORKSPACE/_G2_BACKUP/20261117-v1-newproject-pre-storage-migration/` = `public.dump`, `auth_users_identities.data.dump` (1 user, 1 identity), `storage.schema.dump`, `state_before.txt`. **Restore proof:** `public` restored into a throwaway container — 15 tables with identical row counts, 25 policies, 3 migration markers. Applied in one transaction as `postgres`. Result: bucket `task-resources` private, 10 MiB, 12 MIME types; 3 policies (select/insert/delete); `can_access_task_file` is SECURITY INVOKER, `anon` cannot execute, pinned `search_path`; 4 migration markers; anon table grants 0; RLS 15/15. `hosted-verify.sh`: **16 passed** (the Storage test ran: upload as member OK, non-member / `.html` / >10 MiB refused, public URL refused, stranger cannot read) + Realtime pass; leftovers: only the dev account's project; `storage.objects` 0 |
+
+**Findings recorded for the recovery procedure**
+- Dumps of the hosted server (Postgres 17.12) contain Supabase-internal column options `ALTER TABLE … ALTER COLUMN … SET (pg_attver=…)` (105 lines). A stock/older Postgres (the 17.6.1.147 image) **refuses** them. To restore into a scratch/non-Supabase server, render the dump with `pg_restore -f -` and drop those lines (`grep -v "SET (pg_attver="`); a restore into a new Supabase project is the intended path. The restore proof above used exactly that.
+- The auth data dump cannot be restored into the plain image (its `auth.users` lacks hosted columns); restore it into a new Supabase project instead. It was verified by content (1 user, 1 identity).
+- Ordinary users cannot read bucket metadata through the Storage API (404), so tests must detect the bucket by uploading, not by `GET /bucket/…`.
+- Rollback for A3 (not needed): `DROP POLICY task_resources_files_{select,insert,delete} ON storage.objects; DROP FUNCTION public.can_access_task_file(text); DELETE FROM public.clearspace_migrations WHERE version='20261117000400_task_resources_storage';` and delete the empty bucket through the Storage API.

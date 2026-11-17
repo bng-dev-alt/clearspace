@@ -230,17 +230,16 @@ test('team page lists the workspace and sends an invitation (UI) -> pending row,
 });
 
 test('Storage (needs migration 20261117000400 on the project): private bucket, member-only, size/MIME limits', async ({ request }) => {
-  const bucket = await api(request, '/storage/v1/bucket/task-resources', { token: tokenA });
-  test.skip(bucket.status !== 200, 'bucket task-resources does not exist yet: migration 20261117000400 is not applied to this project');
-  expect(bucket.json.public).toBe(false);
-  expect(bucket.json.file_size_limit).toBe(10485760);
   const tokenB = await tokenFor(request, B_EMAIL);
   // 1x1 PNG
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   const put = (token: string, path: string, type: string, body: Buffer) =>
     request.post(`${URL_}/storage/v1/object/task-resources/${path}`, { headers: { apikey: ANON, Authorization: `Bearer ${token}`, 'Content-Type': type }, data: body });
   const base = `tasks/${cardId}`;
-  expect((await put(tokenA, `${base}/hosted-${run}.png`, 'image/png', png)).status()).toBe(200);
+  const first = await put(tokenA, `${base}/hosted-${run}.png`, 'image/png', png);
+  // Ordinary users cannot read bucket metadata, so existence is detected by the upload itself.
+  test.skip(first.status() === 404 && /bucket not found/i.test(await first.text()), 'bucket task-resources does not exist: migration 20261117000400 is not applied to this project');
+  expect(first.status()).toBe(200); // bucket private/10 MiB/MIME list are verified in SQL (storage.buckets) by the release runbook
   expect((await put(tokenB, `${base}/evil-${run}.png`, 'image/png', png)).status(), 'non-member upload').toBeGreaterThanOrEqual(400);
   expect((await put(tokenA, `${base}/x-${run}.html`, 'text/html', Buffer.from('<script>1</script>'))).status(), 'html refused').toBeGreaterThanOrEqual(400);
   expect((await put(tokenA, `${base}/big-${run}.png`, 'image/png', Buffer.concat([png, Buffer.alloc(11 * 1024 * 1024)]))).status(), '>10 MiB refused').toBeGreaterThanOrEqual(400);

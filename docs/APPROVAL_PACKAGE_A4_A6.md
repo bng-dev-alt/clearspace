@@ -246,3 +246,27 @@ Alternative: allow me to drive AI Studio/Cloud Console in your own signed-in Chr
 
 ### State at the pause (waiting for the owner's decision on promote)
 Production domain: old build, inert; firewall deny `/api/ai` published; Cloudflare Access 302; `main` `ff615c3`; no push, no merge; staged candidate `dpl_2tSV5NWA…` unaliased. Rollback after a promote: `vercel rollback` to `dpl_6HzXV3gf` (an earlier production deployment, eligible for Instant Rollback).
+
+---
+
+## Execution record — promote (2026-11-17 20:32Z) — **PASS**
+
+Pre-promote re-verification (read-only): `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`, project `clearspace`, target production, READY, no alias, `releaseCommit=5e8dc1c` (commit exists, HEAD later = tooling/docs only); production pointer `dpl_6HzXV3gf`; firewall `1 active` (deny `/api/ai`); 0 bypass secrets; `main` `ff615c3`; snapshot of all 5 Vercel projects of the scope taken for the post-check.
+
+Action: `vercel promote https://clearspace-7e032iiy1-bng-dev-alt-webadvisor.vercel.app --scope bng-dev-alt-webadvisor --yes` → "Success! clearspace was promoted … (dpl_2tSV5NWA…) [3s]". Nothing else.
+
+Post-promote checks (all pass):
+| Check | Result |
+|---|---|
+| Production pointer | `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55` (current); `clearspace-ai.vercel.app` serves the new build (new ref in bundle, old ref gone) |
+| Black-box (`check-deployment.sh` on the domain) | 18/18: `/login` 200, HSTS + X-Frame-Options + nosniff + CSP, `/api/dev/login` → 404, no dev-login/`service_role`/`AIza`/`GEMINI_API_KEY` in the bundle, only a `role=anon` JWT of the new project |
+| All 11 AI endpoints | `analyze-resource, capacity-planning, chat, daily-brief, generate-backlog, generate-project, generate-sprint, improve, project-manager, risk-analysis, voice-action`: **POST 403 and GET 403** each (firewall deny) |
+| Production smoke (`hosted-verify.sh`, disposable accounts) | 16/16 + Realtime: login/session/logout/protected routes, unconfirmed refused, project + task persistence (create/edit/move/drag), calendar/dashboard/Intelligence, project creation, team + invitation, **Storage**, cross-user isolation, invitation RPC, AI History restore, AI routes 403, all traffic to the new Supabase only. 3 accounts created and deleted by id; leftovers only the dev account's project |
+| No AI usage | `ai_requests = 0`, no Gemini call was made |
+| Cloudflare Access | legacy origin host → 302 to Cloudflare Access (GET and POST); port 3130 closed |
+| Other Vercel projects | `microcrm`, `microcrm-app`, `microcrm-app2`, `utilityforge-os`: production deployment and `updatedAt` unchanged |
+| Other repos/apps | V2 `d1a7ce2` and all 5 experiment worktrees unchanged; `main` `ff615c3`, remote has only `main` |
+| Protection/settings | 0 bypass secrets, `ssoProtection` unchanged, firewall `1 active` |
+| Data | `auth.users=1` (dev account only), 1 project, 0 storage objects |
+
+Rollback (not needed): `vercel rollback` to `dpl_6HzXV3gf` (earlier production deployment; Instant Rollback). A frontend rollback does not touch database writes, and there are none from real users yet (only the dev account); it is only a *safe* state while the old Supabase project stays paused and the deny rule stays published.

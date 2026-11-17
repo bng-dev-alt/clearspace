@@ -314,8 +314,19 @@ test('AI History restore: owner restores a snapshot atomically; a non-member can
   expect(intact.json.map((c: any) => c.name)).toEqual(['Restored column']);
 });
 
-test('AI gateway on the hosted DB without a Gemini key: 401 without token, 503 fail-closed with one, ledger row written, no key in the response', async ({ request }) => {
+const AI_MODE = process.env.E2E_AI_MODE ?? 'local';
+test('AI routes on the hosted DB: local = fail closed without a key (401/503 + ledger); production = blocked by the firewall (403), never called', async ({ request }) => {
   const post = (headers: Record<string, string>) => request.post('/api/ai/improve', { headers: { 'Content-Type': 'application/json', ...headers }, data: JSON.stringify({ projectId, card: { id: 'x', title: 'Improve me', details: '' } }) });
+  if (AI_MODE === 'firewall') {
+    // Vercel firewall deny on /api/ai answers before the app runs: no gateway, no ledger row, no provider call.
+    expect((await post({})).status()).toBe(403);
+    const r = await post({ Authorization: `Bearer ${tokenA}` });
+    expect(r.status()).toBe(403);
+    expect(await r.text()).not.toMatch(/GEMINI|API_KEY|AIza/);
+    const ledger = await api(request, '/rest/v1/ai_requests?select=id', { token: tokenA });
+    expect(ledger.json.length, 'no AI request may have reached the gateway').toBe(0);
+    return;
+  }
   expect((await post({})).status()).toBe(401);
   const r = await post({ Authorization: `Bearer ${tokenA}` });
   expect(r.status()).toBe(503);

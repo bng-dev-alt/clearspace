@@ -2,6 +2,8 @@
 # Real-application verification against the HOSTED "ClearSpace V1" project (see e2e/supabase-hosted.spec.ts).
 #
 #  * needs a dev server on loopback WITHOUT a Gemini key:  npm run dev -- -p 3410 -H 127.0.0.1
+#    (or BASE_URL=https://clearspace-ai.vercel.app PRODUCTION_SMOKE_OK=1 for the post-promote smoke: AI routes are then
+#     expected to answer 403 from the firewall and are never called with a real request)
 #  * creates 3 DISPOSABLE accounts (A, B confirmed; D unconfirmed) through the GoTrue admin API. The service-role
 #    key comes from the Supabase CLI into a shell variable: never printed, never written to disk, never passed
 #    to the test process.
@@ -13,7 +15,13 @@ REF=twjlnsxjtuntujarwner
 BASE=${BASE_URL:-http://127.0.0.1:3410}
 URL=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2-); ANON=$(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.local | cut -d= -f2-)
 [ "$URL" = "https://$REF.supabase.co" ] || { echo "refusing: .env.local does not point at $REF"; exit 2; }
-case "$BASE" in http://127.0.0.1:*|http://localhost:*) ;; *) echo "refusing non-loopback BASE_URL"; exit 2;; esac
+# AI_MODE tells the spec what the AI routes must do: local dev server without a key -> 503 (fail closed);
+# the PRODUCTION domain (only with PRODUCTION_SMOKE_OK=1) while the firewall deny is active -> 403 and NO provider call.
+case "$BASE" in
+  http://127.0.0.1:*|http://localhost:*) AI_MODE=local;;
+  https://clearspace-ai.vercel.app) [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] || { echo "refusing the production domain without PRODUCTION_SMOKE_OK=1"; exit 2; }; AI_MODE=firewall;;
+  *) echo "refusing BASE_URL $BASE (only loopback, or the production domain with PRODUCTION_SMOKE_OK=1)"; exit 2;;
+esac
 curl -s -o /dev/null "$BASE/login" || { echo "no dev server at $BASE"; exit 2; }
 SRK=$(supabase projects api-keys --project-ref "$REF" --workdir "${TMPDIR:-/tmp}" --output-format json | python3 -c "import json,sys; print(next(k['api_key'] for k in json.load(sys.stdin)['keys'] if k['name']=='service_role'))")
 [ -n "$SRK" ] || { echo "no service key"; exit 2; }
@@ -38,6 +46,6 @@ rc=0
 echo "== Realtime check (hosted)"
 RT_URL=$URL RT_ANON=$ANON RT_A_EMAIL=$A RT_A_PASS=$PW RT_B_EMAIL=$B RT_B_PASS=$PW node supabase/tests/realtime_check.mjs || rc=1
 echo "== Playwright (hosted, real UI)"
-E2E_HOSTED=1 E2E_HOSTED_URL=$URL E2E_HOSTED_ANON=$ANON E2E_PASSWORD=$PW E2E_A_EMAIL=$A E2E_B_EMAIL=$B E2E_D_EMAIL=$D PLAYWRIGHT_TEST_BASE_URL=$BASE \
+E2E_AI_MODE=$AI_MODE E2E_HOSTED=1 E2E_HOSTED_URL=$URL E2E_HOSTED_ANON=$ANON E2E_PASSWORD=$PW E2E_A_EMAIL=$A E2E_B_EMAIL=$B E2E_D_EMAIL=$D PLAYWRIGHT_TEST_BASE_URL=$BASE \
   npx playwright test e2e/supabase-hosted.spec.ts --workers=1 || rc=1
 exit $rc

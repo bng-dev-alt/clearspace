@@ -80,6 +80,8 @@ vercel inspect <staged-url> --scope bng-dev-alt-webadvisor      # READY, target 
 vercel curl /login --deployment <staged-url> --scope bng-dev-alt-webadvisor -- -sI   # 200 + HSTS, X-Frame-Options, nosniff, CSP
 vercel curl /api/ai/improve --deployment <staged-url> -- -s -o /dev/null -w '%{http_code}' -X POST   # expect 403 (firewall)
 vercel curl /api/dev/login  --deployment <staged-url> -- -s -o /dev/null -w '%{http_code}' -X POST -H 'x-clearspace-dev-login: 1'   # expect 404
+# all of the below (headers, 403/404 probes, bundle scan) is automated: MODE=vercel DEPLOYMENT=<staged-url> frontend/scripts/check-deployment.sh <staged-url>
+#   (negative control run against the OLD production build: correctly FAILS the new-ref/old-ref and security-header checks)
 # bundle of the STAGED build: every chunk linked from /login must contain the NEW ref and none of: old ref, dev-login strings,
 # service_role, AIza, GEMINI_API_KEY; JWTs only role=anon (same patterns as frontend/scripts/check-production-bundle.sh)
 # 5.3 promote
@@ -207,3 +209,10 @@ firewall rule *Block legacy AI API* enabled (deny `/api/ai`), `/api/ai/chat` →
    `vercel env update GEMINI_MODEL --environment production --sensitive -p clearspace --scope bng-dev-alt-webadvisor` → value `gemini-3.6-flash`
 4. Tell me when done. The old key stays in V2 and the kanban copies; **do not revoke it**.
 Alternative: allow me to drive AI Studio/Cloud Console in your own signed-in Chrome (Claude in Chrome) — slower and touches your Google account UI; I would still not read the key value.
+
+
+### P6 status after the owner's answers (2026-11-17)
+- **Approved by the owner:** (1) use Claude in Chrome for A4b (new Google Cloud project + key, API restriction, `GEMINI_API_KEY` + `GEMINI_MODEL=gemini-3.6-flash` on Vercel); (2) the first staged deployment from a clean export of the release commit + `vercel curl` staged checks, **after** A4b; (3) promote needs a **separate** approval after the staged results.
+- **A4b = BLOCKED:** the Claude in Chrome extension is not connected (two attempts), there is no `gcloud`, the built-in browser is not signed in to Google. Nothing was created. Fix: install/sign in the extension (https://chromewebstore.google.com/detail/fcoeoabgfenejglbffodgkkbkcdhcgfn, same account as this app) and say "Chrome připojen", **or** do the 3-minute manual route above.
+- **A5 not started** (a deployment before A4b would bake the old shared key and hidden model value and force a second deployment). Release candidate commit: the HEAD of the branch after `ec65210` (check `git rev-parse --short HEAD`); local gates were green on it.
+- New helper: `frontend/scripts/check-deployment.sh` (staged/production black-box checks; control-tested on the old production build).

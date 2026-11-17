@@ -178,3 +178,32 @@ Verification (names, environments, values compared as booleans — no secret pri
 
 **Next — A4b (yours):** create the V1-only Gemini key (own Google project, ideally no billing account, restricted to the Generative Language API) and set it in your own terminal before A5:
 `vercel env update GEMINI_API_KEY --environment production --sensitive -p clearspace --scope bng-dev-alt-webadvisor` (hidden prompt; it keeps both environments), and `GEMINI_MODEL` only if needed. (`--sensitive` works here because the name has no `NEXT_PUBLIC_` prefix.)
+
+---
+
+## P6 preflight findings (2026-11-17) — read before A4b/A5
+
+**Preflight (all PASS, read-only):** HEAD `007df9a` clean on `consolidation/security-foundation`; remote has only `main` (`ff615c3`); Vercel env = 7 variables (names/targets as recorded under A4); migrations 100–400 on `twjlnsxjtuntujarwner`, bucket `task-resources` private, RLS 15/15, Auth `mailer_autoconfirm=false`;
+firewall rule *Block legacy AI API* enabled (deny `/api/ai`), `/api/ai/chat` → 403; Cloudflare Access → 302; port 3130 closed; launchd origin agent disabled; newest Vercel deployment still `dpl_6HzXV3gf` (2026-07-30); V2 `d1a7ce2` and all experiment worktrees unchanged; guard file present.
+
+**Local release gates on the candidate (PASS):** ESLint 0 errors (2 old warnings), `tsc` clean, Vitest 216/216, production build OK, `check-production-bundle.sh` all ok (new ref present, old ref absent, no dev-login/`service_role`/`AIza`/`GEMINI_API_KEY`, JWT roles = anon), DB suite 290 assertions on **both** the 17.6.1.147 image and the default CI image (`…167`).
+
+1. **The default model id `gemini-3.5-flash` does not exist.** Google's current model list (https://aistudio.google.com/docs/models, read 2026-11-17) offers stable `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` (+ `gemini-4-*`; previews `gemini-3-flash-preview`, `gemini-3.1-pro-preview`); `gemini-2.5-*` are deprecated (rerouted 2026-12-01), `gemini-2.0-*` and `gemini-3-pro-preview` are shut down.
+   Every real AI call with the old default would have failed with "model not found". Fixed in code (`geminiProvider.ts` default and `.env.example` → `gemini-3.6-flash`); **the hidden Vercel `GEMINI_MODEL` value is unknown and must be set explicitly in A4b** (`gemini-3.6-flash`). The list came from the documentation page, not from the API: re-verify with the key via `GET /v1beta/models` (a free metadata call) in A6 step 0.
+   The UI model selector, analytics labels and cost-estimator table still mention older ids (`gemini-3.5-pro/3.5-flash/3.0-flash`); the server ignores any client-sent model (tested), so this is cosmetic — recorded as a known issue.
+2. **A4b cannot be automated from here:** no `gcloud`/`gsutil`, no `~/.config/gcloud`, no `GOOGLE_*`/`CLOUDSDK_*` variables, and the built-in browser is not signed in to Google (AI Studio redirects to the sign-in page). No credential was created or touched. **A4b = BLOCKED on a human step** (below).
+3. **`--skip-domain` semantics (Vercel docs):** "disables the automatic promotion (aliasing) of the relevant domains to a new production deployment" and overrides the project's *Auto-assign Custom Production Domains* setting; `vercel promote` completes it without a rebuild. The docs do **not** promise anything about the project's own `*.vercel.app` aliases or about public access,
+   so it is **verified after the deploy, not assumed**: `vercel inspect` must list no aliases; `clearspace-ai.vercel.app` must still serve the old deployment (old Supabase ref in its bundle); an unauthenticated GET of the staged URL must redirect to Vercel SSO (302) like every existing deployment URL (project `ssoProtection: all_except_custom_domains`). If the staged URL turns out to be public or aliased, stop before promoting; the AI routes stay firewalled either way.
+4. **Rollback semantics (docs):** *Instant Rollback* reassigns domains to an earlier deployment that has already served production — `dpl_6HzXV3gf` qualifies; a promoted staged deployment cannot be promoted again, only rolled back to. No rebuild, so env changes do not follow a rollback (irrelevant here). Promote/rollback jobs run one at a time per project.
+5. **Pushing to `main`:** triggers GitHub Actions CI only (lint `src e2e`, `tsc`, Vitest, build, Playwright in demo mode, DB suite on the default image — all green locally); no deployment because of the guard (proven on a branch in A1).
+6. **Deployment hygiene:** deploy from a `git archive` export (no `.env.local`, no git metadata); add `--meta releaseCommit=<sha>` so the deployment is traceable; staged checks that need protection bypass use `vercel curl`, which the auto-mode checker refused once without explicit approval — keep it inside the A5 approval text.
+
+### A4b — exactly what is needed from you (≈3 minutes, nothing is pasted into chat)
+
+1. https://aistudio.google.com/apikey → *Create API key* → choose **a new Google Cloud project** (not one with billing). Do not link a billing account (that is what makes it a hard cap; the free tier returns 429 instead of charging).
+2. In the Google Cloud console for that project → *APIs & Services → Credentials → the key → API restrictions → Restrict key → Generative Language API only* (AI Studio cannot set this).
+3. In your own terminal (hidden prompt; both environments are kept):
+   `vercel env update GEMINI_API_KEY --environment production --sensitive -p clearspace --scope bng-dev-alt-webadvisor`
+   `vercel env update GEMINI_MODEL --environment production --sensitive -p clearspace --scope bng-dev-alt-webadvisor` → value `gemini-3.6-flash`
+4. Tell me when done. The old key stays in V2 and the kanban copies; **do not revoke it**.
+Alternative: allow me to drive AI Studio/Cloud Console in your own signed-in Chrome (Claude in Chrome) — slower and touches your Google account UI; I would still not read the key value.

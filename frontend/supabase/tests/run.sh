@@ -50,13 +50,17 @@ run_test() { # $1 = db, $2 = file
   echo "--- $(basename "$2")"
   local out; out="$(mktemp)"
   if { echo "begin;"; cat "$2"; echo "rollback;"; } | psql_admin -d "$1" -f - >"$out" 2>&1; then
+    local k; k=$(grep -cE "NOTICE:  ok" "$out" || true)
+    TOTAL=$((TOTAL + k))
     grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //' || true
+    echo "    ($k assertions)"
     rm -f "$out"
   else
     cat "$out"; rm -f "$out"; echo "FAIL: $2"; exit 1
   fi
 }
 
+TOTAL=0
 echo "== Scenario A: fresh database (baseline -> migrations -> migrations again)"
 newdb cs_a
 apply cs_a "$BASELINE"
@@ -70,4 +74,4 @@ for t in "$HERE"/[1-9]*.test.sql; do run_test cs_a "$t"; done
 
 source "$HERE/legacy_upgrade.sh"
 source "$HERE/concurrency.sh"
-echo "ALL DATABASE TESTS PASSED"
+echo "ALL DATABASE TESTS PASSED (scenario A: $TOTAL SQL assertions + legacy-upgrade + concurrency checks)"

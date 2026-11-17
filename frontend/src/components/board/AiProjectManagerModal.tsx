@@ -114,9 +114,14 @@ export default function AiProjectManagerModal({
       return;
     }
 
-    // Apply each change safely
+    // Aplikují se jen změny, které lze skutečně provést nad AKTUÁLNÍM boardem.
+    // Model může vrátit neexistující sloupec/kartu nebo akci, kterou UI neumí
+    // (např. MERGE_TASKS) -- taková změna se nesmí tvářit jako provedená.
+    const knownColumn = (id?: string) => !!id && columns.some((c) => c.id === id);
+    let applied = 0;
+    const skipped: string[] = [];
+
     for (const change of changesToApply) {
-      // Find card & current column
       let currentColId = '';
       for (const col of columns) {
         if (col.cards.some((card) => card.id === change.targetCardId)) {
@@ -125,22 +130,33 @@ export default function AiProjectManagerModal({
         }
       }
 
-      if (change.actionType === 'MOVE_TASK' && change.targetColumnId && currentColId) {
-        onMoveCard(change.targetCardId, currentColId, change.targetColumnId);
+      let done = false;
+      if (change.actionType === 'MOVE_TASK' && currentColId && knownColumn(change.targetColumnId) && change.targetColumnId !== currentColId) {
+        onMoveCard(change.targetCardId, currentColId, change.targetColumnId as string);
+        done = true;
       } else if (change.actionType === 'CHANGE_PRIORITY' && change.newPriority && currentColId) {
         onUpdateCard(currentColId, change.targetCardId, { priority: change.newPriority });
+        done = true;
       } else if (change.actionType === 'ARCHIVE_TASK' && currentColId) {
         onUpdateCard(currentColId, change.targetCardId, { archived: true });
+        done = true;
       } else if (change.actionType === 'SPLIT_TASK' && change.subtasksToCreate && currentColId) {
-        const destCol = change.targetColumnId || currentColId;
+        const destCol = knownColumn(change.targetColumnId) ? (change.targetColumnId as string) : currentColId;
         for (const subTitle of change.subtasksToCreate) {
           onAddCard(destCol, {
             title: subTitle,
             details: `Vytvořeno rozdělením úkolu "${change.targetCardTitle}" AI Project Managerem.`,
           });
         }
+        done = true;
       }
 
+      if (!done) {
+        skipped.push(change.targetCardTitle || change.actionType);
+        continue;
+      }
+
+      applied += 1;
       await collaborationService.logActivity({
         projectId,
         actorName: 'AI Project Manager',
@@ -150,7 +166,14 @@ export default function AiProjectManagerModal({
       });
     }
 
-    alert(`Úspěšně aplikováno ${changesToApply.length} změn na nástěnku!`);
+    if (applied === 0) {
+      alert('Žádnou z vybraných změn se nepodařilo aplikovat (úkol nebo sloupec už neexistuje, případně akce není podporována).');
+      return;
+    }
+    alert(
+      `Aplikováno ${applied} z ${changesToApply.length} změn.` +
+        (skipped.length > 0 ? `\nNeaplikováno: ${skipped.join(', ')}.` : '')
+    );
     onClose();
   };
 

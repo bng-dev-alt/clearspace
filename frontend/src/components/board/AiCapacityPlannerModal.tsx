@@ -106,8 +106,10 @@ export default function AiCapacityPlannerModal({
       return;
     }
 
+    let applied = 0;
+    const skipped: string[] = [];
+
     for (const sug of toApply) {
-      // Find target member object
       const targetMember = members.find((m) => m.fullName.toLowerCase() === sug.toMemberName.toLowerCase());
 
       let currentColId = '';
@@ -118,27 +120,36 @@ export default function AiCapacityPlannerModal({
         }
       }
 
-      if (currentColId) {
-        const updatedAssignees = targetMember
-          ? [targetMember]
-          : [{ id: 'm-new', fullName: sug.toMemberName, initials: sug.toMemberName.substring(0, 2).toUpperCase(), avatarColor: '#209dd7', createdAt: new Date().toISOString() }];
-
-        onUpdateCard(currentColId, sug.cardId, {
-          assignees: updatedAssignees,
-          assignee: { name: sug.toMemberName, initials: sug.toMemberName.substring(0, 2).toUpperCase(), color: '#209dd7' },
-        });
-
-        await collaborationService.logActivity({
-          projectId,
-          actorName: 'AI Capacity Planner',
-          actionType: 'reassign_task',
-          entityType: 'task',
-          details: { sug },
-        });
+      // Přiřadit lze jen existujícího člena a existující kartu. Dřív se pro
+      // jméno vymyšlené modelem vytvářel falešný člen 'm-new' a změna se tvářila jako provedená.
+      if (!currentColId || !targetMember) {
+        skipped.push(sug.toMemberName);
+        continue;
       }
+
+      onUpdateCard(currentColId, sug.cardId, {
+        assignees: [targetMember],
+        assignee: { name: targetMember.fullName, initials: targetMember.initials, color: targetMember.avatarColor },
+      });
+      applied += 1;
+
+      await collaborationService.logActivity({
+        projectId,
+        actorName: 'AI Capacity Planner',
+        actionType: 'reassign_task',
+        entityType: 'task',
+        details: { sug },
+      });
     }
 
-    alert(`Úspěšně přerozděleno ${toApply.length} karet pro vyvážení kapacit!`);
+    if (applied === 0) {
+      alert('Žádné přerozdělení se nepodařilo aplikovat (karta nebo člen týmu neexistuje).');
+      return;
+    }
+    alert(
+      `Přerozděleno ${applied} z ${toApply.length} karet.` +
+        (skipped.length > 0 ? `\nNeznámý člen týmu: ${skipped.join(', ')}.` : '')
+    );
     onClose();
   };
 

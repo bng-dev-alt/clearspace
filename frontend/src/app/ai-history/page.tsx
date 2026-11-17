@@ -382,10 +382,18 @@ export default function AiHistoryPage() {
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--dark-navy)', margin: '0 0 0.5rem 0' }}>
                   Potvrdit obnovení verze
                 </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)', lineHeight: '1.5', margin: 0 }}>
-                  Opravdu chcete obnovit projekt do stavu před touto AI operací? 
-                  <strong> Budou zrušeny všechny pozdější AI změny.</strong>
-                </p>
+                {selectedRecord.snapshotBefore.boardData ? (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)', lineHeight: '1.5', margin: 0 }} data-testid="restore-scope-board">
+                    Board projektu „{selectedRecord.projectName}“ bude nahrazen stavem před touto AI operací.
+                    <strong> Všechny úpravy provedené od té doby (i ostatními členy) se v tomto projektu ztratí.</strong>{' '}
+                    Ostatní projekty zůstanou nedotčené. Aktuální stav se předtím uloží jako nový záznam v historii.
+                  </p>
+                ) : (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)', lineHeight: '1.5', margin: 0 }} data-testid="restore-scope-delete">
+                    Projekt „{selectedRecord.projectName}“, který vytvořila AI, bude
+                    <strong> trvale smazán včetně všech svých úkolů.</strong> Ostatní projekty zůstanou nedotčené.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -404,7 +412,7 @@ export default function AiHistoryPage() {
                 onClick={handleConfirmRestore}
                 data-testid="confirm-restore-btn"
               >
-                Ano, obnovit
+                {selectedRecord.snapshotBefore.boardData ? 'Ano, obnovit board' : 'Ano, smazat projekt'}
               </button>
             </div>
           </div>

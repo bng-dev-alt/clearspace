@@ -1,4 +1,4 @@
-import { Card, TeamMember } from '../types/kanban';
+import { Card, Column, TeamMember } from '../types/kanban';
 
 /**
  * Mapování řádků DB -> aplikační model karty (čistý modul bez závislosti na
@@ -132,5 +132,42 @@ export function mapDbCard(card: DbCard): Card {
     archived: card.archived || false,
     createdAt: card.created_at,
     updatedAt: card.updated_at,
+  };
+}
+
+/**
+ * Záloha boardu -> JSON pro RPC restore_project_board (jedna transakce na serveru).
+ * Zrcadlí cardToDbFields; děti karty (checklist, komentáře, aktivity) jdou s kartou.
+ */
+export function boardToRestorePayload(columns: Column[]) {
+  return {
+    columns: columns.map((col) => ({
+      id: col.id,
+      name: col.name,
+      cards: col.cards.map((card) => ({
+        id: card.id,
+        title: card.title,
+        details: card.details,
+        tag: card.tag || null,
+        priority: card.priority || null,
+        assignee_name: card.assignee?.name || null,
+        assignee_initials: card.assignee?.initials || null,
+        assignee_color: card.assignee?.color || null,
+        assignees: card.assignees && card.assignees.length > 0 ? card.assignees : null,
+        assignee_ids: (card.assignees ?? []).map((m) => m.id).filter((id) => id && id !== 'member-fallback'),
+        due_date: card.dueDate || null,
+        archived: card.archived || false,
+        created_at: card.createdAt || null,
+        updated_at: card.updatedAt || null,
+        checklist: (card.checklist ?? []).map((i) => ({ id: i.id, text: i.text, completed: i.completed })),
+        comments: (card.comments ?? []).map((c) => ({
+          id: c.id,
+          author_name: c.authorName,
+          content: c.content,
+          created_at: c.createdAt,
+        })),
+        activities: (card.activities ?? []).map((a) => ({ id: a.id, text: a.text, created_at: a.createdAt })),
+      })),
+    })),
   };
 }

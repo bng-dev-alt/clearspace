@@ -4,7 +4,7 @@ import { DEFAULT_MEMBERS } from '../data/dummyData';
 import { localStore, isDefaultProject } from './storage/localStore';
 import { buildSeedBoard } from './storage/seedBoard';
 import { persistenceStatus } from './persistence';
-import { mapDbCard } from './boardMapping';
+import { mapDbCard, boardToRestorePayload } from './boardMapping';
 import type { DbCard } from './boardMapping';
 
 // Výchozí členství nového projektu = všichni výchozí členové workspace.
@@ -733,120 +733,45 @@ export const kanbanService = {
     }
   },
 
-  async restoreProjectSnapshot(
-    projectId: string,
-    boardData: Column[] | null,
-    projectsList: Project[] | null
-  ): Promise<void> {
-    // 1. Obnovení seznamu projektů
-    if (projectsList) {
-      if (!hasSupabaseConfig) {
-        localStore.saveProjects(projectsList);
-      } else {
-        try {
-          const existingProjIds = projectsList.map((p) => p.id);
-          const { data: dbProjs } = await supabase.from('projects').select('id');
-          if (dbProjs) {
-            const dbProjIds = dbProjs.map((p) => p.id);
-            const toDelete = dbProjIds.filter((id) => !existingProjIds.includes(id));
-            if (toDelete.length > 0) {
-              await supabase.from('projects').delete().in('id', toDelete);
-            }
-          }
-          for (const p of projectsList) {
-            const { error } = await supabase.from('projects').upsert(projectToDbRow(p));
-            if (error) throw error;
-          }
-        } catch (error) {
-          persistenceStatus.report('obnovení projektů ze zálohy', error);
-          throw error;
-        }
-      }
+  /**
+   * Obnova stavu z AI History -- vždy v rozsahu JEDNOHO projektu (`projectId`):
+   *  - `boardData` je pole: board tohoto projektu se nahradí zálohou. V Supabase
+   *    to dělá RPC restore_project_board v JEDNÉ transakci (při chybě zůstane
+   *    původní board), smí jen vlastník projektu a RLS platí dál.
+   *  - `boardData` je null: projekt vytvořila AI, vrátit znamená smazat právě
+   *    tento projekt (RLS: jen vlastník).
+   * Žádné jiné projekty se nečtou, nemění ani nemažou. Seznam projektů ze
+   * snapshotu se záměrně IGNORUJE -- dřív se podle něj mazaly všechny ostatní
+   * projekty uživatele a přepisovaly jejich názvy/členství.
+   */
+  async restoreProjectSnapshot(projectId: string, boardData: Column[] | null): Promise<void> {
+    if (!projectId) {
+      throw new Error('Záznam neobsahuje projekt, který lze obnovit.');
     }
 
-    // 2. Obnovení boardu (sloupce a karty)
-    if (boardData) {
-      if (!hasSupabaseConfig) {
-        localStore.saveBoard(projectId, boardData);
-      } else {
-        try {
-          const { data: oldCols } = await supabase
-            .from('columns')
-            .select('id')
-            .eq('project_id', projectId);
-
-          if (oldCols && oldCols.length > 0) {
-            const oldColIds = oldCols.map((c) => c.id);
-            await supabase.from('cards').delete().in('column_id', oldColIds);
-            await supabase.from('columns').delete().in('id', oldColIds);
-          }
-
-          const colInserts = boardData.map((col, index) => ({
-            id: col.id,
-            project_id: projectId,
-            name: col.name,
-            position: index,
-          }));
-          const { error: colError } = await supabase.from('columns').insert(colInserts);
-          if (colError) throw colError;
-
-          for (const col of boardData) {
-            for (let cardIndex = 0; cardIndex < col.cards.length; cardIndex++) {
-              const card = col.cards[cardIndex];
-              const { error: cardError } = await supabase.from('cards').insert({
-                id: card.id,
-                column_id: col.id,
-                ...cardToDbFields(card),
-                position: cardIndex,
-              });
-              if (cardError) throw cardError;
-
-              await syncDbCardAssignees(card.id, card.assignees);
-
-              if (card.checklist && card.checklist.length > 0) {
-                await supabase.from('task_checklists').insert(
-                  card.checklist.map((item) => ({
-                    id: item.id,
-                    card_id: card.id,
-                    text: item.text,
-                    completed: item.completed,
-                  }))
-                );
-              }
-
-              if (card.comments && card.comments.length > 0) {
-                await supabase.from('task_comments').insert(
-                  card.comments.map((c) => ({
-                    id: c.id,
-                    card_id: card.id,
-                    author_name: c.authorName,
-                    content: c.content,
-                    created_at: c.createdAt,
-                  }))
-                );
-              }
-
-              if (card.activities && card.activities.length > 0) {
-                await supabase.from('task_activities').insert(
-                  card.activities.map((a) => ({
-                    id: a.id,
-                    card_id: card.id,
-                    text: a.text,
-                    created_at: a.createdAt,
-                  }))
-                );
-              }
-            }
-          }
-          persistenceStatus.clear();
-        } catch (error) {
-          persistenceStatus.report('obnovení boardu ze zálohy', error);
-          throw error;
-        }
-      }
-    } else {
+    if (!boardData) {
       await this.deleteProject(projectId);
+      return;
     }
+
+    if (!hasSupabaseConfig) {
+      localStore.saveBoard(projectId, boardData);
+      return;
+    }
+
+    const { error } = await supabase.rpc('restore_project_board', {
+      p_project_id: projectId,
+      p_board: boardToRestorePayload(boardData),
+    });
+    if (error) {
+      persistenceStatus.report('obnovení boardu ze zálohy', error);
+      throw new Error(
+        error.code === '42501'
+          ? 'Board může obnovit jen vlastník projektu.'
+          : 'Obnovu se nepodařilo provést. Board zůstal beze změny.'
+      );
+    }
+    persistenceStatus.clear();
   },
 
   // --- Project Membership (Release 22) ---

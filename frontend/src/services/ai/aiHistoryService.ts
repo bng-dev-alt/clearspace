@@ -92,7 +92,7 @@ export const aiHistoryService = {
     return [];
   },
 
-  // 4. Restore snapshot
+  // 4. Restore snapshot -- jen jeden projekt, nikdy jiné projekty (viz kanbanService.restoreProjectSnapshot)
   async restore(recordId: string): Promise<void> {
     if (typeof window === 'undefined') return;
 
@@ -100,18 +100,25 @@ export const aiHistoryService = {
     if (!stored) throw new Error('Historie je prázdná.');
 
     const history: AiHistoryRecord[] = JSON.parse(stored);
-    const targetIndex = history.findIndex((r) => r.id === recordId);
-    if (targetIndex === -1) throw new Error('Záznam historie nebyl nalezen.');
-
-    const record = history[targetIndex];
+    const record = history.find((r) => r.id === recordId);
+    if (!record) throw new Error('Záznam historie nebyl nalezen.');
     const snapshot = record.snapshotBefore;
 
-    // Restore using kanbanService
-    await kanbanService.restoreProjectSnapshot(snapshot.projectId, snapshot.boardData, snapshot.projectsList);
+    // Pojistka: před přepsáním boardu uložit jeho AKTUÁLNÍ stav jako nový záznam,
+    // aby se i samotná obnova dala vzít zpět.
+    if (snapshot.boardData && snapshot.projectId) {
+      const current = await kanbanService.fetchBoardData(snapshot.projectId);
+      this.saveHistoryRecord(
+        'Záloha před obnovou',
+        snapshot.projectName || record.projectName,
+        `Stav boardu těsně před obnovou záznamu "${record.description}"`,
+        0,
+        this.captureSnapshot(snapshot.projectId, current, null)
+      );
+    }
 
-    // Truncate the timeline: "Budou zrušeny všechny pozdější AI změny."
-    const remainingHistory = history.slice(targetIndex + 1);
-    localStorage.setItem('ai_history', JSON.stringify(remainingHistory));
+    await kanbanService.restoreProjectSnapshot(snapshot.projectId, snapshot.boardData);
+    // Historie se NEmaže: záznamy zůstávají, takže jde postupovat i dál.
   },
 
   // 5. Toggle favorite status (for future extensions)

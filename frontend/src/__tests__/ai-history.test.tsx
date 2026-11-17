@@ -80,39 +80,31 @@ describe('AI History & Restore Engine Tests', () => {
     expect(historyList[0].id).toBe(record.id);
   });
 
-  test('restore calls restoreProjectSnapshot and truncates subsequent history', async () => {
+  test('restore is scoped to one project, keeps the whole history and saves a pre-restore backup', async () => {
     const snapshot1 = aiHistoryService.captureSnapshot('proj-1', mockBoardData, mockProjList);
-    const record1 = aiHistoryService.saveHistoryRecord(
-      'AI Improve Task',
-      'Projekt Jedna',
-      'Změna 1',
-      1,
-      snapshot1
-    );
+    const record1 = aiHistoryService.saveHistoryRecord('AI Improve Task', 'Projekt Jedna', 'Změna 1', 1, snapshot1);
 
     const snapshot2 = aiHistoryService.captureSnapshot('proj-1', mockBoardData, mockProjList);
-    aiHistoryService.saveHistoryRecord(
-      'AI Generate Tasks',
-      'Projekt Jedna',
-      'Změna 2',
-      5,
-      snapshot2
-    );
+    aiHistoryService.saveHistoryRecord('AI Generate Tasks', 'Projekt Jedna', 'Změna 2', 5, snapshot2);
 
-    // Timeline descending: [record2, record1]
     expect(aiHistoryService.getHistory().length).toBe(2);
 
-    // Restore to record1: should rollback to state before record1 and remove record1 & record2 from timeline
     await aiHistoryService.restore(record1.id);
 
-    expect(kanbanService.restoreProjectSnapshot).toHaveBeenCalledWith(
-      snapshot1.projectId,
-      snapshot1.boardData,
-      snapshot1.projectsList
-    );
+    // only the project id + board are passed -- the project LIST from the snapshot is never used
+    expect(kanbanService.restoreProjectSnapshot).toHaveBeenCalledTimes(1);
+    expect(kanbanService.restoreProjectSnapshot).toHaveBeenCalledWith(snapshot1.projectId, snapshot1.boardData);
 
-    // History list should now be completely empty (since record1 was the oldest and both were truncated)
-    expect(aiHistoryService.getHistory().length).toBe(0);
+    // nothing was deleted from history; a backup of the pre-restore state was ADDED
+    const history = aiHistoryService.getHistory();
+    expect(history.length).toBe(3);
+    expect(history[0].operationType).toBe('Záloha před obnovou');
+    expect(history.some((r) => r.id === record1.id)).toBe(true);
+  });
+
+  test('restore of an unknown record fails loudly and changes nothing', async () => {
+    await expect(aiHistoryService.restore('nope')).rejects.toThrow();
+    expect(kanbanService.restoreProjectSnapshot).not.toHaveBeenCalled();
   });
 
   test('toggleFavorite toggles the isFavorite property of a history record', () => {

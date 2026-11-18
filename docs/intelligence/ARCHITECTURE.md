@@ -1,5 +1,8 @@
 # ClearSpace V1: Project Intelligence 2.0 and Meeting Intelligence
 
+> **Superseding note (hardening run):** this is the design document. Where it differs from what was built (server-secret-gated STT RPCs, `stt_jobs`, no names sent to Soniox, consent text as the user's own statement, retention on page open instead of a schedule), `HARDENING_RELEASE_CANDIDATE.md` is current.
+
+
 **Status:** architecture proposal, 2026-11-18. Nothing here is implemented.
 
 **Constraints for this document:**
@@ -185,7 +188,7 @@ Next.js route handlers under /api/ai/*   ◀── firewall deny in production u
 | `language_hints` | `["cs","en"]` |
 | `enable_language_identification` | `true` |
 | `enable_speaker_diarization` | `true` |
-| Optional `context` | project name plus member names (as data) to improve name spelling **(verify)** that the async API accepts it and how much it costs |
+| Optional `context` | **Decision (hardening): only a generic domain is sent; no project, member, speaker or meeting names** (privacy). Name-spelling hints would need a DPA/consent decision first |
 | Model id | the current Soniox async model, recorded per transcript **(verify; scribe_ only used `stt-rt-v5`)**; read from env `SONIOX_MODEL`, never hard-coded in many places |
 | Never | periodic finalize: in scribe_ it raised Czech WER from 8.1 % to 17.7 % and caused drift (realtime only, `S1_TRANSCRIPTION_RESULTS.md:116-124`) |
 

@@ -1,5 +1,8 @@
 # ClearSpace Intelligence R1–R7: combined release plan
 
+> **Superseding note (hardening run):** the trust model, P1 dispositions, test counts and external gates are in `HARDENING_RELEASE_CANDIDATE.md`; where this plan differs (STT write RPCs, retention, budgets, privacy), that document is current.
+
+
 Status: **prepared 2026-11-18, nothing applied.** Branch `feature/intelligence-v2` (worktree `V1-intelligence`), base `origin/main` = `fe3b2e9`.
 Every step below that touches hosted Supabase, Vercel, a firewall, a provider account or `main` needs the owner's explicit approval (gates B1–B7 in
 `RUN_B_PACKAGE.md`). This document is the single reference for *what ships, in which order, with which settings, how it is verified, and how it is undone*.
@@ -26,7 +29,7 @@ Every step below that touches hosted Supabase, Vercel, a firewall, a provider ac
 | 4 | `20261117000400_task_resources_storage` | applied | private `task-resources` bucket |
 | 5 | `20261118000500_intelligence_core` | **pending** | 4 tables, 5 RPCs, state-machine trigger |
 | 6 | `20261118000600_intelligence_quality` | **pending** | `columns.role` (+ one-time backfill from names), transcript lineage, quotas, `project_intelligence_stamp` |
-| 7 | `20261118000700_meeting_audio` | **pending** | consent + audio + STT columns on `meetings`, private `meeting-audio` bucket + 3 policies, 8 RPCs, `ai_requests` audio/cost columns |
+| 7 | `20261118000700_meeting_audio` | **pending** | consent + audio + STT columns on `meetings`, private `meeting-audio` bucket + 3 policies, `server_trust` + server-secret-gated trusted STT RPCs, `stt_jobs` (per-attempt provider job + cleanup state), orphan-audio queue, `ai_requests` audio/cost/`billing_state` columns |
 
 Rules for the hosted apply (same pattern as A3): fresh backup **and a restore proof into a throwaway container** first; apply each file as role `postgres`
 in **one transaction** (`psql -v ON_ERROR_STOP=1 --single-transaction`); verify; stop on the first error. Each migration refuses (changes nothing) when its
@@ -73,7 +76,7 @@ key (owner confirmation, release gate). Prompts are unvalidated against the real
 
 **Soniox** (verified from the public docs on 2026-11-18, see `SONIOX_API_VERIFICATION.md`; **no account contact, no key, no call was made**).
 Async API on `https://api.soniox.com/v1` (EU `api.eu.soniox.com`), `Authorization: Bearer`, model `stt-async-v6`, `audio_url` accepted, diarization and language ID bundled,
-about US$0.10 per audio hour, Soniox keeps data 30 days unless deleted (we delete right after the transcript is stored), no training on customer data, GDPR/SOC 2 listed.
+about US$0.10 per audio hour, Soniox keeps data 30 days unless deleted (we delete right after the transcript is stored; a failed deletion stays pending and is retried), no training on customer data, GDPR/SOC 2 listed (a DPA is **not** confirmed: external gate). No member, speaker, meeting or project name is sent to Soniox.
 Open before the first real call: (a) does Soniox fetch a **Supabase signed URL** (query token) reliably, (b) per-minute rate limits, (c) DPA / subprocessor list and whether the EU
 region should be used for production data, (d) `<end>`/`<fin>` markers in async output (the normaliser drops them defensively), (e) cost of the `context` object.
 The account must be funded (no free credits for new accounts since 2025-10-27); a 402 is shown to users as "dočasně nedostupné", never as billing detail.
@@ -154,9 +157,9 @@ Not verifiable locally (stay open): real Gemini prompt quality (B1), Soniox read
 | Bad frontend | `vercel promote dpl_2tSV5NWAHaEweTibxzszh6SMZJ55` (previous production build). Safe: the old build ignores the new tables; AI stays shut by the firewall |
 | Bad migration | restore from the pre-migration dump into a scratch DB first; for 5–7 use the down scripts (data-guarded) or fix forward (all migrations are idempotent) |
 | AI misbehaves / cost | firewall deny stays/returns; lower `AI_DAILY_TOKEN_BUDGET_PER_USER`; revoke the key at Google |
-| Soniox misbehaves / cost | remove `SONIOX_API_KEY` or `STT_ENABLED`; stop at Soniox Console; per-user/global daily audio caps already bound spend; leftover provider data auto-deletes after 30 days or via Console |
-| Orphan audio | the app deletes audio on "Smazat zvuk", on retention expiry (checked when the meeting page is open) and before a meeting is deleted; `stt_cleanup_pending` marks provider data still to delete; manual purge route exists |
-| Stuck transcription | page shows "check again / cancel"; a submission without a job id for >10 min is redone as a counted attempt (max 3, then re-upload); an orphan provider job (crash between create and record) costs at most one file and carries `client_reference_id = meeting id` for manual lookup |
+| Soniox misbehaves / cost | remove `SONIOX_API_KEY`, `STT_SERVER_SECRET` or `STT_ENABLED`; stop at Soniox Console; per-user/global daily audio caps already bound spend; leftover provider data auto-deletes after 30 days or via Console |
+| Orphan audio | the app deletes audio on "Smazat zvuk", when a project member opens the meetings pages after the deadline (`audio_delete_after`, set at upload, also for failed/cancelled meetings; **no scheduler**) and before a meeting is deleted; orphaned Storage objects are queued and swept; `stt_jobs.cleanup_state = 'pending'` marks provider data still to delete; manual purge route exists |
+| Stuck / uncertain transcription | page shows "check again / cancel"; an uncertain POST outcome (`unknown`) is **never re-sent**: it is reconciled by listing the provider's jobs by `client_reference_id` (`<meeting>:<attempt>`) and the estimate stays in the budget; if nothing is found after 10 min with a complete listing it is released, otherwise the user explicitly ends it (cost stays booked). Attempts are cumulative per meeting (max 3) |
 
 ## 12. Approvals still required
 

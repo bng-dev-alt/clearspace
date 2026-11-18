@@ -3,6 +3,7 @@ import { AiGatewayError } from '../ai/errors';
 import { estimateAudioMs, sniffAudioFamily, SNIFF_BYTES } from './audio';
 import { NormalizeError, normalizeSonioxTokens } from './normalize';
 import { SonioxClient, SonioxError } from './soniox';
+import { AudioCleanupError, deleteMeetingAudio, sweepProjectAudio } from './audioCleanup';
 
 /**
  * Přepis zvuku bez fronty a bez workeru (R5). Stav je v databázi (`meetings`, `stt_jobs`) a mění se jen přes RPC, která zamykají
@@ -95,12 +96,15 @@ export function toGatewayError(e: SonioxError): AiGatewayError {
 
 /**
  * Po tomto selhání poskytovatel JISTĚ úlohu nevytvořil (odmítl požadavek dřív): nic se neúčtuje a opakování je bezpečné.
- * Vše ostatní (timeout, síť, 5xx, 408) je NEJISTÉ: úloha mohla vzniknout.
+ * Vše ostatní (timeout, síť, 5xx, 408, ale i ODPOVĚĎ 2xx S NEČITELNÝM TĚLEM) je NEJISTÉ: úloha mohla vzniknout.
  */
 export function definitelyNotCreated(e: SonioxError): boolean {
-  if (e.kind === 'config' || e.kind === 'budget' || e.kind === 'not_found') return true;
-  if (e.kind === 'terminal') return true; // 400/401/403/413: požadavek odmítnut
-  return e.status === 429; // limit_exceeded: odmítnuto před zpracováním
+  if (e.kind === 'config') return true; // nic se neodeslalo (chybí klíč / adresa)
+  const status = e.status ?? 0;
+  // Jen skutečné odmítnutí (4xx) je důkaz, že úloha nevznikla. Stav 2xx nebo 5xx, nebo žádný stav, nic nedokazuje.
+  if (status < 400 || status >= 500) return false;
+  if (e.kind === 'budget' || e.kind === 'not_found' || e.kind === 'terminal') return true; // 400/401/402/403/404/413: požadavek odmítnut
+  return status === 429; // limit_exceeded: odmítnuto před zpracováním
 }
 
 const slug = (s: string) => (/^[a-z0-9_]{1,64}$/.test(s) ? s : 'unknown');
@@ -112,8 +116,8 @@ async function trusted(db: SupabaseClient, secret: string, name: string, args: R
   return db.rpc(name, { p_server_secret: secret, ...args });
 }
 
-async function sttFail(db: SupabaseClient, secret: string, meetingId: string, jobId: string | null, type: string, billing: Billing, audioMs?: number): Promise<void> {
-  const { error } = await trusted(db, secret, 'stt_fail', { p_meeting: meetingId, p_job_id: jobId, p_error_type: slug(type), p_billing: billing, p_audio_ms: audioMs ?? null });
+async function sttFail(db: SupabaseClient, secret: string, meetingId: string, attempt: number, jobId: string | null, type: string, billing: Billing, audioMs?: number): Promise<void> {
+  const { error } = await trusted(db, secret, 'stt_fail', { p_meeting: meetingId, p_attempt: attempt, p_job_id: jobId, p_error_type: slug(type), p_billing: billing, p_audio_ms: audioMs ?? null });
   if (error) console.error('[stt] stt_fail failed', error.code);
 }
 
@@ -196,17 +200,17 @@ export async function startTranscription(a: SttCtx): Promise<StartResult> {
   // Od této chvíle je rezervace zaúčtovaná: každá cesta ven musí stav uzavřít, aby porada nezůstala viset.
   const signed = await a.db.storage.from(BUCKET).createSignedUrl(row.audio_path as string, a.limits.signedUrlTtlSec);
   if (signed.error || !signed.data?.signedUrl) {
-    await sttFail(a.db, a.secret, a.meetingId, null, 'storage_unavailable', 'none');
+    await sttFail(a.db, a.secret, a.meetingId, row.attempt, null, 'storage_unavailable', 'none');
     throw new AiGatewayError('stt_unavailable', 'Soubor se nepodařilo zpřístupnit. Zkuste to prosím znovu.');
   }
   // Obsah se ověří PŘED odesláním (a před jakýmkoli poplatkem): přípona a MIME jde falšovat, hlavička souboru ne.
   const head = await fetchHead(signed.data.signedUrl, a.fetchImpl ?? fetch);
   if (head === null) {
-    await sttFail(a.db, a.secret, a.meetingId, null, 'storage_unavailable', 'none');
+    await sttFail(a.db, a.secret, a.meetingId, row.attempt, null, 'storage_unavailable', 'none');
     throw new AiGatewayError('stt_unavailable', 'Soubor se nepodařilo zpřístupnit. Zkuste to prosím znovu.');
   }
   if (sniffAudioFamily(head) === null) {
-    await sttFail(a.db, a.secret, a.meetingId, null, 'invalid_audio', 'none');
+    await sttFail(a.db, a.secret, a.meetingId, row.attempt, null, 'invalid_audio', 'none');
     throw new AiGatewayError('stt_invalid_audio', 'Soubor není platný zvukový záznam.');
   }
 
@@ -224,12 +228,12 @@ export async function startTranscription(a: SttCtx): Promise<StartResult> {
     model = job.model ?? a.soniox.model;
   } catch (e) {
     if (e instanceof SonioxError && definitelyNotCreated(e)) {
-      await sttFail(a.db, a.secret, a.meetingId, null, e.errorType, 'none');
+      await sttFail(a.db, a.secret, a.meetingId, row.attempt, null, e.errorType, 'none');
       throw toGatewayError(e);
     }
     // NEJISTÝ výsledek: úloha mohla vzniknout a být účtována. Neopakuje se; odhad zůstává v rozpočtu; zjistí se výpisem.
     const type = e instanceof SonioxError ? (e.kind === 'network' ? 'network_error' : e.errorType) : 'internal_error';
-    const { error: uErr } = await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: a.meetingId, p_error_type: slug(type) });
+    const { error: uErr } = await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: a.meetingId, p_attempt: row.attempt, p_error_type: slug(type) });
     if (uErr) console.error('[stt] stt_mark_unknown failed', uErr.code);
     if (e instanceof SonioxError) console.error('[stt] POST outcome unknown', e.kind, e.status, e.errorType);
     return { started: true, state: 'unknown', attempt: row.attempt };
@@ -237,11 +241,13 @@ export async function startTranscription(a: SttCtx): Promise<StartResult> {
 
   // Úloha u poskytovatele EXISTUJE: její id se zapíše; při selhání zápisu se jednou opakuje, jinak jde stav do "unknown"
   // (výpis podle client_reference_id ji pak najde a převezme, nic se neodesílá podruhé).
-  let att = await trusted(a.db, a.secret, 'stt_attach_job', { p_meeting: a.meetingId, p_job_id: jobId, p_model: model });
-  if (att.error) att = await trusted(a.db, a.secret, 'stt_attach_job', { p_meeting: a.meetingId, p_job_id: jobId, p_model: model });
+  // Vázáno na POKUS: opožděné id úlohy se nikdy nepřipojí k novějšímu pokusu (viz stt_attach_job).
+  const attachArgs = { p_meeting: a.meetingId, p_attempt: row.attempt, p_job_id: jobId, p_model: model };
+  let att = await trusted(a.db, a.secret, 'stt_attach_job', attachArgs);
+  if (att.error) att = await trusted(a.db, a.secret, 'stt_attach_job', attachArgs);
   if (att.error) {
     console.error('[stt] stt_attach_job failed', att.error.code);
-    await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: a.meetingId, p_error_type: 'attach_failed' });
+    await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: a.meetingId, p_attempt: row.attempt, p_error_type: 'attach_failed' });
     return { started: true, state: 'unknown', attempt: row.attempt };
   }
   if (att.data === 'orphaned') {
@@ -263,6 +269,8 @@ export interface SyncResult {
   audioPurged?: boolean;
   /** Dotaz na poskytovatele selhal přechodně; úloha není ztracená, stačí to zkusit znovu. */
   transient?: boolean;
+  /** Ukončení nejistého odeslání je možné až po uplynutí lhůty odeslání (jinak by mohl vzniknout druhý placený požadavek). */
+  abandonDeferred?: boolean;
 }
 
 const STUCK_MS = 2 * 3_600_000;
@@ -328,22 +336,25 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
   const reload = async () => { m = await loadMeeting(a.db, a.meetingId, a.projectId); };
 
   // --- zrušení: nikdy nesmaže už vzniklé náklady (odhad zůstává v rozpočtu), id úlohy se zachová k úklidu ---
-  if (a.cancel) {
-    if (m.stt_state === 'transcribing') {
-      await sttFail(a.db, a.secret, m.id, m.stt_job_id, 'cancelled', 'estimated');
-      await reload();
-    } else if (m.stt_state === 'submitting') {
-      await sttFail(a.db, a.secret, m.id, null, 'cancelled', 'uncertain');
-      await reload();
-    } else if (m.stt_state === 'unknown') {
-      await trusted(a.db, a.secret, 'stt_resolve_unknown', { p_meeting: m.id, p_resolution: 'abandon' });
-      await reload();
-    }
+  if (a.cancel && m.stt_state === 'transcribing') {
+    await sttFail(a.db, a.secret, m.id, m.stt_attempts, m.stt_job_id, 'cancelled', 'estimated');
+    await reload();
+  } else if (a.cancel && m.stt_state === 'submitting') {
+    // Odeslání právě probíhá (nebo proces spadl): placený POST mohl vzniknout. Nejde to "zrušit" a hned poslat znovu:
+    // stav přejde do 'unknown' (odhad zůstává v rozpočtu) a výsledek se zjistí podle client_reference_id.
+    await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: m.id, p_attempt: m.stt_attempts, p_error_type: 'cancel_requested' });
+    await reload();
   }
 
   if (m.stt_state === 'submitting') {
     const age = m.stt_submitted_at ? now.getTime() - Date.parse(m.stt_submitted_at) : 0;
-    return result({ stuck: age > UNKNOWN_WAIT_MS });
+    if (age > UNKNOWN_WAIT_MS) {
+      // proces nejspíš spadl kolem POST: výsledek je nejistý (nikdy se neodešle znovu), dál se řeší jako 'unknown'
+      await trusted(a.db, a.secret, 'stt_mark_unknown', { p_meeting: m.id, p_attempt: m.stt_attempts, p_error_type: 'outcome_unknown' });
+      await reload();
+    } else {
+      return result({ stuck: false });
+    }
   }
 
   // --- nejistý výsledek POST: zjistit u poskytovatele, nikdy neodesílat znovu ---
@@ -351,20 +362,33 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
     const { data: jobs } = await a.db.from('stt_jobs').select('client_reference').eq('meeting_id', m.id).eq('attempt', m.stt_attempts).maybeSingle();
     const ref = (jobs as { client_reference?: string } | null)?.client_reference;
     if (!ref) return result({ transient: true });
-    let lookup;
+    let lookup: { found: { id: string; model: string | null } | null; complete: boolean } | null = null;
     try {
       lookup = await findProviderJob(a, ref);
     } catch (e) {
-      if (e instanceof SonioxError && (e.kind === 'retryable' || e.kind === 'network' || e.kind === 'wait')) return result({ transient: true });
-      if (e instanceof SonioxError) throw toGatewayError(e);
-      throw e;
+      if (!(e instanceof SonioxError)) throw e;
+      if (!(e.kind === 'retryable' || e.kind === 'network' || e.kind === 'wait') && !a.cancel) throw toGatewayError(e);
     }
-    if (lookup.found) {
-      await trusted(a.db, a.secret, 'stt_attach_job', { p_meeting: m.id, p_job_id: lookup.found.id, p_model: lookup.found.model ?? a.soniox.model });
+    if (lookup?.found) {
+      // úloha EXISTUJE: převezme se pod číslem pokusu z reference (ne pod "aktuálním"), nic se neodesílá podruhé
+      const attempt = Number(ref.split(':')[1]) || m.stt_attempts;
+      await trusted(a.db, a.secret, 'stt_attach_job', { p_meeting: m.id, p_attempt: attempt, p_job_id: lookup.found.id, p_model: lookup.found.model ?? a.soniox.model });
       await reload();
+      if (a.cancel && (m.stt_state as SttState) === 'transcribing') {
+        await sttFail(a.db, a.secret, m.id, m.stt_attempts, lookup.found.id, 'cancelled', 'estimated'); // původní záměr uživatele
+        await reload();
+        return result({ providerStatus: 'adopted', cleanupPending: (await runCleanup(a)) > 0 });
+      }
       return result({ providerStatus: 'adopted' });
     }
     const age = m.stt_submitted_at ? now.getTime() - Date.parse(m.stt_submitted_at) : 0;
+    if (a.cancel) {
+      // výslovné ukončení: odhad zůstává v rozpočtu; databáze odmítne ukončení před uplynutím lhůty odeslání
+      const { data } = await trusted(a.db, a.secret, 'stt_resolve_unknown', { p_meeting: m.id, p_resolution: 'abandon' });
+      await reload();
+      return result({ abandonDeferred: data === 'too_early' });
+    }
+    if (lookup === null) return result({ transient: true });
     if (lookup.complete && age > UNKNOWN_WAIT_MS) {
       await trusted(a.db, a.secret, 'stt_resolve_unknown', { p_meeting: m.id, p_resolution: 'absent' });
       await reload();
@@ -380,7 +404,7 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
     } catch (e) {
       if (!(e instanceof SonioxError)) throw e;
       if (e.kind === 'not_found') {
-        await sttFail(a.db, a.secret, m.id, m.stt_job_id, 'transcription_not_found', 'none');
+        await sttFail(a.db, a.secret, m.id, m.stt_attempts, m.stt_job_id, 'transcription_not_found', 'uncertain'); // úloha vznikla; 404 nedokazuje, že se neúčtuje
         await reload();
         return result();
       }
@@ -398,7 +422,7 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
     if (status.status === 'error') {
       // odmítnutý soubor poskytovatel neúčtuje; jiné selhání už mohlo běžet, proto odhad zůstává
       const billing: Billing = status.errorType === 'invalid_audio_file' ? 'none' : 'estimated';
-      await sttFail(a.db, a.secret, m.id, m.stt_job_id, status.errorType ?? 'transcription_failed', billing);
+      await sttFail(a.db, a.secret, m.id, m.stt_attempts, m.stt_job_id, status.errorType ?? 'transcription_failed', billing);
       await reload();
       return result({ cleanupPending: (await runCleanup(a)) > 0 });
     }
@@ -417,8 +441,8 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
       normalized = await normalizeSonioxTokens(tokens);
     } catch (e) {
       if (!(e instanceof NormalizeError)) throw e;
-      // poskytovatel úlohu ZPRACOVAL a účtuje ji: zaúčtuje se skutečná délka
-      await sttFail(a.db, a.secret, m.id, m.stt_job_id, e.code === 'empty' ? 'empty_transcript' : 'transcript_too_long', 'actual', status.audioDurationMs ?? 0);
+      // poskytovatel úlohu ZPRACOVAL a účtuje ji; chybí-li délka, zůstává odhad (nikdy nula)
+      await sttFail(a.db, a.secret, m.id, m.stt_attempts, m.stt_job_id, e.code === 'empty' ? 'empty_transcript' : 'transcript_too_long', status.audioDurationMs ? 'actual' : 'estimated', status.audioDurationMs ?? undefined);
       await reload();
       return result({ cleanupPending: (await runCleanup(a)) > 0 });
     }
@@ -456,31 +480,24 @@ export async function syncTranscription(a: SttCtx & { cancel?: boolean; now?: Da
   return result({ cleanupPending: pending, audioPurged: purged });
 }
 
-/** Smaže zvuk ze Storage (včetně případných nepřipojených souborů ve složce porady) a teprve potom označí řádek. */
-export async function purgeAudio(a: SttCtx & { includeProvider?: boolean }): Promise<{ audioDeleted: boolean; cleanupPending: boolean }> {
+/**
+ * Smaže zvuk (Storage + označení v databázi) a, je-li k dispozici klíč poskytovatele a serverové tajemství, i data u poskytovatele.
+ * Obojí je NEZÁVISLÉ: selhání jednoho nezastaví druhé a chybějící konfigurace přepisu NEBRÁNÍ smazání zvuku.
+ */
+export async function purgeAudio(
+  a: Omit<SttCtx, 'soniox' | 'secret'> & { soniox?: SonioxClient | null; secret?: string | null; includeProvider?: boolean }
+): Promise<{ audioDeleted: boolean; cleanupPending: boolean }> {
   const m = await loadMeeting(a.db, a.meetingId, a.projectId);
   if (m.stt_state === 'submitting' || m.stt_state === 'unknown' || m.stt_state === 'transcribing') {
     throw new AiGatewayError('conflict', 'Zvuk nelze smazat, dokud přepis běží.');
   }
-  // Dva NEZÁVISLÉ úklidy (Storage a data u poskytovatele): selhání jednoho nezastaví druhý a každý se zopakuje zvlášť.
   let pending = m.stt_cleanup_pending;
-  if (a.includeProvider) pending = (await runCleanup(a)) > 0;
-  const prefix = `${m.project_id}/${m.id}`;
-  const names = new Set<string>();
-  if (m.audio_path) names.add(m.audio_path);
-  // soubory, které se nahrály, ale nepřipojily (selhání registrace): jen jejich smazání je uklidí
-  const listed = await a.db.storage.from(BUCKET).list(prefix);
-  for (const o of (listed.data ?? []) as { name: string }[]) names.add(`${prefix}/${o.name}`);
-  if (names.size > 0) {
-    const rm = await a.db.storage.from(BUCKET).remove([...names]);
-    if (rm.error) throw new AiGatewayError('stt_failed', 'Soubor se nepodařilo smazat. Zkuste to prosím znovu.');
-  }
-  if (m.audio_path && !m.audio_deleted_at) {
-    const { error } = await a.db.rpc('mark_audio_deleted', { p_meeting: m.id });
-    if (error) {
-      console.error('[stt] mark_audio_deleted failed', error.code);
-      throw new AiGatewayError('stt_failed', 'Soubor se nepodařilo smazat. Zkuste to prosím znovu.');
-    }
+  if (a.includeProvider && a.soniox && a.secret) pending = (await runCleanup({ ...a, soniox: a.soniox, secret: a.secret })) > 0;
+  try {
+    await deleteMeetingAudio(a.db, m);
+  } catch (e) {
+    if (e instanceof AudioCleanupError) throw new AiGatewayError(e.code === 'in_flight' ? 'conflict' : 'stt_failed', e.message);
+    throw e;
   }
   return { audioDeleted: true, cleanupPending: pending };
 }
@@ -488,41 +505,17 @@ export async function purgeAudio(a: SttCtx & { includeProvider?: boolean }): Pro
 export interface SweepResult {
   audioPurged: number;
   orphansRemoved: number;
+  unattachedRemoved: number;
   providerCleanupPending: number;
 }
 
 /**
- * Projektový úklid (bez cronu): smaže zvuk po termínu, osiřelé soubory smazaných porad a dokončí úklid u poskytovatele.
- * Volá ho otevřený seznam porad. Pokud do projektu nikdo nepřijde, nic se nesmaže (viz záruky retence v RELEASE_PLAN).
+ * Projektový úklid (bez cronu): zvuk po termínu, osiřelé a nepřipojené soubory, a (je-li přepis nastaven) data u poskytovatele.
+ * Volá ho otevřený seznam porad. Pokud do projektu nikdo nepřijde, nic se nesmaže (viz záruky retence v dokumentaci).
  */
-export async function sweepProject(a: Omit<SttCtx, 'meetingId'>): Promise<SweepResult> {
-  const out: SweepResult = { audioPurged: 0, orphansRemoved: 0, providerCleanupPending: 0 };
-  const ctx = (meetingId: string): SttCtx => ({ ...a, meetingId });
-  const due = await a.db
-    .from('meetings')
-    .select('id')
-    .eq('project_id', a.projectId)
-    .eq('source_kind', 'audio')
-    .not('audio_path', 'is', null)
-    .lte('audio_delete_after', new Date().toISOString())
-    .not('stt_state', 'in', '(submitting,unknown,transcribing)')
-    .limit(20);
-  for (const r of (due.data ?? []) as { id: string }[]) {
-    try {
-      await purgeAudio(ctx(r.id));
-      out.audioPurged += 1;
-    } catch (e) {
-      if (!(e instanceof AiGatewayError)) throw e; // jedna selhaná položka nezastaví úklid ostatních
-    }
-  }
-  const orphans = await a.db.from('meeting_audio_orphans').select('path').eq('project_id', a.projectId).limit(50);
-  for (const o of (orphans.data ?? []) as { path: string }[]) {
-    const rm = await a.db.storage.from(BUCKET).remove([o.path]);
-    if (!rm.error) {
-      await a.db.from('meeting_audio_orphans').delete().eq('path', o.path);
-      out.orphansRemoved += 1;
-    }
-  }
-  out.providerCleanupPending = await runCleanup(ctx(''), { meetingScoped: false });
-  return out;
+export async function sweepProject(a: Omit<SttCtx, 'meetingId' | 'soniox' | 'secret'> & { soniox?: SonioxClient | null; secret?: string | null }): Promise<SweepResult> {
+  const files = await sweepProjectAudio(a.db, a.projectId);
+  let providerCleanupPending = 0;
+  if (a.soniox && a.secret) providerCleanupPending = await runCleanup({ ...a, soniox: a.soniox, secret: a.secret, meetingId: '' }, { meetingScoped: false });
+  return { ...files, providerCleanupPending };
 }

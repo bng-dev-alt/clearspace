@@ -43,7 +43,7 @@ export function tokensFor(turns, startAt = 0, msPerWord = 400) {
 
 export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
   const state = {
-    mode: 'ok', // ok | create_400 | create_402 | create_429 | create_500 | create_503 | job_error | job_failed_status | empty | status_500 | status_429_once | delete_500
+    mode: 'ok', // ok | create_200_bad_body | create_400 | create_402 | create_429 | create_500 | create_503 | job_error | job_failed_status | empty | status_500 | status_429_once | delete_500
     pollsUntilDone: 1,
     durationMs: 12_000,
     turns: DEFAULT_TURNS,
@@ -131,6 +131,7 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
       }
       if (state.mode === 'create_lost_response') { req.socket.destroy(); return; } // the job EXISTS, the client never sees the answer
       if (state.mode === 'create_500_created') return err(res, 500, 'internal_error'); // the job EXISTS, the answer is an error
+      if (state.mode === 'create_200_bad_body') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"unexpected":"shape"}'); return; } // the job EXISTS, the 2xx answer has no usable id
       return json(res, 201, { id, status: 'queued', model: body.model, created_at: new Date().toISOString(), audio_url: body.audio_url ?? null, file_id: body.file_id ?? null, client_reference_id: body.client_reference_id ?? null, error_type: null, error_message: null });
     }
 

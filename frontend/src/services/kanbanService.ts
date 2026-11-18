@@ -334,6 +334,11 @@ export const kanbanService = {
     }
 
     try {
+      // Zvuk porad musí zmizet PŘED projektem: po jeho smazání už k souborům nemá přístup nikdo. Selže-li to, projekt se nemaže.
+      // (Dynamický import: meetingService importuje služby, které sem míří; vyhne se kruhové závislosti.)
+      const { meetingService } = await import('./meetingService');
+      await meetingService.purgeProjectAudio(projectId);
+
       const { error } = await supabase
         .from('projects')
         .delete()

@@ -21,13 +21,20 @@ vi.mock('../../lib/supabase', () => ({
     from: () => ({
       insert: () => ({ select: () => ({ single: async () => { h.log.push('insert'); return { data: h.insertError ? null : { id: 'mm' }, error: h.insertError }; } }) }),
       delete: () => ({ eq: async () => { h.log.push('delete'); h.deleted += 1; return { error: null }; } }),
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: h.meetingRow, error: null }) }) }),
+      select: () => {
+        const b: Record<string, unknown> = {};
+        b.eq = () => b; b.not = () => b; b.limit = () => b;
+        b.maybeSingle = async () => ({ data: h.meetingRow, error: null });
+        b.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: h.meetingRow ? [{ id: 'mm' }] : [], count: 0, error: null }).then(res);
+        return b;
+      },
     }),
     rpc: async (name: string) => { h.log.push(name); return { data: h.rpcData[name] ?? null, error: h.rpcErrors[name] ?? null }; },
     storage: {
       from: () => ({
         upload: async (path: string, _f: unknown, o: { contentType: string }) => { h.log.push('upload'); h.uploaded.push({ path, type: o.contentType }); return { error: h.uploadError }; },
         remove: async (paths: string[]) => { h.log.push('remove'); h.removed.push(...paths); return { error: h.removeError }; },
+        list: async () => ({ data: [], error: null }),
       }),
     },
   },
@@ -108,36 +115,59 @@ describe('STT calls go through the server routes only', () => {
     await expect(meetingService.startTranscription('pA', 'mm')).rejects.toMatchObject({ code: 'consent_required' });
     h.fetchRes = { ok: false, status: 503, body: { code: 'stt_disabled', error: 'vypnuto' } };
     await expect(meetingService.syncTranscription('pA', 'mm')).rejects.toMatchObject({ code: 'stt_disabled' });
+    // C1: deleting audio never needs the server route (production firewall closes /api/ai; transcription may be off)
     h.fetchRes = { ok: false, status: 403, body: null };
-    await expect(meetingService.purgeAudio('pA', 'mm')).rejects.toMatchObject({ code: 'ai_disabled' }); // production firewall
+    await expect(meetingService.purgeAudio('pA', 'mm')).resolves.toBeUndefined();
   });
 });
 
 describe('remove: no orphaned audio', () => {
-  const withAudio = () => { h.meetingRow = { id: 'mm', project_id: 'pA', title: 'x', occurred_at: '', source_kind: 'audio', status: 'transcribed', audio_path: 'pA/mm/f.mp3', audio_deleted_at: null, speaker_names: {} }; };
-  test('a meeting with audio is purged through the server first, then deleted', async () => {
+  const withAudio = (extra: Record<string, unknown> = {}) => { h.meetingRow = { id: 'mm', project_id: 'pA', title: 'x', occurred_at: '', source_kind: 'audio', status: 'transcribed', audio_path: 'pA/mm/f.mp3', audio_deleted_at: null, stt_state: 'completed', speaker_names: {}, ...extra }; };
+  test('a meeting with audio: Storage first, then the database mark, then the row (no server route involved)', async () => {
     withAudio();
+    h.fetchRes = { ok: false, status: 403, body: null }; // /api/ai closed by the production firewall
     await meetingService.remove('mm');
-    expect(h.log).toEqual(['delete']); // the purge ran through fetch (server route), then the row delete
+    expect(h.removed).toEqual(['pA/mm/f.mp3']);
+    expect(h.log).toEqual(['remove', 'mark_audio_deleted', 'delete']);
     expect(h.deleted).toBe(1);
   });
-  test('if the server route is unavailable the file is removed straight from Storage, then the meeting is deleted', async () => {
+  test('works with transcription switched off (the route answers 503 stt_disabled)', async () => {
     withAudio();
     h.fetchRes = { ok: false, status: 503, body: { code: 'stt_disabled', error: 'x' } };
     await meetingService.remove('mm');
     expect(h.removed).toEqual(['pA/mm/f.mp3']);
-    expect(h.log).toEqual(['remove', 'delete']);
+    expect(h.deleted).toBe(1);
   });
   test('if the file cannot be removed the meeting is NOT deleted (the file would be orphaned)', async () => {
     withAudio();
-    h.fetchRes = { ok: false, status: 503, body: { code: 'stt_disabled', error: 'x' } };
     h.removeError = { message: 'x' };
     await expect(meetingService.remove('mm')).rejects.toMatchObject({ code: 'storage' });
     expect(h.deleted).toBe(0);
+  });
+  test.each(['submitting', 'unknown', 'transcribing'])('a meeting whose transcription is %s is NOT deleted (its provider job would be untracked)', async (stt_state) => {
+    withAudio({ stt_state });
+    await expect(meetingService.remove('mm')).rejects.toMatchObject({ code: 'conflict' });
+    expect(h.deleted).toBe(0);
+    expect(h.removed).toHaveLength(0);
   });
   test('a text meeting is simply deleted', async () => {
     h.meetingRow = { id: 'mm', project_id: 'pA', title: 'x', occurred_at: '', source_kind: 'text', status: 'draft', audio_path: null, speaker_names: {} };
     await meetingService.remove('mm');
     expect(h.log).toEqual(['delete']);
+  });
+});
+
+describe('C2: purgeProjectAudio (called before a project is deleted)', () => {
+  test('lists every object of the project, removes them, marks the meetings', async () => {
+    h.rpcData.list_project_audio = [{ path: 'pA/m1/a.mp3' }, { path: 'pA/m2/b.mp3' }];
+    h.meetingRow = { id: 'mm' };
+    await meetingService.purgeProjectAudio('pA');
+    expect(h.removed).toEqual(['pA/m1/a.mp3', 'pA/m2/b.mp3']);
+    expect(h.log.slice(0, 3)).toEqual(['list_project_audio', 'remove', 'mark_audio_deleted']);
+  });
+  test('a Storage failure aborts: the caller must not delete the project', async () => {
+    h.rpcData.list_project_audio = [{ path: 'pA/m1/a.mp3' }];
+    h.removeError = { message: 'x' };
+    await expect(meetingService.purgeProjectAudio('pA')).rejects.toMatchObject({ code: 'storage' });
   });
 });

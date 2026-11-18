@@ -18,6 +18,7 @@ vi.mock('../lib/supabase', () => {
     }
     b.eq = (...args: unknown[]) => { h.calls.push({ kind: 'eq', table, args }); return b; };
     b.in = (...args: unknown[]) => { h.calls.push({ kind: 'in', table, args }); return b; };
+    b.not = () => b; b.limit = () => b; // read-only helpers used by the project's audio purge
     b.then = (res: (v: unknown) => unknown) => res({ data: [], error: null });
     return b;
   };
@@ -80,8 +81,11 @@ describe('AI History restore safety', () => {
     const deletes = h.calls.filter((c) => c.kind === 'delete');
     expect(deletes).toHaveLength(1);
     expect(deletes[0].table).toBe('projects');
-    const eqs = h.calls.filter((c) => c.kind === 'eq').map((c) => c.args);
-    expect(eqs).toEqual([['id', 'proj-new']]);
+    // the DELETE itself is filtered by exactly this project id
+    expect(h.calls.filter((c) => c.kind === 'eq' && c.table === 'projects').map((c) => c.args)).toEqual([['id', 'proj-new']]);
+    // before it, the project's own audio is purged: reads only, all scoped to this project, and no other write or delete anywhere
+    expect(h.calls.filter((c) => c.kind === 'eq' && c.table !== 'projects').map((c) => c.args as string[]).filter((a) => a[0] === 'project_id' || a[0] === 'id').every((a) => a[1] === 'proj-new')).toBe(true);
+    expect(h.calls.filter((c) => ['update', 'insert', 'upsert'].includes(c.kind))).toHaveLength(0);
     expect(h.calls.some((c) => c.kind === 'in')).toBe(false);
   });
 

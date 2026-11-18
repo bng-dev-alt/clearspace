@@ -52,6 +52,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
+  const [deferred, setDeferred] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inFlight = a.sttState === 'submitting' || a.sttState === 'unknown' || a.sttState === 'transcribing';
   const alive = useRef(true);
@@ -68,6 +69,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         const r = await meetingService.syncTranscription(projectId, meeting.id, cancel);
         if (!alive.current) return null;
         setStuck(r.stuck === true);
+        setDeferred(r.abandonDeferred === true);
         if (r.state !== a.sttState || r.revision || r.audioPurged || r.cleanupPending !== a.cleanupPending) await onChanged();
         return r;
       } catch (e) {
@@ -82,7 +84,25 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
   // "Dnes" se bere při vykreslení stránky (useState-inicializátor je čistý pro React); stačí hrubá přesnost.
   const [now] = useState(() => Date.now());
   // Platí i pro selhané / zrušené porady: termín smazání zvuku a úklid u poskytovatele se na ně vztahují stejně.
-  const needsSettle = !inFlight && (a.cleanupPending || (!!a.deleteAfter && !a.deletedAt && Date.parse(a.deleteAfter) <= now));
+  const due = !!a.path && !!a.deleteAfter && !a.deletedAt && Date.parse(a.deleteAfter) <= now;
+  const needsSettle = !inFlight && (a.cleanupPending || due);
+
+  // Smazání po termínu a úklid u poskytovatele: zvuk se maže PŘÍMO (Storage + databáze), nezávisle na přepisu a na serverových
+  // routách; úklid u poskytovatele je navíc a nikdy nebrání smazání zvuku.
+  const settle = useCallback(async () => {
+    let changed = false;
+    try {
+      if (due) {
+        await meetingService.deleteAudioFiles(projectId, meeting.id);
+        changed = true;
+      }
+    } catch (e) {
+      if (alive.current) setError(e instanceof MeetingServiceError ? e.message : 'Zvuk se nepodařilo smazat.');
+    }
+    if (a.cleanupPending) await meetingService.providerCleanupBestEffort(projectId, meeting.id);
+    if (alive.current && changed) await onChanged();
+  }, [due, a.cleanupPending, projectId, meeting.id, onChanged]);
+
   useEffect(() => {
     if (!inFlight && !needsSettle) return;
     let stop = false;
@@ -90,7 +110,8 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       if (stop) return;
-      await sync();
+      if (inFlight) await sync();
+      else await settle();
       if (stop) return;
       delay = Math.min(pollMs.max, Math.round(delay * 1.5));
       if (inFlight) timer = setTimeout(tick, delay);
@@ -100,7 +121,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
       stop = true;
       clearTimeout(timer);
     };
-  }, [inFlight, needsSettle, sync, pollMs.first, pollMs.max]);
+  }, [inFlight, needsSettle, sync, settle, pollMs.first, pollMs.max]);
 
   async function act(fn: () => Promise<void>, message?: string) {
     if (busy) return;
@@ -130,9 +151,11 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         </span>
       </div>
       <p className="mi-muted" data-testid="audio-info">
-        {a.consentAt ? `Souhlas účastníků zaznamenán ${new Date(a.consentAt).toLocaleString('cs-CZ')}.` : 'Souhlas účastníků nebyl zaznamenán.'}
+        {a.consentAt ? `Prohlášení člena o informování účastníků zaznamenáno ${new Date(a.consentAt).toLocaleString('cs-CZ')} (není to právní doklad o souhlasu).` : 'Prohlášení o informování účastníků nebylo zaznamenáno.'}
         {a.bytes ? ` Soubor ${(a.bytes / 1048576).toFixed(1)} MB.` : ''}
-        {a.path && a.deleteAfter && !a.deletedAt ? ` Zvuk se automaticky smaže ${new Date(a.deleteAfter).toLocaleDateString('cs-CZ')}.` : ''}
+        {a.path && a.deleteAfter && !a.deletedAt
+          ? ` Termín smazání zvuku: ${new Date(a.deleteAfter).toLocaleDateString('cs-CZ')}. Aplikace nemá plánovač: zvuk se smaže při prvním otevření porad po tomto termínu, nebo ho můžete smazat hned.`
+          : ''}
         {a.deletedAt ? ` Zvuk byl smazán ${new Date(a.deletedAt).toLocaleDateString('cs-CZ')}, přepis zůstává.` : ''}
       </p>
       {a.sttState === 'completed' && estMs !== null && (
@@ -149,6 +172,11 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         <p role="status" className="mi-muted" data-testid="stt-unknown">
           Odpověď poskytovatele nepřišla, takže se neví, jestli přepis vznikl. Nic se neodesílá znovu automaticky (hrozila by dvojí platba): stav se
           ověřuje u poskytovatele. Když to nevyjde, přepis můžete ukončit; odhadovaná cena zůstane započtena do limitu.
+        </p>
+      )}
+      {deferred && a.sttState === 'unknown' && (
+        <p role="status" className="mi-muted" data-testid="stt-abandon-deferred">
+          Odeslání ještě může probíhat, proto ho zatím nelze ukončit (jinak by hrozila druhá platba). Zkuste to za několik minut; odhad ceny zůstává započten.
         </p>
       )}
       {a.cleanupPending && (
@@ -173,7 +201,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         {inFlight && (
           <>
             <Button onClick={() => void sync()} disabled={busy} data-testid="stt-check">Zkontrolovat stav</Button>
-            <Button variant="ghost" onClick={() => act(async () => { await meetingService.syncTranscription(projectId, meeting.id, true); }, 'Přepis zrušen.')} disabled={busy} data-testid="stt-cancel">{a.sttState === 'unknown' ? 'Ukončit (cena zůstane započtena)' : 'Zrušit přepis'}</Button>
+            <Button variant="ghost" onClick={() => act(async () => { const r = await meetingService.syncTranscription(projectId, meeting.id, true); setDeferred(r.abandonDeferred === true); }, 'Požadavek na zrušení odeslán.')} disabled={busy} data-testid="stt-cancel">{a.sttState === 'unknown' ? 'Ukončit (cena zůstane započtena)' : 'Zrušit přepis'}</Button>
           </>
         )}
         {a.path && !a.deletedAt && !inFlight && (

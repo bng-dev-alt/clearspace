@@ -106,7 +106,7 @@ test('upload with consent: private bucket object, consent recorded, NOTHING sent
   meetingUrl = page.url();
   meetingId = meetingUrl.split('/').pop()!;
   await expect(page.getByTestId('audio-panel')).toBeVisible();
-  await expect(page.getByTestId('audio-info')).toContainText('Souhlas účastníků zaznamenán');
+  await expect(page.getByTestId('audio-info')).toContainText('Prohlášení člena o informování účastníků zaznamenáno');
   const m = (await rest(request, owner.token, `meetings?id=eq.${meetingId}&select=source_kind,consent_at,consent_by,audio_path,audio_bytes,audio_mime,stt_state,status`)).json[0];
   expect(m).toMatchObject({ source_kind: 'audio', audio_bytes: MP3.length, audio_mime: 'audio/mpeg', stt_state: 'none', status: 'uploaded', consent_by: owner.id });
   expect(m.consent_at).toBeTruthy();
@@ -239,13 +239,19 @@ test('AUDIT PROBES: a legitimate member calling the trusted STT RPCs with their 
   const forged = 'x'.repeat(40);
   expect((await call('stt_reserve', { p_server_secret: forged, p_meeting: meetingId, p_est_audio_ms: 1, p_user_daily_ms: 999999999, p_global_daily_ms: 999999999 })).status).toBe(403);
   expect((await call('stt_complete', { p_server_secret: forged, p_meeting: meetingId, p_job_id: 'x', p_model: 'm', p_audio_ms: 1, p_transcript: { revision: 'a', speakers: [], segments: [], coverage: {}, char_count: 1 } })).status).toBe(403);
-  expect((await call('stt_fail', { p_server_secret: forged, p_meeting: meetingId, p_job_id: null, p_error_type: 'x', p_billing: 'none' })).status).toBe(403);
+  expect((await call('stt_fail', { p_server_secret: forged, p_meeting: meetingId, p_attempt: 1, p_job_id: null, p_error_type: 'x', p_billing: 'none' })).status).toBe(403);
+  // F1: the pre-hardening secret-less signatures no longer exist at all
+  expect((await call('stt_fail', { p_meeting: meetingId, p_job_id: null, p_error_type: 'x' })).status).toBe(404);
+  expect((await call('stt_attach_job', { p_meeting: meetingId, p_job_id: 'x', p_model: 'm' })).status).toBe(404);
+  expect((await call('stt_mark_cleaned', { p_meeting: meetingId })).status).toBe(404);
+  expect((await sb(request, '/rest/v1/machine_persist_tokens', { method: 'POST', token: owner.token, data: { txid: 1 } })).status).toBe(403);
   expect((await sb(request, '/rest/v1/ai_requests', { method: 'POST', token: owner.token, data: { feature: 'meeting-transcribe', status: 'succeeded' } })).status).toBe(403);
   expect((await rest(request, owner.token, 'server_trust?select=*')).status).toBe(403);
 });
 
-test('an UNCERTAIN provider answer is never re-sent: the page says "unknown", reconciliation ADOPTS the existing job, exactly ONE paid request', async ({ page, request }) => {
-  await control(request, { reset: true, mode: 'create_lost_response', pollsUntilDone: 1, fetchAudio: true });
+for (const mode of ['create_lost_response', 'create_200_bad_body']) {
+test(`an UNCERTAIN provider answer (${mode}) is never re-sent: the page says "unknown", reconciliation ADOPTS the existing job, exactly ONE paid request`, async ({ page, request }) => {
+  await control(request, { reset: true, mode, pollsUntilDone: 1, fetchAudio: true });
   await loginUi(page, ownerEmail);
   await createAudioMeeting(page, 'Ztracená odpověď');
   await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
@@ -266,6 +272,7 @@ test('an UNCERTAIN provider answer is never re-sent: the page says "unknown", re
   const done = (await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=status,billing_state,audio_ms')).json[0];
   expect(done).toMatchObject({ status: 'succeeded', billing_state: 'actual', audio_ms: 12_000 });
 });
+}
 
 test('cancel keeps the cost and the provider job id; the provider copy is deleted later and the page tells the truth meanwhile', async ({ page, request }) => {
   await control(request, { reset: true, mode: 'ok', pollsUntilDone: 99, fetchAudio: true });
@@ -291,6 +298,110 @@ test('cancel keeps the cost and the provider job id; the provider copy is delete
   await page.reload();
   await expect.poll(async () => (await stats(request)).jobs[0].deleted, { timeout: 20_000 }).toBe(true);
   await expect.poll(async () => (await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_cleanup_pending`)).json[0].stt_cleanup_pending, { timeout: 20_000 }).toBe(false);
+});
+
+test('F3: cancelling while the paid POST is in flight does NOT allow an immediate second POST; abandoning waits for the submission window; the estimate stays booked', async ({ page, request }) => {
+  await control(request, { reset: true, mode: 'create_hang', pollsUntilDone: 1, fetchAudio: true });
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'Zrušení za letu');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  const call = (route: string, body: Record<string, unknown> = {}) => request.post(`/api/ai/meetings/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId: id, ...body } });
+  const first = call('transcribe'); // the provider hangs: this request is "in flight"
+  await expect.poll(async () => (await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_state`)).json[0].stt_state, { timeout: 10_000 }).toBe('submitting');
+  const cancel = await (await call('sync', { cancel: true })).json();
+  expect(cancel).toMatchObject({ state: 'unknown', abandonDeferred: true }); // NOT "failed"
+  const retry = await (await call('transcribe')).json();
+  expect(retry).toEqual({ started: false, state: 'unknown' }); // no second paid POST
+  expect((await (await call('sync', { cancel: true })).json()).abandonDeferred).toBe(true); // abandoning is refused inside the window
+  await first;
+  expect((await stats(request)).calls.filter((c) => c.method === 'POST' && c.path === '/v1/transcriptions')).toHaveLength(1);
+  const led = (await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=billing_state,audio_ms')).json[0];
+  expect(led.billing_state).toBe('uncertain'); // the cost is NOT released
+  expect(led.audio_ms).toBeGreaterThan(0);
+  // after the submission window the user may end it; the estimate stays and only then a retry is allowed (a NEW attempt)
+  await sb(request, `/rest/v1/meetings?id=eq.${id}`, { method: 'PATCH', token: SERVICE, headers: { Prefer: 'return=minimal' }, data: { stt_submitted_at: new Date(Date.now() - 11 * 60_000).toISOString() } });
+  await control(request, { mode: 'ok', pollsUntilDone: 1 });
+  const ended = await (await call('sync', { cancel: true })).json();
+  expect(ended.state).toBe('failed');
+  expect((await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=billing_state')).json[0].billing_state).toBe('uncertain');
+  const again = await (await call('transcribe')).json();
+  expect(again).toMatchObject({ started: true, attempt: 2 });
+});
+
+test('C1: deleting audio works with /api/ai closed (production firewall) and with transcription off: Storage + database directly', async ({ page, request }) => {
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'Mazání bez serveru');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  expect(await listObjects(request, id)).toHaveLength(1);
+  await page.route('**/api/ai/**', (route) => route.fulfill({ status: 403, contentType: 'application/json', body: '{"code":"ai_disabled"}' }));
+  await page.getByTestId('audio-delete').click();
+  await page.getByTestId('audio-delete-confirm').click();
+  await expect(page.getByTestId('audio-info')).toContainText('Zvuk byl smazán', { timeout: 15_000 });
+  expect(await listObjects(request, id)).toHaveLength(0);
+  const m = (await rest(request, owner.token, `meetings?id=eq.${id}&select=audio_path,audio_deleted_at`)).json[0];
+  expect(m.audio_path).toBeNull();
+  expect(m.audio_deleted_at).toBeTruthy();
+});
+
+test('C1: a FAILED meeting past its deadline is deleted on open, without any transcription route', async ({ page, request }) => {
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'Selhaná po termínu');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  await sb(request, `/rest/v1/meetings?id=eq.${id}`, { method: 'PATCH', token: SERVICE, headers: { Prefer: 'return=minimal' }, data: { stt_state: 'failed', status: 'failed', audio_delete_after: new Date(Date.now() - 60_000).toISOString() } });
+  await page.route('**/api/ai/**', (route) => route.fulfill({ status: 403, contentType: 'application/json', body: '{}' }));
+  await page.reload();
+  await expect(page.getByTestId('audio-info')).toContainText('Zvuk byl smazán', { timeout: 15_000 });
+  expect(await listObjects(request, id)).toHaveLength(0);
+});
+
+test('C5: a FRESH unattached upload is left alone by the sweep (it may be mid-registration); the 24 h grace rule itself is covered by the SQL suite (84) and the unit tests', async ({ page, request }) => {
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'S nepřipojeným souborem');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  const stray = `${PROJECT}/${id}/${'f'.repeat(8)}-ffff-4fff-8fff-${'f'.repeat(12)}.mp3`;
+  const up = await request.post(`${SB}/storage/v1/object/meeting-audio/${stray}`, { headers: { apikey: ANON, Authorization: `Bearer ${owner.token}`, 'Content-Type': 'audio/mpeg' }, data: MP3 });
+  expect(up.status()).toBe(200);
+  expect(await listObjects(request, id)).toHaveLength(2);
+  await page.goto(`/projects/${PROJECT}/meetings`);
+  await page.waitForTimeout(1500);
+  expect(await listObjects(request, id)).toHaveLength(2);
+  const objs = (await sb(request, '/storage/v1/object/list/meeting-audio', { method: 'POST', token: SERVICE, data: { prefix: `${PROJECT}/${id}` } })).json as { name: string }[];
+  expect(objs.map((o) => o.name)).toContain(stray.split('/').pop());
+});
+
+test('C2: deleting a PROJECT removes its audio from Storage first (nothing is left unreachable), and a Storage failure keeps the project', async ({ page, request }) => {
+  const P2 = `au-del-${run}`;
+  expect((await sb(request, '/rest/v1/projects', { method: 'POST', token: owner.token, headers: { Prefer: 'return=minimal' }, data: { id: P2, name: 'Ke smazání' } })).status).toBe(201);
+  const mk = await sb(request, '/rest/v1/meetings', { method: 'POST', token: owner.token, headers: { Prefer: 'return=representation' }, data: { project_id: P2, title: 'Zvuk', source_kind: 'audio' } });
+  const mid = mk.json[0].id as string;
+  expect((await sb(request, '/rest/v1/rpc/record_audio_consent', { method: 'POST', token: owner.token, data: { p_meeting: mid } })).status).toBeLessThan(300);
+  const up = async (name: string) => (await request.post(`${SB}/storage/v1/object/meeting-audio/${P2}/${mid}/${name}.mp3`, { headers: { apikey: ANON, Authorization: `Bearer ${owner.token}`, 'Content-Type': 'audio/mpeg' }, data: MP3 })).status();
+  const attached = `${'a'.repeat(8)}-aaaa-4aaa-8aaa-${'a'.repeat(12)}`;
+  expect(await up(attached)).toBe(200);
+  expect(await up(`${'b'.repeat(8)}-bbbb-4bbb-8bbb-${'b'.repeat(12)}`)).toBe(200); // never attached
+  expect((await sb(request, '/rest/v1/rpc/attach_meeting_audio', { method: 'POST', token: owner.token, data: { p_meeting: mid, p_path: `${P2}/${mid}/${attached}.mp3`, p_bytes: MP3.length, p_mime: 'audio/mpeg', p_client_ms: 1000 } })).status).toBeLessThan(300);
+  const listP2 = async () => ((await sb(request, '/storage/v1/object/list/meeting-audio', { method: 'POST', token: SERVICE, data: { prefix: `${P2}/${mid}` } })).json as unknown[]).length;
+  expect(await listP2()).toBe(2);
+  await loginUi(page, ownerEmail);
+  await page.goto('/');
+  // a Storage failure must keep the project (nothing is deleted half-way)
+  await page.route(`${SB}/storage/v1/object/meeting-audio`, (route) => (route.request().method() === 'DELETE' ? route.fulfill({ status: 500, body: '{}' }) : route.continue()));
+  await page.getByTestId(`delete-project-btn-${P2}`).click();
+  page.once('dialog', (d) => void d.accept());
+  await page.getByTestId('delete-project-confirm-btn').click();
+  await expect.poll(async () => (await rest(request, owner.token, `projects?id=eq.${P2}&select=id`)).json.length, { timeout: 8000 }).toBe(1);
+  expect(await listP2()).toBe(2);
+  // with Storage working the audio disappears BEFORE the project
+  await page.unroute(`${SB}/storage/v1/object/meeting-audio`);
+  await page.goto('/');
+  await page.getByTestId(`delete-project-btn-${P2}`).click();
+  await page.getByTestId('delete-project-confirm-btn').click();
+  await expect.poll(async () => (await rest(request, owner.token, `projects?id=eq.${P2}&select=id`)).json.length, { timeout: 15_000 }).toBe(0);
+  expect(await listP2()).toBe(0);
 });
 
 test('the provider key never reaches the browser: the page bundle and responses contain no key', async ({ page }) => {

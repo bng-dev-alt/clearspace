@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { startFakeSoniox, type FakeSoniox } from '../../../e2e/support/fake-soniox.mjs';
-import { SonioxClient } from '../../lib/stt/soniox';
-import { purgeAudio, startTranscription, sweepProject, syncTranscription, sttLimitsFromEnv, sttServerSecret, type SttLimits } from '../../lib/stt/pipeline';
+import { SonioxClient, SonioxError } from '../../lib/stt/soniox';
+import { definitelyNotCreated, purgeAudio, startTranscription, sweepProject, syncTranscription, sttLimitsFromEnv, sttServerSecret, type SttLimits } from '../../lib/stt/pipeline';
 import { AiGatewayError } from '../../lib/ai/errors';
 
 /**
@@ -14,10 +14,11 @@ interface H {
   meeting: Record<string, unknown> | null;
   jobs: Job[];
   attemptJob: { client_reference: string } | null;
-  sweepMeetings: { id: string }[];
+  sweepMeetings: Record<string, unknown>[];
   orphans: { path: string }[];
   orphanDeletes: string[];
   listed: string[];
+  stray: string[];
   rpc: { name: string; args: Record<string, unknown> }[];
   rpcImpl: Record<string, (a: Record<string, unknown>) => { data: unknown; error: null | { code: string } }>;
   order: string[];
@@ -70,6 +71,7 @@ function makeDb(): SupabaseClient {
     rpc: async (name: string, args: Record<string, unknown>) => {
       h.rpc.push({ name, args });
       h.order.push(name);
+      if (name === 'list_project_audio') return { data: h.stray.map((path) => ({ path })), error: null };
       return (h.rpcImpl[name] ?? (() => ({ data: null, error: null })))(args);
     },
     storage: {
@@ -102,7 +104,13 @@ const dbEffects = () => {
     return { data: 'attached', error: null };
   };
   h.rpcImpl.stt_mark_unknown = () => { Object.assign(m(), { stt_state: 'unknown' }); return { data: null, error: null }; };
-  h.rpcImpl.stt_resolve_unknown = () => { Object.assign(m(), { stt_state: 'failed' }); return { data: null, error: null }; };
+  h.rpcImpl.stt_resolve_unknown = () => {
+    // like the database: not before the submission window (10 min) has passed
+    const age = Date.now() - Date.parse(String(m().stt_submitted_at ?? new Date().toISOString()));
+    if (age < 10 * 60_000) return { data: 'too_early', error: null };
+    Object.assign(m(), { stt_state: 'failed' });
+    return { data: 'resolved', error: null };
+  };
   h.rpcImpl.stt_complete = (a) => { Object.assign(m(), { stt_state: 'completed', stt_cleanup_pending: true }); queueJob(String(a.p_job_id)); return { data: 'a'.repeat(64), error: null }; };
   h.rpcImpl.stt_fail = (a) => { Object.assign(m(), { stt_state: 'failed', stt_cleanup_pending: !!a.p_job_id || !!m().stt_job_id }); queueJob((a.p_job_id as string | null) ?? null); return { data: null, error: null }; };
   h.rpcImpl.stt_cleanup_result = (a) => {
@@ -122,7 +130,7 @@ beforeAll(async () => { fake = await startFakeSoniox(); });
 afterAll(async () => { await fake.close(); });
 beforeEach(async () => {
   await fake.control({ reset: true, mode: 'ok', pollsUntilDone: 1, durationMs: 12_000, fetchAudio: false });
-  h = { meeting: baseMeeting(), jobs: [], attemptJob: { client_reference: REF }, sweepMeetings: [], orphans: [], orphanDeletes: [], listed: [], rpc: [], rpcImpl: {}, order: [], signedUrl: `${fake.origin}/__audio/ok.mp3?token=signed`, signError: null, removed: [], removeError: null };
+  h = { meeting: baseMeeting(), jobs: [], attemptJob: { client_reference: REF }, sweepMeetings: [], orphans: [], orphanDeletes: [], listed: [], stray: [], rpc: [], rpcImpl: {}, order: [], signedUrl: `${fake.origin}/__audio/ok.mp3?token=signed`, signError: null, removed: [], removeError: null };
   reserveOutcome('started');
   dbEffects();
 });
@@ -160,7 +168,7 @@ describe('startTranscription: the happy path', () => {
     const c = await calls();
     expect(c.calls.filter((x) => x.method === 'POST' && x.path === '/v1/transcriptions')).toHaveLength(1);
     expect(c.jobs[0].body).toMatchObject({ audio_url: h.signedUrl, language_hints: ['cs', 'en'], enable_speaker_diarization: true, model: 'stt-async-v6', client_reference_id: REF });
-    expect(rpcNamed('stt_attach_job')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: 'tr-1', p_model: 'stt-async-v6' });
+    expect(rpcNamed('stt_attach_job')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: 'tr-1', p_model: 'stt-async-v6' });
   });
   test('PRIVACY: no member, speaker, meeting or project name reaches the provider (only a generic domain)', async () => {
     await start();
@@ -238,7 +246,7 @@ describe('startTranscription: failures BEFORE the paid request are closed as not
     h.signedUrl = `${fake.origin}/__audio/bad.mp3?token=x`;
     await rejects(start(), 'stt_invalid_audio');
     expect(await sonioxCalls()).toHaveLength(0);
-    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: null, p_error_type: 'invalid_audio', p_billing: 'none', p_audio_ms: null });
+    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: null, p_error_type: 'invalid_audio', p_billing: 'none', p_audio_ms: null });
   });
   test('a storage error closes the job as storage_unavailable / not billed', async () => {
     h.signError = { message: 'boom' };
@@ -259,7 +267,7 @@ describe('startTranscription: failures BEFORE the paid request are closed as not
     await fake.control({ mode });
     const e = await rejects(start(), code);
     expect(e.message).not.toMatch(/balance|zůstatek|provider message|402/i); // billing state and provider text are never exposed
-    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: null, p_error_type: type, p_billing: 'none', p_audio_ms: null });
+    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: null, p_error_type: type, p_billing: 'none', p_audio_ms: null });
     expect(await posts()).toHaveLength(1);
     expect(rpcNamed('stt_attach_job')).toHaveLength(0);
     expect(rpcNamed('stt_mark_unknown')).toHaveLength(0);
@@ -277,9 +285,30 @@ describe('startTranscription: an UNCERTAIN paid POST is never repeated and never
     const r = await start();
     expect(r).toEqual({ started: true, state: 'unknown', attempt: 1 });
     expect(rpcNamed('stt_mark_unknown')).toHaveLength(1);
-    expect(rpcNamed('stt_mark_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_error_type: type });
+    expect(rpcNamed('stt_mark_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_error_type: type });
     expect(rpcNamed('stt_fail')).toHaveLength(0);
     expect(await posts()).toHaveLength(1);
+  });
+  test('F2: a 2xx answer with an UNREADABLE body is uncertain (the job exists and is billed): never "not billed", never repeated', async () => {
+    await fake.control({ mode: 'create_200_bad_body' });
+    const r = await start();
+    expect(r).toEqual({ started: true, state: 'unknown', attempt: 1 });
+    expect(rpcNamed('stt_fail')).toHaveLength(0); // the estimate is NOT released
+    expect(rpcNamed('stt_mark_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_error_type: 'bad_response' });
+    expect(await posts()).toHaveLength(1);
+    expect((await calls()).jobs).toHaveLength(1);
+  });
+  test('definitelyNotCreated: only a genuine 4xx rejection proves the job was not created', () => {
+    const e = (kind: string, status: number) => new SonioxError(kind as never, status, 'x');
+    expect(definitelyNotCreated(e('terminal', 400))).toBe(true);
+    expect(definitelyNotCreated(e('terminal', 413))).toBe(true);
+    expect(definitelyNotCreated(e('budget', 402))).toBe(true);
+    expect(definitelyNotCreated(e('retryable', 429))).toBe(true);
+    expect(definitelyNotCreated(e('config', 0))).toBe(true);
+    expect(definitelyNotCreated(e('terminal', 200))).toBe(false); // 2xx with a bad body
+    expect(definitelyNotCreated(e('terminal', 0))).toBe(false); // no status at all
+    expect(definitelyNotCreated(e('retryable', 500))).toBe(false);
+    expect(definitelyNotCreated(e('network', 0))).toBe(false);
   });
   test('a timeout is uncertain as well (the job may exist at the provider)', async () => {
     await fake.control({ mode: 'create_hang' });
@@ -373,7 +402,7 @@ describe('syncTranscription', () => {
     await fake.control({ mode: 'job_error' });
     await create();
     await sync();
-    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: 'tr-1', p_error_type: 'invalid_audio_file', p_billing: 'none', p_audio_ms: null });
+    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: 'tr-1', p_error_type: 'invalid_audio_file', p_billing: 'none', p_audio_ms: null });
     expect(JSON.stringify(h.rpc)).not.toMatch(/unsupported provider text/);
     expect(rpcNamed('stt_complete')).toHaveLength(0);
     expect(rpcNamed('stt_cleanup_result').map((c) => c.args.p_result)).toEqual(['done']);
@@ -383,7 +412,7 @@ describe('syncTranscription', () => {
     await fake.control({ mode: 'job_failed_status' });
     await create();
     await sync();
-    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_error_type: 'unknown_status', p_billing: 'estimated' });
+    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_attempt: 1, p_error_type: 'unknown_status', p_billing: 'estimated' });
   });
 
   test('a transcript without speech is booked at the REAL duration (the provider processed and bills it); no empty transcript is stored', async () => {
@@ -405,10 +434,10 @@ describe('syncTranscription', () => {
     expect(rpcNamed('stt_fail')).toHaveLength(0);
   });
 
-  test('the provider has forgotten the job (404): closed as transcription_not_found, not billed again', async () => {
+  test('the provider has forgotten the job (404): closed as transcription_not_found, but the cost stays booked (the job was created)', async () => {
     running({ stt_job_id: 'tr-unknown' });
     await sync();
-    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_job_id: 'tr-unknown', p_error_type: 'transcription_not_found', p_billing: 'none' });
+    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_attempt: 1, p_job_id: 'tr-unknown', p_error_type: 'transcription_not_found', p_billing: 'uncertain' });
   });
 
   test('a rejected key (401) is reported as unavailable and the job stays recoverable (not failed)', async () => {
@@ -422,8 +451,6 @@ describe('syncTranscription', () => {
     await create();
     await fake.control({ pollsUntilDone: 99 });
     running({ stt_submitted_at: new Date(Date.now() - 3 * 3_600_000).toISOString() });
-    expect((await sync()).stuck).toBe(true);
-    h.meeting = { ...baseMeeting(), stt_state: 'submitting', stt_submitted_at: new Date(Date.now() - 11 * 60_000).toISOString() };
     expect((await sync()).stuck).toBe(true);
     h.meeting = { ...baseMeeting(), stt_state: 'submitting', stt_submitted_at: new Date().toISOString() };
     expect((await sync()).stuck).toBe(false);
@@ -472,21 +499,43 @@ describe('syncTranscription: cancel keeps the cost and the provider job id', () 
     running('transcribing');
     await soniox().createTranscription({ audioUrl: 'http://x/a.mp3', clientReferenceId: REF });
     const r = await sync({ cancel: true });
-    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: 'tr-1', p_error_type: 'cancelled', p_billing: 'estimated', p_audio_ms: null });
+    expect(rpcNamed('stt_fail')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: 'tr-1', p_error_type: 'cancelled', p_billing: 'estimated', p_audio_ms: null });
     expect(rpcNamed('stt_cleanup_result')[0].args).toMatchObject({ p_result: 'retry', p_error_type: 'still_running' });
     expect((await calls()).jobs[0].deleted).toBe(false);
     expect(r.cleanupPending).toBe(true); // truthful: the provider copy still exists and a deletion is pending
   });
-  test('cancelling while SUBMITTING books the estimate as uncertain (the POST may be in flight)', async () => {
+  test('F3: cancelling while SUBMITTING does NOT fail the attempt (which would allow an immediate second paid POST): the outcome becomes UNKNOWN', async () => {
     running('submitting');
-    await sync({ cancel: true });
-    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_job_id: null, p_error_type: 'cancelled', p_billing: 'uncertain' });
-  });
-  test('"cancel" on an UNKNOWN outcome is an explicit abandon (estimate kept), never a silent retry', async () => {
-    running('unknown');
-    await sync({ cancel: true });
-    expect(rpcNamed('stt_resolve_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_resolution: 'abandon' });
+    const r = await sync({ cancel: true });
+    expect(rpcNamed('stt_fail')).toHaveLength(0);
+    expect(rpcNamed('stt_mark_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_error_type: 'cancel_requested' });
+    expect(r.state).toBe('unknown'); // the database refused to abandon inside the submission window ...
+    expect(r.abandonDeferred).toBe(true); // ... and the UI is told why
     expect(await posts()).toHaveLength(0);
+  });
+  test('F3: a stuck SUBMITTING attempt (process died, older than 10 min) moves to unknown on sync and is reconciled, never re-sent', async () => {
+    running('submitting', { stt_submitted_at: new Date(Date.now() - 11 * 60_000).toISOString() });
+    await sync();
+    expect(rpcNamed('stt_mark_unknown')[0].args).toMatchObject({ p_attempt: 1, p_error_type: 'outcome_unknown' });
+    expect(await posts()).toHaveLength(0);
+  });
+  test('"cancel" on an UNKNOWN outcome is an explicit abandon (estimate kept); before the submission window the database refuses it and the UI is told', async () => {
+    running('unknown');
+    h.rpcImpl.stt_resolve_unknown = () => ({ data: 'too_early', error: null });
+    const r = await sync({ cancel: true });
+    expect(rpcNamed('stt_resolve_unknown')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_resolution: 'abandon' });
+    expect(r.abandonDeferred).toBe(true);
+    expect(await posts()).toHaveLength(0);
+  });
+  test('cancel while the in-flight POST turns out to have CREATED the job: the job is adopted by its own attempt and then cancelled (cost and id kept)', async () => {
+    await fake.control({ pollsUntilDone: 99 });
+    await soniox().createTranscription({ audioUrl: 'http://x/a.mp3', clientReferenceId: REF }); // the "lost" POST
+    running('unknown');
+    const r = await sync({ cancel: true });
+    expect(rpcNamed('stt_attach_job')[0].args).toMatchObject({ p_attempt: 1, p_job_id: 'tr-1' });
+    expect(rpcNamed('stt_fail')[0].args).toMatchObject({ p_attempt: 1, p_job_id: 'tr-1', p_error_type: 'cancelled', p_billing: 'estimated' });
+    expect(rpcNamed('stt_resolve_unknown')).toHaveLength(0);
+    expect(r.providerStatus).toBe('adopted');
   });
 });
 
@@ -498,7 +547,7 @@ describe('syncTranscription: reconciling an UNKNOWN outcome (the paid POST is ne
     unknown(1);
     const r = await sync();
     expect(r.providerStatus).toBe('adopted');
-    expect(rpcNamed('stt_attach_job')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_job_id: 'tr-1', p_model: 'stt-async-v6' });
+    expect(rpcNamed('stt_attach_job')[0].args).toEqual({ p_server_secret: SECRET, p_meeting: MID, p_attempt: 1, p_job_id: 'tr-1', p_model: 'stt-async-v6' });
     expect(await posts()).toHaveLength(1);
     expect(r.state).toBe('transcribing');
   });
@@ -600,24 +649,46 @@ describe('purgeAudio', () => {
   });
 });
 
+describe('C1: deleting audio does NOT depend on the transcription configuration', () => {
+  test('purge without provider client or server secret still deletes the audio; the provider cleanup is reported as still pending', async () => {
+    h.meeting = { ...baseMeeting(), stt_state: 'completed', stt_job_id: 'tr-1', stt_cleanup_pending: true };
+    queueJob('tr-1');
+    const r = await purgeAudio({ db: makeDb(), soniox: null, secret: null, meetingId: MID, projectId: 'pA', limits, includeProvider: true });
+    expect(r).toEqual({ audioDeleted: true, cleanupPending: true });
+    expect(h.removed).toHaveLength(1);
+    expect(await sonioxCalls()).toHaveLength(0);
+    expect(h.jobs[0].cleanup_state).toBe('pending'); // retryable later: nothing was forgotten
+  });
+  test('sweep without provider configuration still removes due audio, orphans and unattached uploads', async () => {
+    h.meeting = { ...baseMeeting(), stt_state: 'failed' };
+    h.sweepMeetings = [{ id: MID, project_id: 'pA', audio_path: String(h.meeting?.audio_path), audio_deleted_at: null, stt_state: 'failed' }];
+    h.orphans = [{ path: 'pA/gone/x.mp3' }];
+    h.stray = ['pA/m2/never-attached.mp3'];
+    const r = await sweepProject({ db: makeDb(), soniox: null, secret: null, projectId: 'pA', limits });
+    expect(r).toEqual({ audioPurged: 1, orphansRemoved: 1, unattachedRemoved: 1, providerCleanupPending: 0 });
+    expect(h.removed).toContain('pA/m2/never-attached.mp3');
+    expect(h.rpc.find((c) => c.name === 'list_project_audio')?.args).toEqual({ p_project: 'pA', p_unattached_only: true, p_older_than_hours: 24 });
+  });
+});
+
 describe('sweepProject (no cron: runs when a member opens the project)', () => {
   const sweep = () => sweepProject({ db: makeDb(), soniox: soniox(), secret: SECRET, projectId: 'pA', limits });
   test('deletes due audio, orphaned objects and pending provider data; reports the counts', async () => {
     h.meeting = { ...baseMeeting(), stt_state: 'completed', stt_job_id: 'tr-1' };
-    h.sweepMeetings = [{ id: MID }];
+    h.sweepMeetings = [{ id: MID, project_id: 'pA', audio_path: String(h.meeting?.audio_path), audio_deleted_at: null, stt_state: 'completed' }];
     h.orphans = [{ path: 'pA/gone/x.mp3' }];
     await fake.control({ pollsUntilDone: 0 });
     await soniox().createTranscription({ audioUrl: 'http://x/a.mp3' });
     await soniox().getTranscription('tr-1');
     queueJob('tr-1');
     const r = await sweep();
-    expect(r).toEqual({ audioPurged: 1, orphansRemoved: 1, providerCleanupPending: 0 });
+    expect(r).toEqual({ audioPurged: 1, orphansRemoved: 1, unattachedRemoved: 0, providerCleanupPending: 0 });
     expect(h.orphanDeletes).toEqual(['pA/gone/x.mp3']);
     expect((await calls()).jobs[0].deleted).toBe(true);
   });
   test('an orphan whose Storage delete fails stays queued (retried later); one failing meeting does not stop the others', async () => {
     h.meeting = { ...baseMeeting(), stt_state: 'completed' };
-    h.sweepMeetings = [{ id: MID }];
+    h.sweepMeetings = [{ id: MID, project_id: 'pA', audio_path: String(h.meeting?.audio_path), audio_deleted_at: null, stt_state: 'completed' }];
     h.orphans = [{ path: 'pA/gone/x.mp3' }];
     h.removeError = { message: 'x' };
     const r = await sweep();

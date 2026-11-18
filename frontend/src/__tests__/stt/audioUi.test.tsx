@@ -8,7 +8,7 @@ vi.mock('../../services/meetingService', () => {
     code: string;
     constructor(code: string, message: string) { super(message); this.code = code; }
   }
-  for (const n of ['startTranscription', 'syncTranscription', 'purgeAudio', 'createAudioMeeting', 'createWithTranscript']) h.svc[n] = vi.fn();
+  for (const n of ['startTranscription', 'syncTranscription', 'purgeAudio', 'deleteAudioFiles', 'providerCleanupBestEffort', 'createAudioMeeting', 'createWithTranscript']) h.svc[n] = vi.fn();
   return { MeetingServiceError, meetingService: h.svc };
 });
 
@@ -38,7 +38,7 @@ describe('AudioPanel', () => {
   test('without recorded consent the start button is disabled', () => {
     render(<AudioPanel meeting={meeting({ consentAt: null })} projectId="p1" onChanged={vi.fn()} />);
     expect(screen.getByTestId('stt-start')).toBeDisabled();
-    expect(screen.getByTestId('audio-info')).toHaveTextContent('Souhlas účastníků nebyl zaznamenán');
+    expect(screen.getByTestId('audio-info')).toHaveTextContent('Prohlášení o informování účastníků nebylo zaznamenáno');
   });
   test('start calls the service once (no double click) and reloads', async () => {
     let resolve!: () => void;
@@ -100,13 +100,42 @@ describe('AudioPanel', () => {
     fireEvent.click(screen.getByTestId('stt-cancel'));
     await waitFor(() => expect(svc().syncTranscription).toHaveBeenCalledWith('p1', 'm1', true));
   });
-  test('completed: duration and price estimate are shown; a pending provider cleanup is settled with one sync', async () => {
-    svc().syncTranscription.mockResolvedValue({ state: 'completed', cleanupPending: false });
+  test('completed: duration and price estimate are shown; a pending provider cleanup is retried once (never blocks anything)', async () => {
+    svc().providerCleanupBestEffort.mockResolvedValue(undefined);
     render(<AudioPanel meeting={meeting({ sttState: 'completed', audioMs: 1_800_000, costUsd: 0.05, model: 'stt-async-v6', cleanupPending: true, deleteAfter: new Date(Date.now() + 5 * 86_400_000).toISOString() })} projectId="p1" onChanged={vi.fn()} pollMs={FAST} />);
     expect(screen.getByTestId('stt-usage')).toHaveTextContent('30.0 min');
     expect(screen.getByTestId('stt-usage')).toHaveTextContent('$0.0500');
-    expect(screen.getByTestId('audio-info')).toHaveTextContent('automaticky smaže');
-    await waitFor(() => expect(svc().syncTranscription).toHaveBeenCalledTimes(1));
+    // wording matches behaviour: a deadline, no scheduler
+    expect(screen.getByTestId('audio-info')).toHaveTextContent('Termín smazání zvuku');
+    expect(screen.getByTestId('audio-info')).toHaveTextContent('nemá plánovač');
+    expect(screen.getByTestId('audio-info')).not.toHaveTextContent('automaticky');
+    await waitFor(() => expect(svc().providerCleanupBestEffort).toHaveBeenCalledWith('p1', 'm1'));
+    expect(svc().syncTranscription).not.toHaveBeenCalled(); // no transcription call for a settled meeting
+    expect(svc().deleteAudioFiles).not.toHaveBeenCalled(); // deadline not reached
+  });
+  test('C1: audio past its deadline is deleted DIRECTLY (no transcription route), also for a failed or never-transcribed meeting', async () => {
+    svc().deleteAudioFiles.mockResolvedValue(undefined);
+    for (const sttState of ['failed', 'none'] as const) {
+      svc().deleteAudioFiles.mockClear();
+      const onChanged = vi.fn();
+      const { unmount } = render(<AudioPanel meeting={meeting({ sttState, deleteAfter: new Date(Date.now() - 1000).toISOString() })} projectId="p1" onChanged={onChanged} pollMs={FAST} />);
+      await waitFor(() => expect(svc().deleteAudioFiles).toHaveBeenCalledWith('p1', 'm1'));
+      await waitFor(() => expect(onChanged).toHaveBeenCalled());
+      expect(svc().syncTranscription).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+  test('an UNKNOWN outcome is explained, never auto-repeated, and the end button says the cost stays booked', () => {
+    render(<AudioPanel meeting={meeting({ sttState: 'unknown', attempts: 1 })} projectId="p1" onChanged={vi.fn()} pollMs={{ first: 100000, max: 100000 }} />);
+    expect(screen.getByTestId('stt-unknown')).toHaveTextContent('neví, jestli přepis vznikl');
+    expect(screen.getByTestId('stt-cancel')).toHaveTextContent('cena zůstane započtena');
+    expect(screen.queryByTestId('stt-start')).toBeNull(); // no retry button while the outcome is unknown
+  });
+  test('F3: ending an unknown outcome inside the submission window is deferred and the page says why', async () => {
+    svc().syncTranscription.mockResolvedValue({ state: 'unknown', abandonDeferred: true, cleanupPending: false });
+    render(<AudioPanel meeting={meeting({ sttState: 'unknown', attempts: 1 })} projectId="p1" onChanged={vi.fn()} pollMs={{ first: 100000, max: 100000 }} />);
+    fireEvent.click(screen.getByTestId('stt-cancel'));
+    expect(await screen.findByTestId('stt-abandon-deferred')).toHaveTextContent('zatím nelze ukončit');
   });
   test('a finished meeting with nothing pending is not polled at all', async () => {
     render(<AudioPanel meeting={meeting({ sttState: 'completed', audioMs: 60_000, deleteAfter: new Date(Date.now() + 86_400_000).toISOString() })} projectId="p1" onChanged={vi.fn()} pollMs={FAST} />);

@@ -50,6 +50,7 @@ const meeting = () => ({ id: MID, project_id: 'pA', title: 'P', source_kind: 'au
 
 describe('STT routes', () => {
   const env = { ...process.env };
+  const env0 = () => ({ ...env, NEXT_PUBLIC_SUPABASE_URL: 'http://sb.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' });
   const logs: unknown[][] = [];
   beforeAll(async () => { fake = await startFakeSoniox({ expectKey: SECRET }); });
   afterAll(async () => { await fake.close(); });
@@ -62,14 +63,41 @@ describe('STT routes', () => {
   });
   afterEach(() => { process.env = env; vi.restoreAllMocks(); });
 
-  test('feature flag: without STT_ENABLED=1 every route answers 503 stt_disabled BEFORE auth or any database access', async () => {
+  test('feature flag: without STT_ENABLED=1 the TRANSCRIBING routes answer 503 stt_disabled BEFORE auth or any database access', async () => {
     delete process.env.STT_ENABLED;
-    for (const route of [transcribe, sync, purge, sweep]) {
+    for (const route of [transcribe, sync]) {
       const r = await post(route, { projectId: 'pA', meetingId: MID });
       expect(r.status).toBe(503);
       expect((await r.json()).code).toBe('stt_disabled');
     }
     expect(h.created).toBe(0);
+  });
+
+  test('C1: the DELETING routes (purge, sweep) do not depend on the transcription flag, the server secret or the provider key', async () => {
+    for (const env of [
+      () => { delete process.env.STT_ENABLED; },
+      () => { delete process.env.STT_SERVER_SECRET; },
+      () => { delete process.env.SONIOX_API_KEY; },
+      () => { process.env.STT_SERVER_SECRET = 'short'; },
+    ]) {
+      process.env = { ...env0(), STT_ENABLED: '1', STT_SERVER_SECRET: SERVER_SECRET, SONIOX_API_KEY: SECRET, SONIOX_BASE_URL: fake.url };
+      env();
+      h.meeting = { ...meeting(), stt_state: 'completed' };
+      const p = await post(purge, { projectId: 'pA', meetingId: MID });
+      expect(p.status).toBe(200);
+      expect(await p.json()).toMatchObject({ audioDeleted: true });
+      const w = await post(sweep, { projectId: 'pA' });
+      expect(w.status).toBe(200);
+      // no TRUSTED rpc was attempted without a usable secret
+      expect(h.rpc.filter((c) => String(c.name).startsWith('stt_'))).toHaveLength(0);
+      h.rpc.length = 0;
+    }
+  });
+  test('the deleting routes still authenticate and scope to the project (401 / 404)', async () => {
+    delete process.env.STT_ENABLED;
+    expect((await post(purge, { projectId: 'pA', meetingId: MID }, { token: null })).status).toBe(401);
+    h.meeting = { ...meeting(), project_id: 'pOther' };
+    expect((await post(purge, { projectId: 'pA', meetingId: MID })).status).toBe(404);
   });
 
   test('authentication: no token / invalid token -> 401 and nothing is touched', async () => {
@@ -113,10 +141,10 @@ describe('STT routes', () => {
     expect(h.rpc.map((x) => x.name)).toEqual(['stt_reserve', 'stt_attach_job']);
   });
 
-  test('FAIL CLOSED: without STT_SERVER_SECRET (or with a short one) no trusted RPC is ever called', async () => {
+  test('FAIL CLOSED: without STT_SERVER_SECRET (or with a short one) the transcribing routes never call a trusted RPC', async () => {
     for (const v of [undefined, 'short']) {
       if (v === undefined) delete process.env.STT_SERVER_SECRET; else process.env.STT_SERVER_SECRET = v;
-      for (const route of [transcribe, sync, purge, sweep]) {
+      for (const route of [transcribe, sync]) {
         const r = await post(route, { projectId: 'pA', meetingId: MID });
         expect(r.status).toBe(503);
         expect((await r.json()).code).toBe('stt_unavailable');
@@ -134,7 +162,7 @@ describe('STT routes', () => {
   test('sweep: a project-scoped cleanup that needs no meeting id', async () => {
     const r = await post(sweep, { projectId: 'pA' });
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ audioPurged: 0, orphansRemoved: 0, providerCleanupPending: 0 });
+    expect(await r.json()).toEqual({ audioPurged: 0, orphansRemoved: 0, unattachedRemoved: 0, providerCleanupPending: 0 });
     expect((await post(sweep, {})).status).toBe(400);
   });
 

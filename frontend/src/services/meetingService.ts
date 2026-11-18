@@ -1,6 +1,7 @@
 import { parseAiHttpError, AI_NETWORK_ERROR } from '../lib/ai/clientErrors';
 import { SNIFF_BYTES, validateAudio } from '../lib/stt/audio';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
+import { AudioCleanupError, deleteMeetingAudio, deleteProjectAudio, sweepProjectAudio } from '../lib/stt/audioCleanup';
 import {
   parseTranscript,
   transcriptRevision,
@@ -61,6 +62,7 @@ export interface SttSyncResult {
   revision?: string;
   cleanupPending: boolean;
   audioPurged?: boolean;
+  abandonDeferred?: boolean;
 }
 
 export interface MeetingRun {
@@ -420,11 +422,12 @@ export const meetingService = {
     const m = await this.get(meetingId);
     if (m && m.audio.path && !m.audio.deletedAt) {
       try {
-        await this.purgeAudio(projectId ?? m.projectId, meetingId);
-      } catch {
-        const { error: rmErr } = await supabase.storage.from('meeting-audio').remove([m.audio.path]);
-        if (rmErr) throw new MeetingServiceError('storage', 'Zvuk se nepodařilo smazat, porada zůstává. Zkuste to prosím znovu.');
+        await this.deleteAudioFiles(projectId ?? m.projectId, meetingId);
+      } catch (e) {
+        if (e instanceof MeetingServiceError && e.code === 'conflict') throw new MeetingServiceError('conflict', 'Porada se právě přepisuje. Nejdřív přepis zrušte nebo počkejte, až skončí.');
+        throw new MeetingServiceError('storage', 'Zvuk se nepodařilo smazat, porada zůstává. Zkuste to prosím znovu.');
       }
+      await this.providerCleanupBestEffort(projectId ?? m.projectId, meetingId);
     }
     const { error } = await supabase.from('meetings').delete().eq('id', meetingId);
     if (error) fail(error);
@@ -512,17 +515,69 @@ export const meetingService = {
     return (await this.callStt('sync', { projectId, meetingId, cancel })) as unknown as SttSyncResult;
   },
 
-  /** Projektový úklid bez cronu (zvuk po termínu, osiřelé soubory, úklid u poskytovatele). Chyby se tiše ignorují. */
+  /**
+   * Projektový úklid bez cronu. Mazání zvuku (po termínu, osiřelé a nepřipojené soubory) běží PŘÍMO proti Supabase pod identitou
+   * uživatele: nezávisí na příznacích přepisu ani na tom, jestli je cesta /api/ai otevřená. Úklid dat u poskytovatele
+   * (vyžaduje serverový klíč) se zkusí navíc, jen když nějaká čekají; selhání se tiše ignoruje a úklid zůstane čekat.
+   */
   async sweepAudio(projectId: string): Promise<void> {
+    if (!hasSupabaseConfig) return;
     try {
-      await this.callStt('sweep', { projectId });
+      await sweepProjectAudio(supabase, projectId);
     } catch {
       /* úklid je best-effort; ruční mazání zůstává vždy k dispozici */
+    }
+    await this.providerCleanupBestEffort(projectId, null);
+  },
+
+  /** Smazání zvuku porady (Storage + databáze): bez Next routy, bez klíčů poskytovatele, bez příznaků přepisu. */
+  async deleteAudioFiles(projectId: string, meetingId: string): Promise<void> {
+    requireSupabase();
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('id, project_id, audio_path, audio_deleted_at, stt_state')
+      .eq('id', meetingId)
+      .maybeSingle();
+    if (error) fail(error);
+    if (!data) return;
+    try {
+      await deleteMeetingAudio(supabase, data as never);
+    } catch (e) {
+      if (e instanceof AudioCleanupError) throw new MeetingServiceError(e.code === 'in_flight' ? 'conflict' : 'storage', e.message);
+      throw e;
     }
   },
 
   async purgeAudio(projectId: string, meetingId: string): Promise<void> {
-    await this.callStt('purge', { projectId, meetingId, includeProvider: true });
+    await this.deleteAudioFiles(projectId, meetingId);
+    await this.providerCleanupBestEffort(projectId, meetingId);
+  },
+
+  /**
+   * Před smazáním PROJEKTU: smaže všechen zvuk projektu ze Storage (po smazání projektu k němu nemá nikdo přístup). Selže-li to,
+   * vyhodí chybu a projekt se nemá mazat. Úklid dat u poskytovatele se zkusí navíc; co nejde hned, smaže poskytovatel sám do 30 dnů.
+   */
+  async purgeProjectAudio(projectId: string): Promise<void> {
+    if (!hasSupabaseConfig) return;
+    try {
+      await deleteProjectAudio(supabase, projectId);
+    } catch (e) {
+      if (e instanceof AudioCleanupError) throw new MeetingServiceError('storage', e.message);
+      throw e;
+    }
+    await this.providerCleanupBestEffort(projectId, null);
+  },
+
+  /** Úklid dat u poskytovatele přepisu (jen server to umí). Nedostupná route nebo nenastavený přepis nikdy nebrání mazání. */
+  async providerCleanupBestEffort(projectId: string, meetingId: string | null): Promise<void> {
+    try {
+      const { count } = await supabase.from('stt_jobs').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('cleanup_state', 'pending');
+      if (!count) return;
+      if (meetingId) await this.callStt('purge', { projectId, meetingId, includeProvider: true });
+      else await this.callStt('sweep', { projectId });
+    } catch {
+      /* zůstává ve frontě stt_jobs (cleanup_state = 'pending') a zopakuje se */
+    }
   },
 
   /** Členové projektu (pro výběr řešitele). */

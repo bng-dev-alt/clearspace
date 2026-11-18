@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { AUDIO_ENABLED } from './NewMeetingForm';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CalendarClock } from 'lucide-react';
@@ -34,8 +33,9 @@ export default function MeetingList({ projectId }: { projectId: string }) {
     // Načtení dat z externího systému (Supabase); setState proběhne až po await.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    // Úklid zvuku po termínu a osiřelých souborů (aplikace nemá plánovač): jen s povoleným přepisem, best-effort
-    if (AUDIO_ENABLED) void meetingService.sweepAudio(projectId);
+    // Úklid zvuku po termínu, osiřelých a nepřipojených souborů (aplikace nemá plánovač). Nezávisí na příznacích přepisu:
+    // zvuk, který už je nahraný, se maže i při vypnutém přepisu. Best-effort, jedna selhaná položka nezastaví ostatní.
+    void meetingService.sweepAudio(projectId);
   }, [load, projectId]);
 
   return (

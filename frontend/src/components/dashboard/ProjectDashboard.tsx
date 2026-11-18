@@ -171,7 +171,7 @@ export default function ProjectDashboard() {
       setProjectToDelete(null);
     } catch (err) {
       console.error('Failed to delete project:', err);
-      alert('Nepodařilo se odstranit projekt.');
+      alert(err instanceof Error && err.message ? `Nepodařilo se odstranit projekt. ${err.message}` : 'Nepodařilo se odstranit projekt.');
     }
   };
 
@@ -432,7 +432,7 @@ export default function ProjectDashboard() {
                 Opravdu chcete odstranit projekt: <span style={{ color: 'var(--purple-secondary)', fontWeight: 700 }}>{projectToDelete.name}</span>?
               </p>
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', lineHeight: '1.4' }}>
-                Varování: Tato akce je zcela nevratná. Odstraněním projektu dojde k trvalému smazání všech jeho boardů, sloupců, karet a veškerých souvisejících dat.
+                Varování: Tato akce je zcela nevratná. Odstraněním projektu dojde k trvalému smazání všech jeho boardů, sloupců, karet, porad a zvukových nahrávek. Pokud se nepodaří smazat nahrávky, projekt se nesmaže. Data, která u poskytovatele strojového přepisu nešlo smazat hned, poskytovatel odstraní sám do 30 dnů.
               </p>
             </div>
             <div className="modal-footer">

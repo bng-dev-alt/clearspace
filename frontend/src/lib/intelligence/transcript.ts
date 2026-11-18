@@ -71,7 +71,7 @@ function timeToMs(raw: string): number | null {
 }
 
 // Jméno mluvčího: začíná velkým písmenem, max 4 slova, jen písmena a . ' ’ -
-const LABEL = String.raw`\p{Lu}[\p{L}.'’-]*(?:\s+[\p{L}][\p{L}.'’-]*){0,3}`;
+const LABEL = String.raw`\p{Lu}[\p{L}.'’-]*(?:\s+[\p{L}\d][\p{L}\d.'’-]*){0,3}`;
 const TS = String.raw`(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?`;
 const LINE = new RegExp(String.raw`^(?:\[?(${TS})\]?\s+)?(?:(${LABEL}):\s+)?(.+)$`, 'u');
 

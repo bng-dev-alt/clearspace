@@ -104,7 +104,7 @@ const DEFAULT_MAX_BODY = 256 * 1024;
 
 // --- kroky ---
 
-async function readJsonBody(req: NextRequest, maxBytes: number): Promise<Record<string, unknown>> {
+export async function readJsonBody(req: NextRequest, maxBytes: number): Promise<Record<string, unknown>> {
   const ct = req.headers.get('content-type') || '';
   if (!/^application\/json\b/i.test(ct)) {
     throw new AiGatewayError('unsupported_media_type', 'Požadavek musí mít Content-Type application/json.');
@@ -129,13 +129,13 @@ async function readJsonBody(req: NextRequest, maxBytes: number): Promise<Record<
   return body as Record<string, unknown>;
 }
 
-interface Authenticated {
+export interface Authenticated {
   user: User;
   /** Klient s identitou volajícího -- všechny dotazy procházejí RLS. */
   db: SupabaseClient;
 }
 
-async function authenticate(req: NextRequest): Promise<Authenticated> {
+export async function authenticate(req: NextRequest): Promise<Authenticated> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (process.env.NEXT_PUBLIC_FORCE_DEMO === '1' || !url || !anon) {
@@ -239,7 +239,7 @@ export function estimateBoardChars(columns: Column[]): number {
   return n;
 }
 
-function requireProjectId(body: Record<string, unknown>): string {
+export function requireProjectId(body: Record<string, unknown>): string {
   const id = body.projectId;
   if (typeof id !== 'string' || id.length === 0 || id.length > 200) {
     throw new AiGatewayError('bad_request', 'Chybí identifikátor projektu.');
@@ -263,7 +263,7 @@ export function parseModelJson(content: string): unknown {
   }
 }
 
-function errorResponse(err: AiGatewayError): NextResponse {
+export function errorResponse(err: AiGatewayError): NextResponse {
   const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
   if (err.code === 'rate_limited' || err.code === 'budget_exceeded') headers['Retry-After'] = '60';
   return NextResponse.json({ error: err.message, code: err.code }, { status: err.status, headers });

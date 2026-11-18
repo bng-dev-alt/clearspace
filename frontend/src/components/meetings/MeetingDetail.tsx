@@ -21,6 +21,7 @@ import { transcriptToText } from '../../lib/intelligence/transcript';
 import { KIND_LABEL, KIND_ORDER, STATUS_LABEL, STEPS, stepIndex } from './labels';
 import ItemCard from './ItemCard';
 import TranscriptView from './TranscriptView';
+import AudioPanel from './AudioPanel';
 import './meetings.css';
 
 export default function MeetingDetail({ projectId, meetingId }: { projectId: string; meetingId: string }) {
@@ -249,6 +250,13 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
           <Button variant="ghost" onClick={() => setConfirmDelete(true)} data-testid="meeting-delete">Smazat poradu</Button>
         )}
       </div>
+
+      {meeting.sourceKind === 'audio' && <AudioPanel meeting={meeting} projectId={projectId} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />}
+      {transcript && revisions.find((r) => r.revision === viewRev)?.source === 'soniox' && (
+        <p className="mi-muted" role="note" data-testid="machine-transcript-note">
+          Strojový přepis (Soniox): může obsahovat chyby v jménech a číslech. Zkontrolujte ho a doplňte jména mluvčích před analýzou.
+        </p>
+      )}
 
       <div className="mi-grid">
         {transcript && (

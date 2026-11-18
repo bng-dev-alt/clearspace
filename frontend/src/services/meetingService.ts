@@ -1,4 +1,5 @@
 import { parseAiHttpError, AI_NETWORK_ERROR } from '../lib/ai/clientErrors';
+import { SNIFF_BYTES, validateAudio } from '../lib/stt/audio';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import {
   parseTranscript,
@@ -29,6 +30,37 @@ export interface Meeting {
   speakerNames: Record<string, string>;
   languageHint: 'cs' | 'en' | null;
   createdAt: string;
+  audio: MeetingAudio;
+}
+
+export type SttState = 'none' | 'submitting' | 'transcribing' | 'completed' | 'failed';
+
+/** Zvuk a stav strojového přepisu (R5). U textových porad a starších databází jsou to prázdné výchozí hodnoty. */
+export interface MeetingAudio {
+  consentAt: string | null;
+  path: string | null;
+  bytes: number | null;
+  uploadedAt: string | null;
+  deleteAfter: string | null;
+  deletedAt: string | null;
+  sttState: SttState;
+  attempts: number;
+  errorType: string | null;
+  audioMs: number | null;
+  costUsd: number | null;
+  model: string | null;
+  cleanupPending: boolean;
+}
+
+export interface SttSyncResult {
+  state: SttState;
+  providerStatus?: string;
+  errorType?: string | null;
+  stuck?: boolean;
+  transient?: boolean;
+  revision?: string;
+  cleanupPending: boolean;
+  audioPurged?: boolean;
 }
 
 export interface MeetingRun {
@@ -125,6 +157,21 @@ const mapMeeting = (r: any): Meeting => ({
   speakerNames: (r.speaker_names ?? {}) as Record<string, string>,
   languageHint: r.language_hint,
   createdAt: r.created_at,
+  audio: {
+    consentAt: r.consent_at ?? null,
+    path: r.audio_path ?? null,
+    bytes: r.audio_bytes ?? null,
+    uploadedAt: r.audio_uploaded_at ?? null,
+    deleteAfter: r.audio_delete_after ?? null,
+    deletedAt: r.audio_deleted_at ?? null,
+    sttState: (r.stt_state ?? 'none') as SttState,
+    attempts: r.stt_attempts ?? 0,
+    errorType: r.stt_error_type ?? null,
+    audioMs: r.stt_audio_ms ?? null,
+    costUsd: r.stt_cost_usd === null || r.stt_cost_usd === undefined ? null : Number(r.stt_cost_usd),
+    model: r.stt_model ?? null,
+    cleanupPending: r.stt_cleanup_pending === true,
+  },
 });
 
 const mapItem = (r: any): IntelligenceItem => ({
@@ -363,10 +410,110 @@ export const meetingService = {
     if (error) fail(error);
   },
 
-  async remove(meetingId: string): Promise<void> {
+  /**
+   * Smaže poradu. Zvuk (soubor ve Storage a data u poskytovatele přepisu) se odstraní PŘEDTÍM, ať po smazání řádku
+   * nezůstane osiřelý soubor. Když je přepis vypnutý nebo nedostupný, soubor se smaže aspoň přímo ze Storage
+   * (data u poskytovatele pak zmizí sama do 30 dnů).
+   */
+  async remove(meetingId: string, projectId?: string): Promise<void> {
     requireSupabase();
+    const m = await this.get(meetingId);
+    if (m && m.audio.path && !m.audio.deletedAt) {
+      try {
+        await this.purgeAudio(projectId ?? m.projectId, meetingId);
+      } catch {
+        const { error: rmErr } = await supabase.storage.from('meeting-audio').remove([m.audio.path]);
+        if (rmErr) throw new MeetingServiceError('storage', 'Zvuk se nepodařilo smazat, porada zůstává. Zkuste to prosím znovu.');
+      }
+    }
     const { error } = await supabase.from('meetings').delete().eq('id', meetingId);
     if (error) fail(error);
+  },
+
+  // --- zvuk a strojový přepis (R5) ---
+
+  /** Nová porada se zvukem: souhlas účastníků, nahrání do soukromého bucketu, registrace souboru. Nic se neodesílá poskytovateli. */
+  async createAudioMeeting(input: { projectId: string; title: string; occurredAt?: string; languageHint?: 'cs' | 'en' | null; file: File; clientDurationMs?: number | null; consent: boolean }): Promise<{ meetingId: string }> {
+    requireSupabase();
+    const title = input.title.trim();
+    if (!title) throw new MeetingServiceError('invalid', 'Zadejte název porady.');
+    if (!input.consent) throw new MeetingServiceError('consent_required', 'Bez souhlasu účastníků se zvuk nezpracovává.');
+    const check = await this.checkAudioFile(input.file);
+    const { data: m, error } = await supabase
+      .from('meetings')
+      .insert({ project_id: input.projectId, title, occurred_at: input.occurredAt || new Date().toISOString(), source_kind: 'audio', language_hint: input.languageHint ?? null })
+      .select('id')
+      .single();
+    if (error || !m) fail(error ?? {});
+    const meetingId = (m as { id: string }).id;
+    try {
+      const { error: cErr } = await supabase.rpc('record_audio_consent', { p_meeting: meetingId });
+      if (cErr) fail(cErr);
+      await this.uploadAudio({ meetingId, projectId: input.projectId, file: input.file, format: check.format, mime: check.mime, clientDurationMs: input.clientDurationMs ?? null });
+    } catch (e) {
+      await supabase.from('meetings').delete().eq('id', meetingId); // žádná prázdná porada po neúspěchu
+      throw e;
+    }
+    return { meetingId };
+  },
+
+  /** Kontrola souboru v prohlížeči: přípona, velikost i OBSAH (magic bytes). Server a databáze to ověří znovu. */
+  async checkAudioFile(file: File): Promise<{ format: import('../lib/stt/audio').AudioFormat; mime: string }> {
+    const head = new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer());
+    const r = validateAudio({ name: file.name, size: file.size }, head);
+    if (!r.ok) throw new MeetingServiceError(r.code, r.message);
+    return { format: r.format, mime: r.mime };
+  },
+
+  async uploadAudio(input: { meetingId: string; projectId: string; file: File; format: string; mime: string; clientDurationMs: number | null }): Promise<void> {
+    requireSupabase();
+    const path = `${input.projectId}/${input.meetingId}/${crypto.randomUUID()}.${input.format}`;
+    const up = await supabase.storage.from('meeting-audio').upload(path, input.file, { contentType: input.mime, upsert: false });
+    if (up.error) throw new MeetingServiceError('upload', 'Soubor se nepodařilo nahrát. Zkuste to prosím znovu.');
+    const { data: old, error } = await supabase.rpc('attach_meeting_audio', {
+      p_meeting: input.meetingId,
+      p_path: path,
+      p_bytes: input.file.size,
+      p_mime: input.mime,
+      p_client_ms: input.clientDurationMs === null ? null : Math.max(0, Math.round(input.clientDurationMs)),
+    });
+    if (error) {
+      await supabase.storage.from('meeting-audio').remove([path]); // soubor bez zápisu v databázi nesmí zůstat
+      fail(error);
+    }
+    if (typeof old === 'string' && old) await supabase.storage.from('meeting-audio').remove([old]); // nahrazený soubor
+  },
+
+  /** Volání STT rout (server drží klíč Soniox; prohlížeč s poskytovatelem nikdy nemluví). */
+  async callStt(endpoint: 'transcribe' | 'sync' | 'purge', body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    requireSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new MeetingServiceError('unauthenticated', 'Pro přepis se musíte přihlásit.');
+    let res: Response;
+    try {
+      res = await fetch(`/api/ai/meetings/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    } catch {
+      throw new MeetingServiceError(AI_NETWORK_ERROR.code, AI_NETWORK_ERROR.message);
+    }
+    if (!res.ok) {
+      const e = parseAiHttpError(res.status, await res.json().catch(() => null), 'Operace se zvukem se nezdařila. Zkuste to prosím znovu.');
+      throw new MeetingServiceError(e.code, e.message);
+    }
+    return (await res.json()) as Record<string, unknown>;
+  },
+
+  async startTranscription(projectId: string, meetingId: string): Promise<{ started: boolean; state: SttState }> {
+    const r = await this.callStt('transcribe', { projectId, meetingId });
+    return { started: r.started === true, state: r.state as SttState };
+  },
+
+  async syncTranscription(projectId: string, meetingId: string, cancel = false): Promise<SttSyncResult> {
+    return (await this.callStt('sync', { projectId, meetingId, cancel })) as unknown as SttSyncResult;
+  },
+
+  async purgeAudio(projectId: string, meetingId: string): Promise<void> {
+    await this.callStt('purge', { projectId, meetingId, includeProvider: true });
   },
 
   /** Členové projektu (pro výběr řešitele). */

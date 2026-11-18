@@ -24,6 +24,13 @@ export const AI_ERROR_MESSAGES: Record<string, string> = {
   ai_overloaded: 'AI služba je teď vytížená. Zkuste to prosím za chvíli.',
   ai_failed: 'Služba AI selhala. Zkuste to prosím znovu.',
   bad_model_output: 'AI vrátila neplatný formát dat. Zkuste to prosím znovu.',
+  stt_disabled: 'Přepis zvuku je v této instalaci zatím vypnutý.',
+  consent_required: 'Bez souhlasu účastníků se zvuk nezpracovává.',
+  stt_no_audio: 'K poradě není nahraný žádný zvuk.',
+  stt_attempts_exhausted: 'Byl vyčerpán počet pokusů o přepis. Nahrajte zvuk znovu.',
+  stt_invalid_audio: 'Soubor není platný zvukový záznam.',
+  stt_unavailable: 'Služba přepisu je dočasně nedostupná. Zkuste to prosím později.',
+  stt_failed: 'Přepis se nezdařil. Zkuste to prosím znovu.',
   ai_disabled: 'AI funkce jsou v této instalaci zatím vypnuté.',
   network: 'Nepodařilo se spojit se serverem.',
   unknown: 'Operace se nezdařila. Zkuste to prosím znovu.',
@@ -46,5 +53,5 @@ export function parseAiHttpError(status: number, body: unknown, fallbackMessage?
 
 /** Chyby, u kterých má smysl nabídnout "Zkusit znovu" (přechodné). */
 export function isRetryableAiError(code: string): boolean {
-  return ['network', 'ai_timeout', 'ai_overloaded', 'ai_unavailable', 'ai_failed', 'rate_limited'].includes(code);
+  return ['network', 'ai_timeout', 'ai_overloaded', 'ai_unavailable', 'ai_failed', 'rate_limited', 'stt_unavailable', 'stt_failed'].includes(code);
 }

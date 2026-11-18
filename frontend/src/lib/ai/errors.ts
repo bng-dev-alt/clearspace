@@ -17,7 +17,15 @@ export type AiErrorCode =
   | 'ai_timeout'
   | 'ai_overloaded'
   | 'ai_failed'
-  | 'bad_model_output';
+  | 'bad_model_output'
+  // R5 (přepis zvuku)
+  | 'stt_disabled'
+  | 'consent_required'
+  | 'stt_no_audio'
+  | 'stt_attempts_exhausted'
+  | 'stt_invalid_audio'
+  | 'stt_unavailable'
+  | 'stt_failed';
 
 const STATUS: Record<AiErrorCode, number> = {
   bad_request: 400,
@@ -35,6 +43,13 @@ const STATUS: Record<AiErrorCode, number> = {
   ai_overloaded: 503,
   ai_failed: 502,
   bad_model_output: 502,
+  stt_disabled: 503,
+  consent_required: 409,
+  stt_no_audio: 409,
+  stt_attempts_exhausted: 409,
+  stt_invalid_audio: 400,
+  stt_unavailable: 503,
+  stt_failed: 502,
 };
 
 export class AiGatewayError extends Error {

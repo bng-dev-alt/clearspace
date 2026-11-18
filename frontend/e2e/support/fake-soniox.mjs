@@ -1,0 +1,192 @@
+// Falešný Soniox async STT pro lokální testy (žádná síť ven, žádné kredity, žádný klíč). Spuštění:
+//   node e2e/support/fake-soniox.mjs <port>        (nebo import { startFakeSoniox } z testů)
+// Chová se podle OVĚŘENÉ dokumentace (docs/intelligence/SONIOX_API_VERIFICATION.md): POST/GET/DELETE /v1/transcriptions,
+// GET .../transcript (409 dokud neskončí), DELETE vrací 409 za běhu a 404 když už neexistuje, POST/DELETE /v1/files,
+// tokeny jsou části slov s vlastní úvodní mezerou, `speaker` je číselný řetězec, stavy queued|processing|completed|error.
+// Řízení z testu: POST /__control {mode, pollsUntilDone, turns, durationMs, fetchAudio}, čtení: GET /__stats.
+import http from 'node:http';
+
+const KEY = 'fake-soniox-key';
+
+export const DEFAULT_TURNS = [
+  { speaker: '1', text: 'Dobrý den, začneme releasem. Rozhodli jsme, že release posuneme na pátek.' },
+  { speaker: '2', text: 'Honza připraví migraci databáze do 25. listopadu, to slibuji.' },
+  { speaker: '1', text: 'Riziko: dodavatel může zpozdit certifikát.' },
+];
+
+/** Tokeny jako v async výstupu: části slov, mezera patří na začátek následujícího tokenu, časy v ms. */
+export function tokensFor(turns, startAt = 0, msPerWord = 400) {
+  const tokens = [];
+  let t = startAt;
+  let first = true;
+  for (const turn of turns) {
+    for (const word of turn.text.split(/\s+/).filter(Boolean)) {
+      const parts = word.length >= 9 ? [word.slice(0, 4), word.slice(4)] : [word];
+      parts.forEach((p, i) => {
+        const dur = Math.floor(msPerWord / parts.length);
+        tokens.push({
+          text: (i === 0 && !first ? ' ' : '') + p,
+          start_ms: t,
+          end_ms: t + dur,
+          confidence: 0.95,
+          speaker: turn.speaker,
+          language: 'cs',
+        });
+        t += dur;
+        first = false;
+      });
+    }
+    t += 600; // pauza mezi replikami
+  }
+  return tokens;
+}
+
+export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
+  const state = {
+    mode: 'ok', // ok | create_400 | create_402 | create_429 | create_500 | create_503 | job_error | job_failed_status | empty | status_500 | status_429_once | delete_500
+    pollsUntilDone: 1,
+    durationMs: 12_000,
+    turns: DEFAULT_TURNS,
+    fetchAudio: false,
+    jobs: new Map(), // id -> { polls, body, deleted }
+    files: new Map(),
+    calls: [],
+    audioFetches: [],
+    n: 0,
+    flaky: new Set(),
+  };
+
+  const json = (res, status, body) => {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(body === undefined ? '' : JSON.stringify(body));
+  };
+  const err = (res, status, type) => json(res, status, { status_code: status, error_type: type, message: 'provider message that must never reach the app', request_id: 'req-fake' });
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://x');
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const raw = Buffer.concat(chunks);
+    const body = (() => { try { return JSON.parse(raw.toString('utf8')); } catch { return null; } })();
+
+    if (url.pathname === '/__control' && req.method === 'POST') {
+      for (const k of ['mode', 'pollsUntilDone', 'durationMs', 'turns', 'fetchAudio']) if (body && k in body) state[k] = body[k];
+      if (body?.reset) { state.jobs.clear(); state.files.clear(); state.calls.length = 0; state.audioFetches.length = 0; state.flaky.clear(); state.n = 0; }
+      return json(res, 200, { ok: true });
+    }
+    if (url.pathname === '/__stats') {
+      return json(res, 200, {
+        calls: state.calls,
+        audioFetches: state.audioFetches,
+        jobs: [...state.jobs.entries()].map(([id, j]) => ({ id, polls: j.polls, deleted: j.deleted, body: j.body })),
+        files: [...state.files.keys()],
+      });
+    }
+
+    if (url.pathname.startsWith('/__audio/')) {
+      // zvuk pro testy podepsaných URL: ok.mp3 = platná hlavička ID3, bad.mp3 = prostý text; podporuje Range
+      const full = url.pathname.endsWith('/ok.mp3') ? Buffer.concat([Buffer.from('ID3'), Buffer.alloc(125)]) : Buffer.from('This is not audio. '.repeat(10));
+      const range = /bytes=(\d+)-(\d+)?/.exec(req.headers.range ?? '');
+      if (range) {
+        const a = Number(range[1]); const b = Math.min(full.length - 1, range[2] ? Number(range[2]) : full.length - 1);
+        res.writeHead(206, { 'Content-Type': 'audio/mpeg', 'Content-Range': `bytes ${a}-${b}/${full.length}` });
+        return res.end(full.subarray(a, b + 1));
+      }
+      res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+      return res.end(full);
+    }
+    state.calls.push({ method: req.method, path: url.pathname, auth: req.headers.authorization ? 'present' : 'missing' });
+    if (!url.pathname.startsWith('/v1/')) return json(res, 404, { error_type: 'not_found' });
+    if (req.headers.authorization !== `Bearer ${expectKey}`) return err(res, 401, 'unauthenticated');
+
+    const path = url.pathname.slice(3); // "/transcriptions..."
+
+    if (path === '/transcriptions' && req.method === 'POST') {
+      if (state.mode === 'create_400') return err(res, 400, 'invalid_request');
+      if (state.mode === 'create_402') return err(res, 402, 'organization_balance_exhausted');
+      if (state.mode === 'create_429') return err(res, 429, 'limit_exceeded');
+      if (state.mode === 'create_500') return err(res, 500, 'internal_error');
+      if (state.mode === 'create_503') return err(res, 503, 'service_unavailable');
+      if (!body || typeof body.model !== 'string' || (!body.audio_url && !body.file_id) || (body.audio_url && body.file_id)) return err(res, 400, 'invalid_request');
+      const id = `tr-${++state.n}`;
+      const job = { polls: 0, body, deleted: false, audioStatus: null };
+      state.jobs.set(id, job);
+      if (state.fetchAudio && body.audio_url) {
+        // jako skutečný Soniox: stáhne zvuk z audio_url (podepsaná URL musí fungovat bez dalších hlaviček)
+        try {
+          const r = await fetch(body.audio_url);
+          const buf = Buffer.from(await r.arrayBuffer());
+          job.audioStatus = r.status;
+          state.audioFetches.push({ status: r.status, bytes: buf.length, head: buf.subarray(0, 4).toString('hex') });
+        } catch { job.audioStatus = 0; state.audioFetches.push({ status: 0, bytes: 0, head: '' }); }
+      }
+      return json(res, 201, { id, status: 'queued', model: body.model, created_at: new Date().toISOString(), audio_url: body.audio_url ?? null, file_id: body.file_id ?? null, client_reference_id: body.client_reference_id ?? null, error_type: null, error_message: null });
+    }
+
+    let m = /^\/transcriptions\/([^/]+)\/transcript$/.exec(path);
+    if (m && req.method === 'GET') {
+      const job = state.jobs.get(m[1]);
+      if (!job || job.deleted) return err(res, 404, 'transcription_not_found');
+      if (job.polls < state.pollsUntilDone || state.mode.startsWith('job_')) return err(res, 409, 'transcription_invalid_state');
+      const tokens = state.mode === 'empty' ? [{ text: '<end>', start_ms: 0, end_ms: 0 }] : tokensFor(state.turns);
+      return json(res, 200, { id: m[1], text: tokens.map((t) => t.text).join(''), tokens });
+    }
+
+    m = /^\/transcriptions\/([^/]+)$/.exec(path);
+    if (m && req.method === 'GET') {
+      const job = state.jobs.get(m[1]);
+      if (!job || job.deleted) return err(res, 404, 'transcription_not_found');
+      if (state.mode === 'status_500') return err(res, 500, 'internal_error');
+      if (state.mode === 'status_429_once' && !state.flaky.has(m[1])) { state.flaky.add(m[1]); return err(res, 429, 'limit_exceeded'); }
+      job.polls += 1;
+      const base = { id: m[1], model: job.body.model, created_at: new Date().toISOString(), audio_url: job.body.audio_url ?? null, file_id: null, error_type: null, error_message: null };
+      if (state.mode === 'job_error') return json(res, 200, { ...base, status: 'error', error_type: 'invalid_audio_file', error_message: 'unsupported provider text' });
+      if (state.mode === 'job_failed_status') return json(res, 200, { ...base, status: 'failed', error_type: null, error_message: null });
+      if (job.audioStatus !== null && job.audioStatus !== 200) return json(res, 200, { ...base, status: 'error', error_type: 'invalid_audio_file' });
+      if (job.polls <= state.pollsUntilDone) return json(res, 200, { ...base, status: job.polls === 1 ? 'queued' : 'processing' });
+      return json(res, 200, { ...base, status: 'completed', audio_duration_ms: state.durationMs });
+    }
+    if (m && req.method === 'DELETE') {
+      const job = state.jobs.get(m[1]);
+      if (!job || job.deleted) return err(res, 404, 'transcription_not_found');
+      if (state.mode === 'delete_500') return err(res, 500, 'internal_error');
+      if (job.polls <= state.pollsUntilDone && !state.mode.startsWith('job_')) return err(res, 409, 'transcription_invalid_state');
+      job.deleted = true;
+      res.writeHead(204);
+      return res.end();
+    }
+
+    if (path === '/files' && req.method === 'POST') {
+      const id = `file-${++state.n}`;
+      state.files.set(id, raw.length);
+      return json(res, 201, { id, filename: 'upload', size: raw.length, created_at: new Date().toISOString() });
+    }
+    m = /^\/files\/([^/]+)$/.exec(path);
+    if (m && req.method === 'DELETE') {
+      if (!state.files.has(m[1])) return err(res, 404, 'file_not_found');
+      state.files.delete(m[1]);
+      res.writeHead(204);
+      return res.end();
+    }
+    return err(res, 404, 'not_found');
+  });
+
+  return new Promise((resolve) => {
+    server.listen(port, '127.0.0.1', () => {
+      const { port: p } = server.address();
+      resolve({
+        url: `http://127.0.0.1:${p}/v1`,
+        origin: `http://127.0.0.1:${p}`,
+        state,
+        key: expectKey,
+        control: (body) => fetch(`http://127.0.0.1:${p}/__control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+        close: () => new Promise((r) => server.close(() => r())),
+      });
+    });
+  });
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const port = Number(process.argv[2] || 55591);
+  startFakeSoniox({ port }).then((s) => console.log(`fake-soniox on ${s.url} (key ${s.key})`));
+}

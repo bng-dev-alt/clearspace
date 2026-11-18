@@ -53,28 +53,35 @@ export const projectBrief: AiFeature<{ force: boolean }> = {
   parse: (b) => ({ force: record(b, 'body').force === true }),
   prepare: async ({ db, input, projectId, context }) => {
     if (!context) throw new AiGatewayError('bad_request', 'Chybí kontext projektu.');
+    // Razítko stavu se vezme PŘED voláním modelu: změna během generování pak správně označí brief jako zastaralý.
+    // Chybí-li funkce (starší DB), brief se uloží bez razítka a čerstvost se řídí starším podpisem.
+    const { data: stampData, error: stampErr } = await db.rpc('project_intelligence_stamp', { p_project_id: projectId });
+    const stamp = !stampErr && typeof stampData === 'string' ? stampData : null;
     if (!input.force) {
       // Stejný vstup = stejný brief: nic se neplatí, klient dostane 409 a zobrazí aktuální uložený brief.
       const { data } = await db
         .from('intelligence_runs')
-        .select('id')
+        .select('id, output')
         .eq('project_id', projectId)
         .eq('kind', 'project_brief')
         .eq('status', 'succeeded')
         .is('superseded_at', null)
         .eq('input_fingerprint', briefFingerprint(context.fingerprint))
         .limit(1);
-      if (Array.isArray(data) && data.length > 0) {
+      // Stejný kontext, ale změnilo se razítko stavu (např. starý komentář, který se do kontextu nevešel): brief se smí vytvořit znovu.
+      const storedStamp = Array.isArray(data) && data.length > 0 ? ((data[0] as { output?: { stamp?: unknown } }).output?.stamp ?? null) : null;
+      if (Array.isArray(data) && data.length > 0 && (storedStamp === null || stamp === null || storedStamp === stamp)) {
         throw new AiGatewayError('conflict', 'Brief je aktuální: data projektu se od posledního briefu nezměnila.');
       }
     }
-    return null;
+    return { stamp };
   },
+  estimateExtraChars: () => 0,
   run: ({ context }) => {
     if (!context) throw new AiGatewayError('bad_request', 'Chybí kontext projektu.');
     return aiService.executeProjectBrief(buildBriefPrompt(context));
   },
-  finalize: async ({ db, project, context, board, parsed, response, requestId }) => {
+  finalize: async ({ db, project, context, board, parsed, response, requestId, prepared }) => {
     if (!context || !project) throw new AiGatewayError('bad_request', 'Chybí kontext projektu.');
     const activeCardIds = board.flatMap((c) => c.cards.filter((k) => !k.archived).map((k) => k.id));
     const result = validateProjectBrief(parsed, context.sources, { activeCardIds });
@@ -110,6 +117,7 @@ export const projectBrief: AiFeature<{ force: boolean }> = {
       },
       // Snímek deterministických faktů, ze kterých brief vznikl (zobrazuje se odděleně od interpretace AI).
       facts: { today: f.today, score: f.health.score, level: f.health.level, counts: f.counts, meetingDerived: f.meetingDerived },
+      stamp: (prepared as { stamp: string | null } | null)?.stamp ?? null,
       signature: freshnessSignature(f, { maxCardUpdatedAt: maxCardUpdatedAt(context.columns), knowledgeItemIds: context.knowledgeItemIds }),
       sources,
       truncated: context.truncated,

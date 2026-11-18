@@ -84,7 +84,7 @@ export function suggestDueDate(text: string | null | undefined, refDay: string):
   if (!f) return null;
 
   // 1. celé ISO datum
-  let m = /\b(\d{4}) (\d{1,2}) (\d{1,2})\b/.exec(f);
+  const m = /\b(\d{4}) (\d{1,2}) (\d{1,2})\b/.exec(f);
   if (m) {
     const d = validDate(+m[1], +m[2], +m[3]);
     return d ? { date: d, basis: 'explicit-date', kind: 'exact' } : null;

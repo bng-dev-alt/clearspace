@@ -58,7 +58,17 @@ export interface AiFeature<I> {
   structured: boolean;
   /** Je-li nastaveno, server sestaví kontext přes Project Context Engine (fakta, zdroje, rámovaný text). */
   contextPurpose?: ContextPurpose;
+  /** Volitelné: na jakou kartu se má kontext zaměřit (má přednost při ořezu). Karta musí patřit do projektu. */
+  contextFocus?(input: I): { cardId?: string } | undefined;
   parse(body: Record<string, unknown>): I;
+  /**
+   * Volitelné: výsledek, který se spočítá deterministicky z kontextu bez volání modelu (nic se neúčtuje, žádný řádek
+   * v ledgeru). Vrací-li objekt, odpověď má stejný tvar jako AI odpověď (`parsed`), jen `model: 'deterministic'`.
+   * Běží až po načtení kontextu pod identitou volajícího, tedy po autorizaci.
+   */
+  precompute?(args: { input: I; board: Column[]; project: { id: string; name: string } | null; context: ProjectContext | null }): Record<string, unknown> | null;
+  /** Volitelné: úprava ověřeného JSON výstupu modelu před odesláním (např. skóre zdraví z faktů, ne od modelu). */
+  postprocess?(args: { input: I; parsed: unknown; context: ProjectContext | null }): unknown;
   /**
    * Volitelné: běží po načtení kontextu a PŘED rezervací kvóty (nic se neúčtuje). Smí vyhodit AiGatewayError,
    * např. 409 když je výsledek už uložený (idempotence bez zbytečného volání providera).
@@ -207,6 +217,15 @@ async function complete(
   if (error) console.error('[ai-gateway] ai_complete failed', error.code);
 }
 
+/**
+ * Odhad rezervace tokenů: ~3 znaky na token vstupu + strop výstupu. Do vstupu patří tělo požadavku, server-načtený
+ * kontext a režie, kterou klient neposílá, ale model ji dostane (systémová instrukce, bezpečnostní pravidla, schéma).
+ */
+export const PROMPT_OVERHEAD_CHARS = 4000;
+export function estimateReservation(bodyChars: number, contextChars: number, maxOutputTokens: number): number {
+  return Math.min(1_000_000, Math.ceil((bodyChars + contextChars + PROMPT_OVERHEAD_CHARS) / 3) + maxOutputTokens);
+}
+
 /** Hrubý odhad znaků, které board přidá do promptu (tituly, popisy, komentáře, checklisty + režie na kartu). */
 export function estimateBoardChars(columns: Column[]): number {
   let n = 0;
@@ -271,7 +290,10 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
     let contextChars = 0;
     if (projectId) {
       if (feature.contextPurpose) {
-        context = await buildProjectContext(auth.db, projectId, { purpose: feature.contextPurpose });
+        context = await buildProjectContext(auth.db, projectId, {
+          purpose: feature.contextPurpose,
+          focus: feature.contextFocus?.(input),
+        });
         board = context.columns;
         project = context.project;
         contextChars = context.rendered.length;
@@ -283,6 +305,14 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
       }
     }
 
+    const pre = feature.precompute?.({ input, board, project, context }) ?? null;
+    if (pre) {
+      return NextResponse.json(
+        { content: JSON.stringify(pre), model: 'deterministic', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, parsed: pre, deterministic: true },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
     let prepared: unknown = null;
     if (feature.prepare && projectId) {
       prepared = await feature.prepare({ db: auth.db, input, projectId, context });
@@ -290,10 +320,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
     }
 
     // Odhad: ~3 znaky na token vstupu + strop výstupu dané featury.
-    const reserved = Math.min(
-      1_000_000,
-      Math.ceil((JSON.stringify(body).length + contextChars) / 3) + feature.maxOutputTokens
-    );
+    const reserved = estimateReservation(JSON.stringify(body).length, contextChars, feature.maxOutputTokens);
     requestId = await reserve(auth.db, feature.name, projectId, reserved);
 
     let response: AiResponse;
@@ -308,7 +335,11 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
       throw new AiGatewayError('ai_failed', 'Služba AI selhala. Zkuste to prosím znovu.');
     }
 
-    const parsed = feature.structured ? parseModelJson(response.content) : undefined;
+    let parsed = feature.structured ? parseModelJson(response.content) : undefined;
+    if (feature.structured && feature.postprocess) {
+      parsed = feature.postprocess({ input, parsed, context });
+      response = { ...response, content: JSON.stringify(parsed) };
+    }
 
     const finishedId = requestId;
     await complete(auth.db, requestId, 'succeeded', {

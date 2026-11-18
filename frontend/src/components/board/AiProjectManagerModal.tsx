@@ -296,7 +296,7 @@ export default function AiProjectManagerModal({
               >
                 <div>
                   <span style={{ fontSize: '0.7rem', color: 'var(--gray-text)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Zdraví Projektu
+                    Zdraví projektu (vzorec z dat, ne odhad AI)
                   </span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.2rem' }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 900, color: analysis.healthScore >= 70 ? '#107c41' : '#ecad0a' }}>

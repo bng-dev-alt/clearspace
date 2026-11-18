@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   cards: [] as Array<Record<string, unknown>>,
   items: [] as Array<Record<string, unknown>>,
   order: [] as string[],
+  stamp: null as string | null,
 }));
 
 vi.mock('@google/genai', () => {
@@ -58,6 +59,7 @@ vi.mock('@supabase/supabase-js', () => ({
         h.rpc.push({ name, args });
         if (name === 'ai_reserve') return { data: [{ allowed: true, request_id: 'req-9', reason: null }], error: null };
         if (name === 'persist_project_brief') return h.persist;
+        if (name === 'project_intelligence_stamp') return { data: h.stamp, error: null };
         return { data: null, error: null };
       },
       from,
@@ -96,6 +98,7 @@ describe('project brief (gateway feature)', () => {
     h.persist = { data: 'brief-run-1', error: null };
     h.visibleProjects = ['pA'];
     h.existingRuns = [];
+    h.stamp = null;
     h.cards = [{ id: 'card-1', title: 'Migrace databáze', tag: 'Blokováno', details: 'Čeká na dodavatele', due_date: '2026-11-10', task_comments: [{ id: 'cm-1', card_id: 'card-1', author_name: 'Jana', content: 'Dodavatel potvrdil zpoždění o týden', created_at: '2026-11-10T00:00:00Z' }] }, { id: 'card-2', title: 'Bez problému' }];
     h.items = [
       { id: 'it-1', meeting_id: 'm-1', kind: 'decision', text: 'Release se posouvá na pátek.', review_state: 'accepted', decided_at: '2026-11-15T10:00:00Z', created_at: '2026-11-14T10:00:00Z', applied_card_id: null },
@@ -191,6 +194,30 @@ describe('project brief (gateway feature)', () => {
     const q = h.queries.find((x) => x.table === 'intelligence_runs')!;
     expect(q.filters).toMatchObject({ project_id: 'pA', kind: 'project_brief', status: 'succeeded' });
     expect(String(q.filters.input_fingerprint)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test('R6 stamp: the DB stamp is taken BEFORE the model call and stored with the brief', async () => {
+    h.stamp = 'STAMP-NOW';
+    await brief();
+    expect(h.order.indexOf('project_intelligence_stamp')).toBeLessThan(h.order.indexOf('gemini'));
+    expect((persisted()!.args.p_run as any).output.stamp).toBe('STAMP-NOW'); // eslint-disable-line @typescript-eslint/no-explicit-any
+  });
+  test('R6 stamp: same context fingerprint but a different stamp (e.g. an old comment changed) is NOT answered with 409', async () => {
+    h.stamp = 'S2';
+    h.existingRuns = [{ id: 'old', output: { stamp: 'S1' } }];
+    expect((await brief()).status).toBe(200);
+  });
+  test('R6 stamp: same fingerprint and same stamp is still 409; an old brief without a stamp keeps the old rule', async () => {
+    h.stamp = 'S1';
+    h.existingRuns = [{ id: 'old', output: { stamp: 'S1' } }];
+    expect((await brief()).status).toBe(409);
+    h.existingRuns = [{ id: 'old', output: {} }];
+    expect((await brief()).status).toBe(409);
+  });
+  test('R6 stamp: a database without the function (older schema) still works, the brief is stored without a stamp', async () => {
+    h.stamp = null;
+    expect((await brief()).status).toBe(200);
+    expect((persisted()!.args.p_run as any).output.stamp).toBeNull(); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
   test('force regenerates even when the input is unchanged', async () => {

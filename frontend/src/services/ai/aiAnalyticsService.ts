@@ -1,4 +1,5 @@
 import { aiCostEstimator } from './aiCostEstimator';
+import { supabase, hasSupabaseConfig } from '../../lib/supabase';
 
 export interface AiRequestLog {
   id: string;
@@ -36,6 +37,45 @@ export interface AiStats {
   currentModel: string;
 }
 
+/**
+ * Zdroj pravdy je serverový ledger `ai_requests` (RLS: každý vidí jen své řádky). Po `syncLedger()` čtou všechny
+ * statistiky z něj; bez Supabase (demo) zůstává lokální záznam. Do prohlížeče se už neukládá žádný obsah promptů ani odpovědí.
+ */
+let ledgerCache: AiRequestLog[] | null = null;
+
+interface LedgerRow {
+  id: string;
+  created_at: string;
+  feature: string;
+  status: string;
+  model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  error_code: string | null;
+  duration_ms: number | null;
+}
+
+function mapLedgerRow(r: LedgerRow): AiRequestLog {
+  const model = r.model ?? 'unknown';
+  const input = r.prompt_tokens ?? 0;
+  const output = r.completion_tokens ?? 0;
+  return {
+    id: r.id,
+    timestamp: Date.parse(r.created_at),
+    feature: r.feature,
+    provider: 'google',
+    model,
+    inputTokens: input,
+    outputTokens: output,
+    totalTokens: r.total_tokens ?? input + output,
+    responseTime: r.duration_ms ?? 0,
+    success: r.status === 'succeeded',
+    error: r.status === 'failed' ? (r.error_code ?? 'failed') : undefined,
+    estimatedCostCzk: aiCostEstimator.calculateCostCzk('google', model, input, output),
+  };
+}
+
 const STORAGE_KEY = 'ai_control_center_logs';
 const BUDGET_KEY = 'ai_control_center_budget';
 
@@ -51,11 +91,20 @@ export const aiAnalyticsService = {
       entry.outputTokens
     );
 
+    // Obsah požadavku a odpovědi se NIKDY neukládá (soukromí): zůstávají jen metadata.
     const log: AiRequestLog = {
       ...entry,
+      requestPayload: undefined,
+      responsePayload: undefined,
       id: `req_${Math.random().toString(36).substring(2, 11)}`,
       estimatedCostCzk: cost,
     };
+
+    // S Supabase je zdrojem pravdy ledger na serveru: lokálně se nic neukládá, jen se obnoví zobrazení.
+    if (hasSupabaseConfig) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('ai_log_updated'));
+      return log;
+    }
 
     // In a real Supabase setup, this would be:
     // await supabase.from('ai_logs').insert(log);
@@ -85,6 +134,7 @@ export const aiAnalyticsService = {
    * Helper to fetch raw logs from localStorage
    */
   getRawLogs(): AiRequestLog[] {
+    if (ledgerCache) return ledgerCache;
     if (typeof window === 'undefined') return [];
     try {
       const data = localStorage.getItem(STORAGE_KEY);
@@ -96,9 +146,37 @@ export const aiAnalyticsService = {
   },
 
   /**
+   * Načte posledních 30 dní z ledgeru `ai_requests` (jen vlastní řádky). Vrací false, když ledger není dostupný
+   * (demo, offline, starší DB): pak se dál používá lokální záznam.
+   */
+  async syncLedger(days = 30): Promise<boolean> {
+    if (!hasSupabaseConfig) return false;
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const { data, error } = await supabase
+      .from('ai_requests')
+      .select('id, created_at, feature, status, model, prompt_tokens, completion_tokens, total_tokens, error_code, duration_ms')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error || !Array.isArray(data)) {
+      ledgerCache = null;
+      return false;
+    }
+    // Nedokončené rezervace nejsou dotaz; od nejstaršího po nejnovější (jako lokální záznam).
+    ledgerCache = (data as LedgerRow[]).filter((r) => r.status !== 'reserved').map(mapLedgerRow).reverse();
+    return true;
+  },
+
+  /** Je statistika právě z ledgeru? (pak ji nelze smazat z prohlížeče) */
+  isLedgerBacked(): boolean {
+    return ledgerCache !== null;
+  },
+
+  /**
    * Clears all stored AI logs.
    */
   async clearLogs(): Promise<void> {
+    if (ledgerCache) return; // ledger je serverový záznam, z prohlížeče se nemaže
     if (typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY);
       window.dispatchEvent(new Event('ai_log_updated'));

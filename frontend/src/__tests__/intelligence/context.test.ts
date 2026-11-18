@@ -123,7 +123,7 @@ describe('budget and truncation order', () => {
     for (const s of c.sources) expect(c.rendered.includes(`[${s.ref}]`)).toBe(true);
   });
   test('default budgets are the documented ones', () => {
-    expect(CONTEXT_BUDGETS).toEqual({ brief: 120_000, chat: 60_000, meeting: 20_000 });
+    expect(CONTEXT_BUDGETS).toEqual({ brief: 120_000, chat: 60_000, meeting: 20_000, daily: 40_000, pm: 80_000, risk: 80_000, capacity: 60_000, improve: 40_000 });
   });
 });
 

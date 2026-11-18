@@ -1,3 +1,4 @@
+import { parseAiHttpError } from '../../lib/ai/clientErrors';
 import { aiAnalyticsService } from './aiAnalyticsService';
 import { supabase, hasSupabaseConfig } from '../../lib/supabase';
 
@@ -53,7 +54,8 @@ export const aiClient = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        errorMsg = errorData.error || `Request failed with status ${response.status}`;
+        const parsedErr = parseAiHttpError(response.status, errorData, `Request failed with status ${response.status}`);
+        errorMsg = parsedErr.message;
         
         // Log the failure
         const modelName = typeof body.model === 'string' ? body.model : 'gemini-3.5-flash';
@@ -72,7 +74,7 @@ export const aiClient = {
           responsePayload: { error: errorMsg },
         });
 
-        throw new Error(errorMsg);
+        throw Object.assign(new Error(errorMsg), { code: parsedErr.code });
       }
 
       responseData = await response.json();

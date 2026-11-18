@@ -1,3 +1,4 @@
+import { parseAiHttpError, AI_NETWORK_ERROR } from '../lib/ai/clientErrors';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import type { Column } from '../types/kanban';
 import { collaborationService } from './collaborationService';
@@ -33,6 +34,8 @@ export interface BriefRecord {
   /** Deterministická fakta, ze kterých brief vznikl (zobrazují se odděleně od interpretace AI). */
   facts: { today: string; score: number; level: string; counts: Record<string, number>; meetingDerived: Record<string, number> } | null;
   signature: string | null;
+  /** Razítko z databáze (project_intelligence_stamp): zahrnuje i komentáře, checklisty, přiřazení a revize přepisů. */
+  stamp: string | null;
   sources: BriefSourceLabel[];
 }
 
@@ -86,6 +89,7 @@ function mapBrief(r: any): BriefRecord {
     notesOnData: b.notesOnData ?? [],
     facts: out.facts ?? null,
     signature: typeof out.signature === 'string' ? out.signature : null,
+    stamp: typeof out.stamp === 'string' ? out.stamp : null,
     sources: out.sources ?? [],
   };
 }
@@ -126,6 +130,16 @@ export const intelligenceService = {
   },
 
   /**
+   * Razítko aktuálního stavu z databáze (viz migrace 0600). Chybí-li funkce (starší DB) nebo selže dotaz, vrací null
+   * a čerstvost se vyhodnotí starším podpisem faktů.
+   */
+  async currentStamp(projectId: string): Promise<string | null> {
+    if (!hasSupabaseConfig) return null;
+    const { data, error } = await supabase.rpc('project_intelligence_stamp', { p_project_id: projectId });
+    return error || typeof data !== 'string' ? null : data;
+  },
+
+  /**
    * Podpis aktuálního stavu projektu (stejná deterministická funkce jako na serveru). Liší-li se od podpisu
    * uloženého v briefu, je brief zastaralý.
    */
@@ -152,14 +166,11 @@ export const intelligenceService = {
         body: JSON.stringify({ projectId, force }),
       });
     } catch {
-      throw new IntelligenceServiceError('network', 'Nepodařilo se spojit se serverem.');
+      throw new IntelligenceServiceError(AI_NETWORK_ERROR.code, AI_NETWORK_ERROR.message);
     }
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      if (res.status === 403 && !body?.code) {
-        throw new IntelligenceServiceError('ai_disabled', 'AI funkce jsou v této instalaci zatím vypnuté.');
-      }
-      throw new IntelligenceServiceError((body?.code as string) ?? 'unknown', (body?.error as string) || 'Brief se nepodařilo vytvořit.');
+      const e = parseAiHttpError(res.status, await res.json().catch(() => null), 'Brief se nepodařilo vytvořit.');
+      throw new IntelligenceServiceError(e.code, e.message);
     }
     const json = await res.json();
     return { runId: json.runId as string };

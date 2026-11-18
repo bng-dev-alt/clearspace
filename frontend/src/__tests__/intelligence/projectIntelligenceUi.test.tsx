@@ -10,7 +10,7 @@ vi.mock('../../services/intelligenceService', () => {
     code: string;
     constructor(code: string, message: string) { super(message); this.code = code; }
   }
-  for (const n of ['latestBrief', 'currentSignature', 'generateBrief', 'listKnowledge']) h.svc[n] = vi.fn();
+  for (const n of ['latestBrief', 'currentSignature', 'currentStamp', 'generateBrief', 'listKnowledge']) h.svc[n] = vi.fn();
   return { IntelligenceServiceError, intelligenceService: h.svc };
 });
 vi.mock('../../services/ai/aiClient', () => ({ aiClient: { setActiveProject: () => {}, fetchAi: (...a: unknown[]) => h.fetchAi(...a) } }));
@@ -33,7 +33,7 @@ const record = (over: Partial<BriefRecord> = {}): BriefRecord => ({
   nextActions: [{ text: 'Odblokovat migraci.', kind: 'unblock', targetCardId: 'card-1', support: 'linked', evidence: [{ ref: 'card:card-1', quote: null, quoteFound: false }] }],
   openQuestions: [claim('Kdy dodá?', 'item:it-1')], notesOnData: [],
   facts: { today: '2026-11-18', score: 76, level: 'attention', counts: { overdue: 1, blocked: 1, unassigned: 2, dueThisWeek: 3 }, meetingDerived: { pendingProposals: 4 } },
-  signature: 'SIG-A',
+  signature: 'SIG-A', stamp: null,
   sources: [
     { ref: 'card:card-1', kind: 'card', label: 'Migrace databáze', cardId: 'card-1', meetingId: null },
     { ref: 'comment:cm-1', kind: 'comment', label: 'Jana', cardId: 'card-1', meetingId: null },
@@ -46,6 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   for (const f of Object.values(h.svc)) f.mockReset();
   svc().currentSignature.mockResolvedValue('SIG-A');
+  svc().currentStamp.mockResolvedValue(null); // older database / no stamp: falls back to the signature
 });
 
 describe('ProjectBriefPanel', () => {
@@ -72,6 +73,21 @@ describe('ProjectBriefPanel', () => {
     expect(svc().currentSignature).toHaveBeenCalledTimes(2);
   });
 
+  test('R6: the database STAMP wins when both sides have it (a comment-only change makes the brief stale even if the facts signature is equal)', async () => {
+    svc().latestBrief.mockResolvedValue(record({ stamp: 'STAMP-1' }));
+    svc().currentStamp.mockResolvedValue('STAMP-1');
+    render(<ProjectBriefPanel projectId="p1" columns={columns()} />);
+    expect(await screen.findByText('Aktuální')).toBeInTheDocument();
+    svc().currentStamp.mockResolvedValue('STAMP-2'); // someone commented
+    render(<ProjectBriefPanel projectId="p1" columns={columns(1)} />);
+    await waitFor(() => expect(screen.getAllByTestId('brief-freshness').some((e) => /Zastaralé/.test(e.textContent ?? ''))).toBe(true));
+  });
+  test('R6: without a stamp on either side the older signature decides', async () => {
+    svc().latestBrief.mockResolvedValue(record({ stamp: 'STAMP-1' }));
+    svc().currentStamp.mockResolvedValue(null);
+    render(<ProjectBriefPanel projectId="p1" columns={columns()} />);
+    expect(await screen.findByText('Aktuální')).toBeInTheDocument(); // SIG-A === SIG-A
+  });
   test('a brief without a signature is shown with an honest "unknown" freshness (never claimed fresh)', async () => {
     svc().latestBrief.mockResolvedValue(record({ signature: null }));
     render(<ProjectBriefPanel projectId="p1" columns={columns()} />);

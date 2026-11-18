@@ -29,7 +29,11 @@ export default function AiControlCenterPage() {
   const [budgetLimit, setBudgetLimit] = useState(300);
   const [monthlyUsage, setMonthlyUsage] = useState(0);
 
+  const [ledgerBacked, setLedgerBacked] = useState(false);
+
   const loadData = async () => {
+    await aiAnalyticsService.syncLedger();
+    setLedgerBacked(aiAnalyticsService.isLedgerBacked());
     const s = await aiAnalyticsService.getStats();
     const fb = await aiAnalyticsService.getFeatureBreakdown();
     const hist = await aiAnalyticsService.getHistory();
@@ -131,9 +135,14 @@ export default function AiControlCenterPage() {
             <span>Aktivní model: {stats.currentModel.replace(/^models\//, '')}</span>
           </div>
 
+          {ledgerBacked && (
+            <span data-testid="ledger-note" style={{ fontSize: '0.75rem', color: 'var(--gray-text)' }}>
+              Data pocházejí ze serverového záznamu (posledních 30 dní, jen vaše dotazy). Obsah dotazů se neukládá.
+            </span>
+          )}
           <button
             onClick={handleClearLogs}
-            disabled={history.length === 0}
+            disabled={history.length === 0 || ledgerBacked}
             style={{
               display: 'flex',
               alignItems: 'center',

@@ -40,6 +40,7 @@ function Claim({ text, support, evidence, record, projectId, onOpenCard, extra }
 export default function ProjectBriefPanel({ projectId, columns, onOpenCard }: Props) {
   const [record, setRecord] = useState<BriefRecord | null | undefined>(undefined);
   const [signature, setSignature] = useState<string | null>(null);
+  const [stamp, setStamp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,12 +69,21 @@ export default function ProjectBriefPanel({ projectId, columns, onOpenCard }: Pr
       .currentSignature(projectId, columns)
       .then((s) => active && setSignature(s))
       .catch(() => active && setSignature(null));
+    intelligenceService.currentStamp(projectId).then((s) => active && setStamp(s)).catch(() => active && setStamp(null));
     return () => {
       active = false;
     };
   }, [projectId, columns]);
 
-  const freshness: Freshness = record === undefined ? 'unknown' : record === null ? 'none' : !record.signature || !signature ? 'unknown' : record.signature === signature ? 'fresh' : 'stale';
+  // Razítko z DB (vidí i komentáře a checklisty) má přednost; starší briefy bez něj se porovnají podle podpisu faktů.
+  const freshness: Freshness =
+    record === undefined
+      ? 'unknown'
+      : record === null
+        ? 'none'
+        : record.stamp && stamp
+          ? record.stamp === stamp ? 'fresh' : 'stale'
+          : !record.signature || !signature ? 'unknown' : record.signature === signature ? 'fresh' : 'stale';
 
   async function generate(force: boolean) {
     if (busy) return;

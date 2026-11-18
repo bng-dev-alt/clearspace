@@ -101,10 +101,12 @@ export const aiFeatures = {
     name: 'improve',
     needsProject: true,
     structured: true,
+    contextPurpose: 'improve',
     maxOutputTokens: 4000,
     parse: (b) => ({ card: sanitizeCard(b.card) }),
-    run: ({ input, board, project }) =>
-      aiService.executeTaskImprove(input.card, { project: project ?? undefined, columns: board }),
+    contextFocus: (input) => ({ cardId: input.card.id }),
+    run: ({ input, board, project, context }) =>
+      aiService.executeTaskImprove(input.card, { project: project ?? undefined, columns: board, renderedContext: context?.rendered }),
   }),
 
   generateBacklog: feature<{
@@ -199,11 +201,12 @@ export const aiFeatures = {
     name: 'risk_analysis',
     needsProject: true,
     structured: true,
+    contextPurpose: 'risk',
     maxOutputTokens: 4000,
     parse: () => ({}),
-    run: ({ board, project }) => {
+    run: ({ board, project, context }) => {
       noEmptyBoard(board);
-      return aiService.executeRiskAnalysis(project?.name ?? '', board, { project: project ?? undefined, columns: board });
+      return aiService.executeRiskAnalysis(project?.name ?? '', board, { project: project ?? undefined, columns: board, renderedContext: context?.rendered });
     },
   }),
 
@@ -211,23 +214,56 @@ export const aiFeatures = {
     name: 'project_manager',
     needsProject: true,
     structured: true,
+    contextPurpose: 'pm',
     maxOutputTokens: 4000,
     parse: () => ({}),
-    run: ({ board, project }) => {
+    // Bez aktivních úkolů není co analyzovat: deterministická odpověď, žádný poplatek za model.
+    precompute: ({ board, context }) => {
       noEmptyBoard(board);
-      return aiService.executeProjectManager(board, { project: project ?? undefined });
+      if (!context || context.facts.counts.active > 0) return null;
+      return {
+        summary: 'Projekt nemá žádné aktivní úkoly, není co analyzovat.',
+        healthScore: context.facts.health.score,
+        confidenceScore: 100,
+        risks: [],
+        blockers: [],
+        suggestedChanges: [],
+      };
     },
+    run: ({ board, project, context }) => {
+      noEmptyBoard(board);
+      return aiService.executeProjectManager(board, { project: project ?? undefined, renderedContext: context?.rendered });
+    },
+    // Skóre zdraví je jedna věc napříč aplikací (vzorec z faktů); model ho nevrací a nemůže ho přepsat.
+    postprocess: ({ parsed, context }) => ({
+      ...(typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {}),
+      healthScore: context?.facts.health.score ?? 0,
+    }),
   }),
 
   dailyBrief: feature<{ activityLogsText: string }>({
     name: 'daily_brief',
     needsProject: true,
     structured: true,
+    contextPurpose: 'daily',
     maxOutputTokens: 3000,
+    // `activityLogsText` se přijímá kvůli kompatibilitě, ale s kontextem z engine se nepoužije (aktivitu čte server z DB).
     parse: (b) => ({ activityLogsText: typeof b.activityLogsText === 'string' ? str(b.activityLogsText, 'activityLogsText', 8000) : '' }),
-    run: ({ input, board, project }) => {
+    precompute: ({ board, context }) => {
       noEmptyBoard(board);
-      return aiService.executeDailyBrief(board, input.activityLogsText, { project: project ?? undefined });
+      if (!context || context.facts.counts.total > 0 || context.sources.some((s) => s.kind === 'activity')) return null;
+      return {
+        greeting: 'Dobré ráno!',
+        executiveSummary: 'Projekt zatím neobsahuje žádné úkoly ani aktivitu.',
+        completedYesterday: [],
+        topPrioritiesToday: [],
+        capacityAlerts: [],
+        recommendedActions: ['Přidejte první úkoly na nástěnku.'],
+      };
+    },
+    run: ({ input, board, project, context }) => {
+      noEmptyBoard(board);
+      return aiService.executeDailyBrief(board, input.activityLogsText, { project: project ?? undefined, renderedContext: context?.rendered });
     },
   }),
 
@@ -235,11 +271,17 @@ export const aiFeatures = {
     name: 'capacity_planning',
     needsProject: true,
     structured: true,
+    contextPurpose: 'capacity',
     maxOutputTokens: 4000,
     parse: (b) => ({ members: list(b.members, 'members', 50).map(sanitizeMember) }),
-    run: ({ input, board, project }) => {
+    // Bez členů týmu není mezi kým přerozdělovat: prázdný plán bez volání modelu.
+    precompute: ({ input, board }) => {
       noEmptyBoard(board);
-      return aiService.executeCapacityPlanning(board, input.members, { project: project ?? undefined });
+      return input.members.length === 0 ? { totalCapacityHours: 0, allocatedHours: 0, workloadByMember: [], rebalanceSuggestions: [] } : null;
+    },
+    run: ({ input, board, project, context }) => {
+      noEmptyBoard(board);
+      return aiService.executeCapacityPlanning(board, input.members, { project: project ?? undefined, renderedContext: context?.rendered });
     },
   }),
 

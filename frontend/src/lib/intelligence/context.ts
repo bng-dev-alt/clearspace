@@ -4,6 +4,7 @@ import type { Card, Column, ProjectActivityLog } from '../../types/kanban';
 import { loadBoard } from '../ai/board';
 import { mapActivityRows, mapItemRows } from './mappers';
 export { mapActivityRows, mapItemRows };
+import { columnRole } from '../projectIntelligence';
 import { computeProjectFacts, DEFAULT_TZ, FACTS_VERSION, type ProjectFacts, type ProjectItemLite } from './facts';
 import { frameUntrusted } from './frame';
 import type { SourceRecord } from './types';
@@ -16,12 +17,18 @@ import type { SourceRecord } from './types';
  *   - omezený, rámovaný text do promptu.
  */
 
-export type ContextPurpose = 'brief' | 'chat' | 'meeting';
+export type ContextPurpose = 'brief' | 'chat' | 'meeting' | 'daily' | 'pm' | 'risk' | 'capacity' | 'improve';
 
 export const CONTEXT_BUDGETS: Record<ContextPurpose, number> = {
   brief: 120_000,
   chat: 60_000,
   meeting: 20_000,
+  // R7: existující featury sdílí tentýž engine; rozpočet podle toho, kolik kontextu daná úloha opravdu potřebuje
+  daily: 40_000,
+  pm: 80_000,
+  risk: 80_000,
+  capacity: 60_000,
+  improve: 40_000,
 };
 
 const ACTIVITY_LIMIT = 100;
@@ -301,6 +308,9 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
 
   const body = [
     `PROJEKT: ${data.project.name} (id ${data.project.id})`,
+    '',
+    '--- Sloupce (id | název | role | aktivních karet); id sloupce použijte, kdy je třeba cílový sloupec ---',
+    ...data.columns.map((c) => `column ${c.id} | "${clip(c.name, 80)}" | role: ${columnRole(c) ?? 'neurčena'} | karet: ${c.cards.filter((k) => !k.archived).length}`),
     '',
     '--- Karty (sloupec, termín, řešitelé jsou fakta z databáze) ---',
     ...lines,

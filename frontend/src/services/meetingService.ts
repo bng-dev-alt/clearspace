@@ -1,3 +1,4 @@
+import { parseAiHttpError, AI_NETWORK_ERROR } from '../lib/ai/clientErrors';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import {
   parseTranscript,
@@ -38,6 +39,19 @@ export interface MeetingRun {
   rejectedCount: number;
   summary: string;
   chapters: { title: string; firstSegment: string; lastSegment: string }[];
+  /** Revize přepisu, ze které analýza vznikla (liší-li se od aktuální revize porady, je analýza zastaralá). */
+  transcriptRevision: string;
+}
+
+export interface TranscriptRevision {
+  revision: string;
+  parentRevision: string | null;
+  source: string;
+  createdAt: string;
+  charCount: number;
+  editNote: string | null;
+  /** Existuje k této revizi (nenahrazená) analýza? */
+  analyzed: boolean;
 }
 
 export interface IntelligenceItem {
@@ -82,10 +96,13 @@ const SQLSTATE_MESSAGES: Record<string, [string, string]> = {
   '22023': ['invalid', 'Neplatná hodnota. Zkontrolujte vyplněné údaje.'],
   '22008': ['invalid', 'Neplatné datum.'],
   '23514': ['invalid', 'Neplatná hodnota. Zkontrolujte vyplněné údaje.'],
+  // R6: kvóty (počet porad / revizí). Text vyhazuje databáze česky a je bezpečný k zobrazení.
+  '53400': ['quota', 'Dosáhli jste limitu (počet porad nebo revizí přepisu).'],
 };
 
 function fail(err: { code?: string; message?: string }): never {
   const known = err.code ? SQLSTATE_MESSAGES[err.code] : undefined;
+  if (known && err.code === '53400' && err.message) throw new MeetingServiceError('quota', err.message);
   if (known) throw new MeetingServiceError(known[0], known[1]);
   throw new MeetingServiceError('unknown', 'Operace se nezdařila. Zkuste to prosím znovu.');
 }
@@ -233,12 +250,76 @@ export const meetingService = {
     return data ? ({ speakers: data.speakers, segments: data.segments } as Transcript) : null;
   },
 
+  /** Historie revizí přepisu (nejnovější první). Revize jsou neměnné; úprava vždy vytvoří novou. */
+  async listRevisions(meetingId: string): Promise<TranscriptRevision[]> {
+    requireSupabase();
+    const [revs, runs] = await Promise.all([
+      supabase
+        .from('meeting_transcripts')
+        .select('revision, parent_revision, source, created_at, char_count, edit_note')
+        .eq('meeting_id', meetingId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('intelligence_runs')
+        .select('transcript_revision')
+        .eq('meeting_id', meetingId)
+        .eq('kind', 'meeting_brief')
+        .eq('status', 'succeeded')
+        .is('superseded_at', null),
+    ]);
+    if (revs.error) fail(revs.error);
+    const analyzed = new Set(((runs.data ?? []) as { transcript_revision: string }[]).map((r) => r.transcript_revision));
+    return ((revs.data ?? []) as any[]).map((r) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      revision: r.revision,
+      parentRevision: r.parent_revision ?? null,
+      source: r.source,
+      createdAt: r.created_at,
+      charCount: r.char_count,
+      editNote: r.edit_note ?? null,
+      analyzed: analyzed.has(r.revision),
+    }));
+  },
+
+  /**
+   * Úprava přepisu = NOVÁ neměnná revize s odkazem na předchůdce. Text projde stejným parserem jako vložení.
+   * Stejný obsah jako existující revize (revize = hash obsahu) se odmítne jako "beze změny".
+   */
+  async addRevision(input: { meetingId: string; projectId: string; text: string; parentRevision: string; note?: string }): Promise<{ revision: string; warnings: string[] }> {
+    requireSupabase();
+    let parsed;
+    try {
+      parsed = parseTranscript(input.text, 'paste');
+    } catch (e) {
+      if (e instanceof TranscriptParseError) throw new MeetingServiceError(e.code, e.message);
+      throw e;
+    }
+    const revision = await transcriptRevision(parsed.transcript);
+    if (revision === input.parentRevision) throw new MeetingServiceError('unchanged', 'Přepis se nezměnil.');
+    const { error } = await supabase.from('meeting_transcripts').insert({
+      meeting_id: input.meetingId,
+      project_id: input.projectId,
+      revision,
+      source: 'edit',
+      parent_revision: input.parentRevision,
+      edit_note: input.note?.trim() ? input.note.trim().slice(0, 500) : null,
+      speakers: parsed.transcript.speakers,
+      segments: parsed.transcript.segments,
+      char_count: parsed.charCount,
+    });
+    if (error) {
+      if (error.code === '23505') throw new MeetingServiceError('unchanged', 'Tato verze přepisu už existuje.');
+      fail(error);
+    }
+    return { revision, warnings: parsed.warnings };
+  },
+
   /** Aktivní běh (nezastaralý) s shrnutím a kapitolami. */
   async latestRun(meetingId: string): Promise<MeetingRun | null> {
     requireSupabase();
     const { data, error } = await supabase
       .from('intelligence_runs')
-      .select('id, created_at, model, prompt_version, rejected_count, output')
+      .select('id, created_at, model, prompt_version, rejected_count, output, transcript_revision')
       .eq('meeting_id', meetingId)
       .eq('kind', 'meeting_brief')
       .eq('status', 'succeeded')
@@ -257,6 +338,7 @@ export const meetingService = {
       rejectedCount: r.rejected_count,
       summary: out.summary ?? '',
       chapters: out.chapters ?? [],
+      transcriptRevision: r.transcript_revision,
     };
   },
 
@@ -317,20 +399,11 @@ export const meetingService = {
         body: JSON.stringify({ projectId, meetingId, force }),
       });
     } catch {
-      throw new MeetingServiceError('network', 'Nepodařilo se spojit se serverem.');
+      throw new MeetingServiceError(AI_NETWORK_ERROR.code, AI_NETWORK_ERROR.message);
     }
     if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      // Produkční firewall vrací 403 bez našeho JSON těla = AI je vypnutá na úrovni infrastruktury.
-      if (res.status === 403 && !body?.code) {
-        throw new MeetingServiceError('ai_disabled', 'AI analýza je v této instalaci zatím vypnutá.');
-      }
-      const code = (body?.code as string) ?? 'unknown';
-      const msg =
-        code === 'conflict'
-          ? 'Tento přepis už byl analyzován.'
-          : (body?.error as string) || 'Analýza se nezdařila. Zkuste to prosím znovu.';
-      throw new MeetingServiceError(code, msg);
+      const e = parseAiHttpError(res.status, await res.json().catch(() => null), 'Analýza se nezdařila. Zkuste to prosím znovu.');
+      throw new MeetingServiceError(e.code, e.code === 'conflict' ? 'Tento přepis už byl analyzován.' : e.message);
     }
     const json = await res.json();
     return { itemCount: json.itemCount ?? 0, rejectedCount: json.rejectedCount ?? 0 };

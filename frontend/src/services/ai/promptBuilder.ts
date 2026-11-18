@@ -1,5 +1,5 @@
 import { Card, Column, TeamMember } from '../../types/kanban';
-import { UNTRUSTED_DATA_RULES } from '../../lib/intelligence/frame';
+import { UNTRUSTED_DATA_RULES, frameUntrusted } from '../../lib/intelligence/frame';
 import { AiMessage, AiContext } from './types';
 
 // Helper pro formátování kontextu jednotlivé karty
@@ -75,6 +75,10 @@ export function formatProjectContext(context?: AiContext): string {
   return result;
 }
 
+/** R7: data projektu ze sdíleného engine (fakta + rámovaný DATA blok) jdou do uživatelské zprávy, ne do systémové instrukce. */
+const dataBlock = (context?: AiContext) => `Data projektu:\n${context?.renderedContext ?? ''}`;
+const withRules = (system: string) => `${system}\n\n${UNTRUSTED_DATA_RULES}`;
+
 export const promptBuilder = {
   buildChatPrompt(messages: AiMessage[], context?: AiContext): AiMessage[] {
     // Nová cesta (Project Context Engine): systémová zpráva obsahuje JEN instrukce a bezpečnostní pravidla.
@@ -143,6 +147,13 @@ Odpověď musíte vrátit jako validní JSON s následující strukturou:
 
 Neuvádějte žádný doprovodný text, pouze čistý validní JSON objekt.`;
 
+    if (context?.renderedContext) {
+      // Rozpracovaná karta pochází od klienta = nedůvěryhodná data, proto rámovaná; kontext projektu ze serveru.
+      return [
+        { role: 'system', content: withRules(systemContent) },
+        { role: 'user', content: `${dataBlock(context)}\n\n${frameUntrusted('CARD', formatCardContext(card))}\n\nNavrhni vylepšení tohoto úkolu.` },
+      ];
+    }
     return [
       { role: 'system', content: systemContent },
       { role: 'user', content: `${formatProjectContext(context)}\n${formatCardContext(card)}\nNavrhni vylepšení tohoto úkolu.` },
@@ -381,6 +392,13 @@ Komunikuj výhradně ČESKY, věcně, kriticky, konstruktivně a profesionálně
 
 Odpověď musíš vrátit jako validní JSON objekt podle zadaného schématu. Neuváděj žádný doprovodný text okolo JSONu.`;
 
+    if (context?.renderedContext) {
+      return [
+        { role: 'system', content: withRules(systemContent) },
+        { role: 'user', content: `${dataBlock(context)}\n\nProveď kritickou analýzu rizik projektu a vrať strukturovaný JSON.` },
+      ];
+    }
+
     let userContent = `NÁZEV PROJEKTU: ${projectName}
 
 ROZLOŽENÍ SLOUPCŮ A KARET NA BOARDU:
@@ -434,8 +452,18 @@ PRAVIDLA PRO NÁVRHY ZMĚN (Suggested Changes):
 2. Pro každý návrh specifikujte jasné zdůvodnění (reason).
 3. Pokud navrhujete MOVE_TASK, uveďte přesně targetColumnId a targetColumnName.
 4. Pokud navrhujete SPLIT_TASK, uveďte konkrétní subtasksToCreate (seznam nových podúkolů).
-5. Vypočítejte celkové skóre zdraví projektu (healthScore: 0-100) a míru jistoty (confidenceScore: 0-100).
+5. Skóre zdraví projektu NEVRACEJTE: počítá ho aplikace (sekce FACTS). Vraťte jen míru jistoty vlastní analýzy (confidenceScore: 0-100).
 6. Odpovězte výhradně ve validním formátu JSON podle poskytnutého schématu.`;
+
+    if (context?.renderedContext) {
+      return [
+        {
+          role: 'system',
+          content: withRules(`${systemContent}\nPro targetCardId použijte id karty z dat (část za "card:") a pro targetColumnId id sloupce ze seznamu sloupců.`),
+        },
+        { role: 'user', content: `${dataBlock(context)}\n\nAnalyzujte projekt a navrhněte úpravy v JSON formátu.` },
+      ];
+    }
 
     let userContent = formatProjectContext(context) + '\n\nAktuální stav nástěnky:\n';
     columns.forEach(col => {
@@ -473,6 +501,14 @@ Analyzujte dokončené položky, rozpracované úkoly (WIP), blokátory a vytvo�
 
 Odpovězte výhradně ve validním formátu JSON podle poskytnutého schématu.`;
 
+    if (context?.renderedContext) {
+      // Aktivitu i stav nástěnky už obsahuje sdílený kontext (z databáze); text aktivity od klienta se nepoužije.
+      return [
+        { role: 'system', content: withRules(systemContent) },
+        { role: 'user', content: `${dataBlock(context)}\n\nVytvořte denní přehled (Daily Brief) v JSON formátu.` },
+      ];
+    }
+
     let userContent = formatProjectContext(context) + '\n\nNedávná historie aktivit v projektu:\n' + activityLogsText + '\n\nStav nástěnky:\n';
     columns.forEach(col => {
       userContent += `Sloupec "${col.name}" (${col.cards.length} karet):\n`;
@@ -494,6 +530,14 @@ Odpovězte výhradně ve validním formátu JSON podle poskytnutého schématu.`
 Spočítejte přiřazené úkoly a odhadované hodiny pro každého člena týmu, vyhodnoťte přetížení či volné kapacity a navrhněte konkrétní přerozdělení karet mezi členy.
 
 Odpovězte výhradně ve validním formátu JSON podle poskytnutého schématu.`;
+
+    if (context?.renderedContext) {
+      const roster = members.map((m) => `Member ID: ${m.id} | Jméno: ${m.fullName} | Pozice: ${m.role || 'Člen'}`).join('\n');
+      return [
+        { role: 'system', content: withRules(`${systemContent}\nPočty úkolů na člena převezměte z FACTS.workload; znovu je nepočítejte.`) },
+        { role: 'user', content: `${dataBlock(context)}\n\nSeznam členů týmu:\n${frameUntrusted('MEMBERS', roster)}\n\nProveďte kapacitní analýzu a navrhněte přerozdělení v JSON formátu.` },
+      ];
+    }
 
     let userContent = formatProjectContext(context) + '\n\nSeznam členů týmu:\n';
     members.forEach(m => {

@@ -25,7 +25,7 @@ vi.mock('../../services/meetingService', async () => {
       this.code = code;
     }
   }
-  const names = ['createWithTranscript', 'get', 'getTranscript', 'latestRun', 'listItems', 'projectMembers', 'analyze', 'review', 'apply', 'undo', 'remove', 'renameSpeakers', 'list', 'pendingCounts'];
+  const names = ['createWithTranscript', 'get', 'getTranscript', 'latestRun', 'listItems', 'projectMembers', 'analyze', 'review', 'apply', 'undo', 'remove', 'renameSpeakers', 'list', 'pendingCounts', 'listRevisions', 'addRevision'];
   for (const n of names) h.svc[n] = vi.fn();
   return { MeetingServiceError, meetingService: h.svc };
 });
@@ -277,21 +277,26 @@ describe('MeetingDetail', () => {
     svc().latestRun.mockResolvedValue(over.run ?? null);
     svc().listItems.mockResolvedValue(over.items ?? []);
     svc().projectMembers.mockResolvedValue(members);
+    svc().listRevisions.mockResolvedValue(over.revisions ?? [{ revision: 'a'.repeat(64), parentRevision: null, source: 'paste', createdAt: '2026-11-18T10:00:00Z', charCount: 30, editNote: null, analyzed: false }]);
   };
+  const REV_A = 'a'.repeat(64);
+  const REV_OLD = 'c'.repeat(64);
+  const runOn = (revision: string) => ({ id: 'r1', createdAt: '', model: 'm', promptVersion: 'p1', rejectedCount: 0, summary: 'S', chapters: [], transcriptRevision: revision });
 
   test('shows steps, transcript with speaker names, and offers analysis; nothing is analysed automatically', async () => {
     setup();
     render(<MeetingDetail projectId="p1" meetingId="m-1" />);
     expect(await screen.findByTestId('meeting-detail')).toBeInTheDocument();
     expect(screen.getByTestId('meeting-steps')).toHaveTextContent('Přepis');
-    expect(screen.getByTestId('segment-seg-0')).toHaveTextContent('Honza:Připravím migraci.');
-    expect(screen.getByTestId('meeting-analyze')).toBeEnabled();
+    expect(await screen.findByTestId('segment-seg-0')).toHaveTextContent('Honza:Připravím migraci.');
+    await waitFor(() => expect(screen.getByTestId('meeting-analyze')).toBeEnabled()); // enabled once the transcript has loaded
     expect(svc().analyze).not.toHaveBeenCalled();
   });
   test('analysis is user-triggered, calls the service with project and meeting, then reloads and reports the result', async () => {
     setup();
     svc().analyze.mockResolvedValue({ itemCount: 3, rejectedCount: 1 });
     render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+    await screen.findByTestId('segment-seg-0'); // the transcript loads after the meeting; analysis needs it
     fireEvent.click(await screen.findByTestId('meeting-analyze'));
     expect(screen.getByTestId('meeting-analyze')).toBeDisabled(); // no double submit
     await waitFor(() => expect(svc().analyze).toHaveBeenCalledWith('p1', 'm-1', false));
@@ -302,6 +307,7 @@ describe('MeetingDetail', () => {
     setup();
     svc().analyze.mockRejectedValue(new MeetingServiceError('ai_disabled', 'AI analýza je v této instalaci zatím vypnutá.'));
     render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+    await screen.findByTestId('segment-seg-0'); // the transcript loads after the meeting; analysis needs it
     fireEvent.click(await screen.findByTestId('meeting-analyze'));
     expect(await screen.findByTestId('meeting-error')).toHaveTextContent('zatím vypnutá');
     expect(screen.getByTestId('meeting-analyze')).toBeEnabled(); // can retry later
@@ -317,10 +323,11 @@ describe('MeetingDetail', () => {
   test('groups items by kind, counts what awaits approval, and evidence clicks highlight the segment', async () => {
     setup({
       meeting: { ...meeting, status: 'ready' },
-      run: { id: 'r1', createdAt: '', model: 'gemini-x', promptVersion: 'p1', rejectedCount: 2, summary: 'Shrnutí porady.', chapters: [] },
+      run: { id: 'r1', createdAt: '', model: 'gemini-x', promptVersion: 'p1', rejectedCount: 2, summary: 'Shrnutí porady.', chapters: [], transcriptRevision: 'a'.repeat(64) },
       items: [item(), item({ id: 'it-2', kind: 'decision', text: 'Release v pátek.', ordinal: 1, reviewState: 'accepted' })],
     });
     render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+    await screen.findByTestId('segment-seg-0');
     expect(await screen.findByTestId('meeting-summary')).toHaveTextContent('Shrnutí porady.');
     expect(screen.getByRole('heading', { name: 'Rozhodnutí (1)' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Úkoly (1)' })).toBeInTheDocument();
@@ -330,7 +337,7 @@ describe('MeetingDetail', () => {
     expect(screen.getByTestId('segment-seg-1')).toHaveAttribute('data-highlight', 'true');
   });
   test('re-analysis needs an explicit confirmation and then passes force=true', async () => {
-    setup({ run: { id: 'r1', createdAt: '', model: 'm', promptVersion: 'p1', rejectedCount: 0, summary: 'S', chapters: [] } });
+    setup({ run: runOn(REV_A) });
     svc().analyze.mockResolvedValue({ itemCount: 0, rejectedCount: 0 });
     render(<MeetingDetail projectId="p1" meetingId="m-1" />);
     fireEvent.click(await screen.findByTestId('meeting-rerun'));
@@ -347,5 +354,80 @@ describe('MeetingDetail', () => {
     fireEvent.click(screen.getByTestId('meeting-delete-confirm'));
     await waitFor(() => expect(svc().remove).toHaveBeenCalledWith('m-1'));
     expect(h.push).toHaveBeenCalledWith('/projects/p1/meetings');
+  });
+
+  describe('R6: transcript revisions', () => {
+    test('a run on the CURRENT revision shows no stale warning', async () => {
+      setup({ run: runOn(REV_A) });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      await screen.findByTestId('meeting-detail');
+      expect(screen.queryByTestId('stale-analysis')).toBeNull();
+    });
+    test('a run on an OLDER revision is flagged; analysing the current revision is explicit and needs no force', async () => {
+      setup({ run: runOn(REV_OLD) });
+      svc().analyze.mockResolvedValue({ itemCount: 1, rejectedCount: 0 });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      expect(await screen.findByTestId('stale-analysis')).toHaveTextContent('ze starší revize');
+      expect(svc().analyze).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTestId('analyze-current-revision'));
+      await waitFor(() => expect(svc().analyze).toHaveBeenCalledWith('p1', 'm-1', false));
+    });
+    test('the transcript shown is the one the analysis was based on (its evidence points at those segments); the current one is one click away', async () => {
+      setup({ run: runOn(REV_OLD) });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      await screen.findByTestId('stale-analysis');
+      await waitFor(() => expect(svc().getTranscript).toHaveBeenCalledWith('m-1', REV_OLD));
+      expect(await screen.findByTestId('old-revision-note')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('show-current-revision'));
+      await waitFor(() => expect(svc().getTranscript).toHaveBeenLastCalledWith('m-1', REV_A));
+      await waitFor(() => expect(screen.queryByTestId('old-revision-note')).toBeNull());
+    });
+    test('clicking evidence while the current revision is shown switches to the analysed revision first', async () => {
+      setup({ run: runOn(REV_OLD), items: [item()] });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      await screen.findByTestId('stale-analysis');
+      fireEvent.click(screen.getByTestId('show-current-revision'));
+      await waitFor(() => expect(svc().getTranscript).toHaveBeenLastCalledWith('m-1', REV_A));
+      fireEvent.click(within(screen.getByTestId('item-it-1')).getByTestId('evidence-link'));
+      await waitFor(() => expect(svc().getTranscript).toHaveBeenLastCalledWith('m-1', REV_OLD));
+    });
+    test('the revision list marks current and analysed revisions', async () => {
+      setup({ run: runOn(REV_A), revisions: [
+        { revision: REV_A, parentRevision: REV_OLD, source: 'edit', createdAt: '2026-11-18T11:00:00Z', charCount: 30, editNote: 'Oprava jména', analyzed: true },
+        { revision: REV_OLD, parentRevision: null, source: 'paste', createdAt: '2026-11-18T10:00:00Z', charCount: 28, editNote: null, analyzed: false },
+      ] });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      const sel = await screen.findByTestId('revision-select');
+      const opts = within(sel).getAllByRole('option').map((o) => o.textContent ?? '');
+      expect(opts[0]).toMatch(/#2 .*úprava.*aktuální.*analyzováno/);
+      expect(opts[1]).toMatch(/#1 .*paste/);
+      expect(opts[1]).not.toMatch(/aktuální/);
+    });
+    test('editing prefills "Jméno: věta", saves as a NEW revision whose parent is the current one, and never analyses automatically', async () => {
+      setup();
+      svc().addRevision.mockResolvedValue({ revision: 'd'.repeat(64), warnings: [] });
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      fireEvent.click(await screen.findByTestId('revision-edit'));
+      const ta = (await screen.findByTestId('revision-text')) as HTMLTextAreaElement;
+      expect(ta.value).toBe('Honza: Připravím migraci.\nDruhý segment.');
+      fireEvent.change(ta, { target: { value: 'Honza: Připravím migraci do pátku.\nDruhý segment.' } });
+      fireEvent.change(screen.getByTestId('revision-note'), { target: { value: 'doplněn termín' } });
+      fireEvent.click(screen.getByTestId('revision-save'));
+      await waitFor(() => expect(svc().addRevision).toHaveBeenCalledWith({ meetingId: 'm-1', projectId: 'p1', text: 'Honza: Připravím migraci do pátku.\nDruhý segment.', parentRevision: REV_A, note: 'doplněn termín' }));
+      expect(await screen.findByTestId('meeting-notice')).toHaveTextContent('Vytvořena nová revize');
+      expect(svc().analyze).not.toHaveBeenCalled();
+    });
+    test('an unchanged text and a quota error are readable; the form stays open', async () => {
+      setup();
+      svc().addRevision.mockRejectedValue(new MeetingServiceError('unchanged', 'Přepis se nezměnil.'));
+      render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+      fireEvent.click(await screen.findByTestId('revision-edit'));
+      fireEvent.click(await screen.findByTestId('revision-save'));
+      expect(await screen.findByTestId('meeting-error')).toHaveTextContent('Přepis se nezměnil.');
+      expect(screen.getByTestId('revision-text')).toBeInTheDocument();
+      svc().addRevision.mockRejectedValue(new MeetingServiceError('quota', 'Porada má maximální počet revizí přepisu (25).'));
+      fireEvent.click(screen.getByTestId('revision-save'));
+      await waitFor(() => expect(screen.getByTestId('meeting-error')).toHaveTextContent('maximální počet revizí'));
+    });
   });
 });

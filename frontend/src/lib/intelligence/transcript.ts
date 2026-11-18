@@ -250,3 +250,18 @@ export async function transcriptRevision(t: Transcript): Promise<string> {
   const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/**
+ * Přepis zpět na editovatelný text ("Jméno: věta" na řádek). Jména mluvčích zadaná člověkem mají přednost.
+ * Časové značky se v textu nezachovají: úprava vytvoří novou revizi bez nich (viz UI).
+ */
+export function transcriptToText(t: Transcript, speakerNames: Record<string, string> = {}): string {
+  const byId = new Map(t.speakers.map((s) => [s.id, s]));
+  return t.segments
+    .map((seg) => {
+      const sp = seg.speakerId ? byId.get(seg.speakerId) : undefined;
+      const name = seg.speakerId ? (speakerNames[seg.speakerId] ?? sp?.displayName ?? sp?.label ?? '').trim() : '';
+      return name ? `${name}: ${seg.text}` : seg.text;
+    })
+    .join('\n');
+}

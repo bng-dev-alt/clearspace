@@ -260,7 +260,6 @@ export const aiProjectManagerSchema = {
   type: 'OBJECT',
   properties: {
     summary: { type: 'STRING', description: 'Stručné shrnutí stavu projektu a doporučení' },
-    healthScore: { type: 'NUMBER', description: 'Celkové skóre zdraví projektu (0-100)' },
     confidenceScore: { type: 'NUMBER', description: 'Míra jistoty AI analýzy v procentech (0-100)' },
     risks: {
       type: 'ARRAY',
@@ -299,7 +298,7 @@ export const aiProjectManagerSchema = {
       }
     }
   },
-  required: ['summary', 'healthScore', 'confidenceScore', 'risks', 'blockers', 'suggestedChanges']
+  required: ['summary', 'confidenceScore', 'risks', 'blockers', 'suggestedChanges']
 };
 
 export const aiResourceAnalysisSchema = {

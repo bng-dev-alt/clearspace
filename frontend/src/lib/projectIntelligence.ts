@@ -1,4 +1,4 @@
-import type { Card, Column } from '../types/kanban';
+import type { Card, Column, ColumnRole } from '../types/kanban';
 
 /**
  * Project Intelligence -- deterministický "mozek" projektu.
@@ -48,9 +48,42 @@ function nameMatches(name: string, keywords: string[]): boolean {
   return keywords.some((k) => n.includes(k));
 }
 
-/** Sdílená konvence "je tenhle sloupec Hotovo?" -- používá i dashboardStats.ts. */
+/** Sdílená konvence "je tenhle sloupec Hotovo?" -- už jen záloha pro sloupce bez explicitní role. */
 export function isDoneColumnName(name: string): boolean {
   return nameMatches(name, DONE_KEYWORDS);
+}
+
+export const COLUMN_ROLES: readonly ColumnRole[] = ['todo', 'doing', 'review', 'done'];
+
+/** Role odvozená ze jména sloupce (stejná pravidla jako jednorázový backfill v migraci 0600). */
+export function inferColumnRole(name: string): ColumnRole | null {
+  if (/hotovo|done|dokon|complete/i.test(name)) return 'done';
+  if (nameMatches(name, REVIEW_KEYWORDS) || /testov/i.test(name)) return 'review';
+  if (/prob[ií]h|rozpracov|doing|progress|vývoj|vyvoj/i.test(name)) return 'doing';
+  if (/to ?do|k řešení|k reseni|backlog|nové|nove|plán/i.test(name)) return 'todo';
+  return null;
+}
+
+/** Explicitní role vyhrává; bez ní se role odvodí ze jména. Jediné místo, které o roli sloupce rozhoduje. */
+export function columnRole(col: { name: string; role?: ColumnRole | null }): ColumnRole | null {
+  return col.role ?? inferColumnRole(col.name);
+}
+
+export function isDoneColumn(col: { name: string; role?: ColumnRole | null }): boolean {
+  return columnRole(col) === 'done';
+}
+
+/**
+ * Aktivity ukládají JMÉNO cílového sloupce (details.to/from). Pro známé sloupce rozhoduje jejich role,
+ * pro dříve přejmenované nebo smazané sloupce zůstává záložní heuristika podle jména.
+ */
+export function doneNameMatcher(columns: Column[]): (name: string) => boolean {
+  const known = new Map<string, boolean>();
+  for (const c of columns) known.set(c.name.trim().toLowerCase(), isDoneColumn(c) || (known.get(c.name.trim().toLowerCase()) ?? false));
+  return (name) => {
+    const k = name.trim().toLowerCase();
+    return known.has(k) ? (known.get(k) as boolean) : isDoneColumnName(name);
+  };
 }
 
 function todayIso(now: Date): string {
@@ -92,10 +125,8 @@ export function computeProjectIntelligence(
 ): ProjectIntelligence {
   const today = todayOverride ?? todayIso(now);
 
-  const doneColIds = new Set(
-    columns.filter((c) => nameMatches(c.name, DONE_KEYWORDS)).map((c) => c.id)
-  );
-  const reviewCols = columns.filter((c) => nameMatches(c.name, REVIEW_KEYWORDS));
+  const doneColIds = new Set(columns.filter((c) => isDoneColumn(c)).map((c) => c.id));
+  const reviewCols = columns.filter((c) => columnRole(c) === 'review');
   const backlogCols = columns.filter((c) => nameMatches(c.name, BACKLOG_KEYWORDS));
 
   const allCards = columns.flatMap((c) =>

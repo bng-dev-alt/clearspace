@@ -19,7 +19,7 @@ export async function loadBoard(
 
   const { data: cols, error: cErr } = await db
     .from('columns')
-    .select('id, name, position')
+    .select('id, name, position, role')
     .eq('project_id', projectId)
     .order('position', { ascending: true })
     .limit(50);
@@ -43,6 +43,7 @@ export async function loadBoard(
     columns: (cols ?? []).map((c) => ({
       id: c.id as string,
       name: c.name as string,
+      role: (c.role as Column['role']) ?? null,
       cards: cards.filter((k) => k.column_id === c.id).map(mapDbCard),
     })),
   };

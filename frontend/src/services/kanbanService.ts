@@ -1,5 +1,5 @@
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
-import { Column, Card, ChecklistItem, Comment, ActivityLog, TeamMember } from '../types/kanban';
+import { Column, Card, ChecklistItem, Comment, ActivityLog, TeamMember, ColumnRole } from '../types/kanban';
 import { DEFAULT_MEMBERS } from '../data/dummyData';
 import { localStore, isDefaultProject } from './storage/localStore';
 import { buildSeedBoard } from './storage/seedBoard';
@@ -44,6 +44,7 @@ interface DbColumn {
   name: string;
   project_id: string;
   position: number;
+  role?: ColumnRole | null;
 }
 
 // --- Mapování DB <-> aplikační model (jediné místo pravdy) ---
@@ -381,6 +382,7 @@ export const kanbanService = {
       return (dbColumns as DbColumn[]).map((col) => ({
         id: col.id,
         name: col.name,
+        role: col.role ?? null,
         cards: ((dbCards as DbCard[]) || [])
           .filter((card) => card.column_id === col.id)
           .map(mapDbCard),
@@ -460,6 +462,20 @@ export const kanbanService = {
     } else {
       persistenceStatus.clear();
     }
+  },
+
+  /** Explicitní role sloupce (null = zpět na odvození ze jména). Starší databáze bez sloupce `role` ji prostě neuloží. */
+  async updateColumnRole(columnId: string, role: ColumnRole | null, projectId?: string): Promise<void> {
+    if (!hasSupabaseConfig) {
+      if (projectId) {
+        const board = localStore.getBoard(projectId);
+        localStore.saveBoard(projectId, board.map((col) => (col.id === columnId ? { ...col, role } : col)));
+      }
+      return;
+    }
+    const { error } = await supabase.from('columns').update({ role }).eq('id', columnId);
+    if (error) persistenceStatus.report('uložení role sloupce', error);
+    else persistenceStatus.clear();
   },
 
   async createCard(columnId: string, card: Card, position: number, projectId?: string): Promise<void> {

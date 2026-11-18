@@ -115,7 +115,7 @@ describe('project brief (gateway feature)', () => {
     expect(body.parsed).toBeUndefined();
     const run = persisted()!.args.p_run as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(persisted()!.args.p_project_id).toBe('pA');
-    expect(run).toMatchObject({ status: 'succeeded', prompt_version: 'project-brief-p1', validator_version: 'cs-evidence-v1', contract_version: 'cs.project-brief@1.0', ai_request_id: 'req-9', model: 'gemini-test' });
+    expect(run).toMatchObject({ status: 'succeeded', prompt_version: 'project-brief-p1', validator_version: 'cs-evidence-v2', contract_version: 'cs.project-brief@1.0', ai_request_id: 'req-9', model: 'gemini-test' });
     expect(run.input_fingerprint).toMatch(/^[0-9a-f]{64}$/);
     expect(run.output.brief.summary).toBe('Projekt je ohrožen blokovanou migrací.');
     expect(run.output.signature).toEqual(expect.any(String));

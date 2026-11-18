@@ -160,6 +160,26 @@ describe('ItemCard: evidence, hints and approval', () => {
     expect((screen.getByTestId('create-due') as HTMLInputElement).value).toBe('');
     expect(screen.getByTestId('use-suggested-assignee')).toHaveTextContent('Honza Novák');
   });
+  test('R6: a due-date SUGGESTION from the text is offered but never pre-filled; accepting it only fills the field', () => {
+    renderItem(item({ dueText: 'do pátku' }), { meetingDay: '2026-11-18' });
+    fireEvent.click(screen.getByTestId('item-create'));
+    expect((screen.getByTestId('create-due') as HTMLInputElement).value).toBe('');
+    expect(screen.getByTestId('use-suggested-due')).toHaveTextContent('2026-11-20');
+    fireEvent.click(screen.getByTestId('use-suggested-due'));
+    expect((screen.getByTestId('create-due') as HTMLInputElement).value).toBe('2026-11-20');
+    expect(svc().apply).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('use-suggested-due')).toBeNull();
+  });
+  test('R6: no suggestion for vague text or without a meeting day', () => {
+    renderItem(item({ dueText: 'brzy' }), { meetingDay: '2026-11-18' });
+    fireEvent.click(screen.getByTestId('item-create'));
+    expect(screen.queryByTestId('use-suggested-due')).toBeNull();
+  });
+  test('R6: the default column respects an explicit role (a column NAMED like done but set to "doing" is a valid default)', () => {
+    renderItem(item(), { columns: [{ id: 'c-a', name: 'Hotovo (archiv)', role: 'doing' }, { id: 'c-b', name: 'Cokoli', role: 'done' }] });
+    fireEvent.click(screen.getByTestId('item-create'));
+    expect((screen.getByTestId('create-column') as HTMLSelectElement).value).toBe('c-a');
+  });
   test('confirming creates the card with exactly the human-chosen values and then reloads', async () => {
     svc().apply.mockResolvedValue({ cardId: 'card-new', alreadyApplied: false });
     const { onChanged } = renderItem(item());

@@ -1,5 +1,5 @@
 import type { Card, Column, ProjectActivityLog, TeamMember } from '../types/kanban';
-import { isDoneColumnName } from './projectIntelligence';
+import { doneNameMatcher, isDoneColumn, isDoneColumnName } from './projectIntelligence';
 
 /**
  * Dashboard statistiky -- stejná filozofie jako projectIntelligence.ts:
@@ -19,7 +19,7 @@ export interface CompletionStats {
 }
 
 export function computeCompletionStats(columns: Column[]): CompletionStats {
-  const doneColIds = new Set(columns.filter((c) => isDoneColumnName(c.name)).map((c) => c.id));
+  const doneColIds = new Set(columns.filter((c) => isDoneColumn(c)).map((c) => c.id));
   let total = 0;
   let done = 0;
   columns.forEach((col) => {
@@ -52,7 +52,7 @@ export function computeTeamWorkload(
   teamMembers: TeamMember[],
   now: Date = new Date()
 ): WorkloadEntry[] {
-  const doneColIds = new Set(columns.filter((c) => isDoneColumnName(c.name)).map((c) => c.id));
+  const doneColIds = new Set(columns.filter((c) => isDoneColumn(c)).map((c) => c.id));
   const weekFromNow = new Date(now);
   weekFromNow.setDate(weekFromNow.getDate() + 7);
 
@@ -102,7 +102,9 @@ export interface VelocityPoint {
 export function computeVelocity(
   activityLogs: ProjectActivityLog[],
   weeks: number = 6,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Rozhoduje, zda jméno cílového sloupce v aktivitě je "Hotovo" (role sloupců; default = jméno). */
+  isDoneName: (name: string) => boolean = isDoneColumnName
 ): VelocityPoint[] {
   const buckets = Array.from({ length: weeks }).map((_, i) => {
     const weeksAgo = weeks - 1 - i;
@@ -123,7 +125,7 @@ export function computeVelocity(
   activityLogs.forEach((log) => {
     if (log.actionType !== 'card_moved') return;
     const to = log.details?.to;
-    if (typeof to !== 'string' || !isDoneColumnName(to)) return;
+    if (typeof to !== 'string' || !isDoneName(to)) return;
     const logDate = new Date(log.createdAt);
     const bucket = buckets.find((b) => logDate >= b.start && logDate <= b.end);
     if (bucket) bucket.completed += 1;
@@ -150,7 +152,8 @@ export function computeBurndown(
   days: number = 14,
   now: Date = new Date()
 ): BurndownPoint[] {
-  const doneColIds = new Set(columns.filter((c) => isDoneColumnName(c.name)).map((c) => c.id));
+  const doneColIds = new Set(columns.filter((c) => isDoneColumn(c)).map((c) => c.id));
+  const isDoneName = doneNameMatcher(columns);
   const currentOpenCount = columns.reduce((sum, col) => {
     if (doneColIds.has(col.id)) return sum;
     return sum + col.cards.filter((c) => !c.archived).length;
@@ -180,8 +183,8 @@ export function computeBurndown(
     } else if (log.actionType === 'card_moved') {
       const to = log.details?.to;
       const from = log.details?.from;
-      const toIsDone = typeof to === 'string' && isDoneColumnName(to);
-      const fromIsDone = typeof from === 'string' && isDoneColumnName(from);
+      const toIsDone = typeof to === 'string' && isDoneName(to);
+      const fromIsDone = typeof from === 'string' && isDoneName(from);
       if (toIsDone && !fromIsDone) netChangePerDay[idx] -= 1;
       else if (!toIsDone && fromIsDone) netChangePerDay[idx] += 1;
     }

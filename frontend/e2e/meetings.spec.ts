@@ -131,7 +131,7 @@ test('analysis (fake Gemini): evidence-backed proposals only; hallucinated owner
   const ledger = (await rest(request, owner.token, 'ai_requests?select=feature,status,total_tokens,model')).json;
   expect(ledger).toEqual([{ feature: 'meeting-analyze', status: 'succeeded', total_tokens: 444, model: 'fake-gemini' }]);
   const run1 = (await rest(request, owner.token, 'intelligence_runs?select=ai_request_id,prompt_version,validator_version,rejected_count')).json[0];
-  expect(run1).toMatchObject({ prompt_version: 'meeting-brief-p1', validator_version: 'cs-evidence-v1', rejected_count: 1 });
+  expect(run1).toMatchObject({ prompt_version: 'meeting-brief-p1', validator_version: 'cs-evidence-v2', rejected_count: 1 });
   expect(run1.ai_request_id).toBeTruthy();
 });
 

@@ -67,10 +67,14 @@ export interface Card {
   updatedAt?: string;
 }
 
+/** Sémantická role sloupce (R6). Chybí-li, odvodí se ze jména (viz projectIntelligence.columnRole). */
+export type ColumnRole = 'todo' | 'doing' | 'review' | 'done';
+
 export interface Column {
   id: string;
   name: string;
   cards: Card[];
+  role?: ColumnRole | null;
 }
 
 export interface ProjectInvitation {

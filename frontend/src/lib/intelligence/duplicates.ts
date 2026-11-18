@@ -1,5 +1,6 @@
 import { fold, foldedWords } from './fold';
 import { tokenInWords } from './evidence';
+import { aliasInWords } from './names';
 
 /** Deterministické pomocníky pro schvalování (žádné AI): kandidáti na duplicitu a návrh řešitele. */
 
@@ -46,7 +47,7 @@ export function suggestAssignee(ownerText: string | null, members: MemberRef[]):
   if (wanted.length === 0) return null;
   const hits = members.filter((m) => {
     const words = foldedWords(m.fullName);
-    return wanted.every((w) => tokenInWords(w, words));
+    return wanted.every((w) => tokenInWords(w, words) || aliasInWords(w, words));
   });
   return hits.length === 1 ? hits[0].id : null;
 }

@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 import { Plus, MoreHorizontal, ArrowLeft, ArrowRight, Trash2, Edit3 } from 'lucide-react';
+import type { ColumnRole } from '../../types/kanban';
+import { inferColumnRole } from '../../lib/projectIntelligence';
+
+export const COLUMN_ROLE_LABELS: Record<ColumnRole, string> = {
+  todo: 'K řešení',
+  doing: 'Rozpracováno',
+  review: 'Kontrola',
+  done: 'Hotovo',
+};
 
 interface ColumnHeaderProps {
   columnId: string;
@@ -16,13 +25,16 @@ interface ColumnHeaderProps {
   onMoveColumn?: (columnId: string, direction: 'left' | 'right') => void;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Explicitní role sloupce (null = odvozená ze jména). */
+  role?: ColumnRole | null;
+  onSetRole?: (columnId: string, role: ColumnRole | null) => void;
 }
 
 export default function ColumnHeader({
   columnId, columnName, cardCount,
   editingColumnId, editNameText, onEditNameTextChange,
   onStartEdit, onSave, onKeyDown, onAddCard,
-  onDeleteColumn, onMoveColumn, isFirst, isLast,
+  onDeleteColumn, onMoveColumn, isFirst, isLast, role, onSetRole,
 }: ColumnHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -188,6 +200,25 @@ export default function ColumnHeader({
                     <ArrowRight size={12} />
                     Posunout doprava
                   </button>
+                )}
+
+                {onSetRole && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--dark-navy)' }}>
+                    Role sloupce
+                    <select
+                      value={role ?? ''}
+                      onChange={(e) => onSetRole(columnId, (e.target.value || null) as ColumnRole | null)}
+                      data-testid={`column-role-${columnId}`}
+                      style={{ fontSize: '0.75rem' }}
+                    >
+                      <option value="">
+                        Automaticky ({inferColumnRole(columnName) ? COLUMN_ROLE_LABELS[inferColumnRole(columnName) as ColumnRole] : 'bez role'})
+                      </option>
+                      {(Object.keys(COLUMN_ROLE_LABELS) as ColumnRole[]).map((r) => (
+                        <option key={r} value={r}>{COLUMN_ROLE_LABELS[r]}</option>
+                      ))}
+                    </select>
+                  </label>
                 )}
 
                 <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '0.2rem 0' }} />

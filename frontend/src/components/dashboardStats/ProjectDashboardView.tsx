@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Layers, CheckCircle2, HeartPulse } from 'lucide-react';
 import type { Column, ProjectActivityLog, TeamMember } from '../../types/kanban';
 import { collaborationService } from '../../services/collaborationService';
-import { computeProjectIntelligence } from '../../lib/projectIntelligence';
+import { computeProjectIntelligence, doneNameMatcher } from '../../lib/projectIntelligence';
 import { computeCompletionStats, computeTeamWorkload, computeVelocity, computeBurndown } from '../../lib/dashboardStats';
 import { MetricCard } from '../ui';
 import TeamWorkloadWidget from './TeamWorkloadWidget';
@@ -45,7 +45,7 @@ export default function ProjectDashboardView({ projectId, projectName, columns, 
   const completion = computeCompletionStats(columns);
   const health = computeProjectIntelligence(columns).health;
   const workload = computeTeamWorkload(columns, teamMembers);
-  const velocity = computeVelocity(activityLogs, 6);
+  const velocity = computeVelocity(activityLogs, 6, new Date(), doneNameMatcher(columns));
   const burndown = computeBurndown(columns, activityLogs, 14);
 
   return (

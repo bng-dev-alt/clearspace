@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react';
-import { Column as ColumnType, Card } from '../../types/kanban';
+import { Column as ColumnType, Card, ColumnRole } from '../../types/kanban';
 import ColumnHeader from './ColumnHeader';
 import KanbanCard from './KanbanCard';
 
@@ -22,6 +22,7 @@ interface ColumnProps {
   onDrop: (e: React.DragEvent, columnId: string) => void;
   onDeleteColumn: (columnId: string) => void;
   onMoveColumn: (columnId: string, direction: 'left' | 'right') => void;
+  onSetColumnRole?: (columnId: string, role: ColumnRole | null) => void;
   isFirst: boolean;
   isLast: boolean;
   onColumnDragStart: (e: React.DragEvent, columnId: string) => void;
@@ -48,6 +49,7 @@ export default function Column({
   onDrop,
   onDeleteColumn,
   onMoveColumn,
+  onSetColumnRole,
   isFirst, isLast,
   onColumnDragStart,
   onColumnDragOver,
@@ -88,6 +90,8 @@ export default function Column({
         onAddCard={onOpenAddModal}
         onDeleteColumn={onDeleteColumn}
         onMoveColumn={onMoveColumn}
+        role={column.role ?? null}
+        onSetRole={onSetColumnRole}
         isFirst={isFirst}
         isLast={isLast}
       />

@@ -44,7 +44,7 @@ describe('quoteSupported', () => {
 });
 
 describe('validateMeetingBrief: structure and fatal cases', () => {
-  test('exposes versions', () => expect(VALIDATOR_VERSION).toBe('cs-evidence-v1'));
+  test('exposes versions', () => expect(VALIDATOR_VERSION).toBe('cs-evidence-v2'));
   test('non-object output is fatal', () => {
     expect(run('text')).toMatchObject({ ok: false, code: 'unparseable' });
     expect(run(null)).toMatchObject({ ok: false, code: 'unparseable' });
@@ -101,8 +101,36 @@ describe('validateMeetingBrief: evidence rules', () => {
     expect(v.rejectedCount).toBe(3);
   });
   test('at most 4 evidence entries per item are kept', () => {
-    const e = Array.from({ length: 6 }, () => ev('seg-0', 'release posuneme na pátek'));
-    expect(ok(decision(e)).items[0].evidence).toHaveLength(4);
+    const quotes = ['release posuneme na pátek', 'Rozhodli jsme', 'release posuneme', 'začneme releasem', 'posuneme na pátek', 'jsme že release'];
+    expect(ok(decision(quotes.map((q) => ev('seg-0', q)))).items[0].evidence).toHaveLength(4);
+  });
+  test('v2: the same segment + quote is counted once', () => {
+    const e = Array.from({ length: 3 }, () => ev('seg-0', 'release posuneme na pátek'));
+    expect(ok(decision(e)).items[0].evidence).toHaveLength(1);
+  });
+  test('v2: a model repeating the same item (same kind and folded text) does not double it', () => {
+    const d = { text: 'Release se posouvá na pátek.', evidence: [ev('seg-0', 'release posuneme na pátek')] };
+    const v = ok({ ...base, decisions: [d, { ...d, text: 'RELEASE se posouvá na pátek' }] });
+    expect(v.items).toHaveLength(1);
+    expect(v.rejectedCount).toBe(1);
+  });
+  test('v2: a one-word quote is not evidence, even a long one', () => {
+    expect(quoteSupported('releasem', 'Dobrý den, začneme releasem.')).toBe(false);
+    const v = ok({ ...base, decisions: [{ text: 'X', evidence: [ev('seg-0', 'releasem')] }] });
+    expect(v.items).toHaveLength(0); // decisions must be linked
+  });
+  test('v2: a quote that runs over into the next segment is still found', () => {
+    // seg-1 ends "...to slibuji.", seg-2 begins "Já zkontroluji..."
+    const v = ok({ ...base, risks: [{ text: 'Slib a kontrola', evidence: [ev('seg-1', 'to slibuji Já zkontroluji')] }] });
+    expect(v.items[0].support).toBe('linked');
+    // but never over a gap of two segments
+    const far = ok({ ...base, risks: [{ text: 'Slib', evidence: [ev('seg-1', 'to slibuji Já zkontroluji testovací prostředí a ozvu se Riziko dodavatel')] }] });
+    expect(far.items[0].support).toBe('unverified');
+  });
+  test('v2: nickname aliases ground an owner (Honza = Jan), but never by prefix (Jan is not Jana)', () => {
+    const t = { speakers: [], segments: [{ id: 'a', startMs: null, endMs: null, speakerId: null, text: 'Jan připraví migraci.' }, { id: 'b', startMs: null, endMs: null, speakerId: null, text: 'Jana to schválí.' }] } as unknown as typeof T;
+    expect(groundedOwner('Honza', [t.segments[0]], t)).toBe('Honza');
+    expect(groundedOwner('Honza', [t.segments[1]], t)).toBeNull();
   });
   test('more than 40 items per section are capped', () => {
     const many = Array.from({ length: 45 }, (_, i) => ({ text: `Riziko ${i}`, evidence: [ev('seg-3', 'dodavatel může zpozdit certifikát')] }));

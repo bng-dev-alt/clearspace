@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember } from '../types/kanban';
+import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember, ColumnRole } from '../types/kanban';
 import { kanbanService } from '../services/kanbanService';
 import { collaborationService } from '../services/collaborationService';
 import { workspaceService, ownerMemberFromProfile } from '../services/workspaceService';
@@ -468,6 +468,11 @@ export function useKanbanBoard(projectId?: string) {
     kanbanService.updateColumnName(columnId, newName, activeProjectId);
   }, [activeProjectId]);
 
+  const setColumnRole = useCallback((columnId: string, role: ColumnRole | null) => {
+    setColumns((prev) => prev.map((col) => (col.id === columnId ? { ...col, role } : col)));
+    kanbanService.updateColumnRole(columnId, role, activeProjectId);
+  }, [activeProjectId]);
+
   const addColumn = useCallback(async (name: string) => {
     const position = columns.length;
     try {
@@ -899,6 +904,7 @@ export function useKanbanBoard(projectId?: string) {
     deleteCard,
     moveCard,
     renameColumn,
+    setColumnRole,
     addColumn,
     deleteColumn,
     moveColumn,

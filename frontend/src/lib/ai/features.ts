@@ -5,6 +5,7 @@ import { AiFeature } from './gateway';
 import { AiGatewayError } from './errors';
 import { int, isRecord, list, oneOf, optStr, record, str } from './validate';
 import { linkCitations } from '../intelligence/citations';
+import { isDoneColumn } from '../projectIntelligence';
 
 /**
  * Definice 11 AI featur. Vstup od klienta je NEDŮVĚRYHODNÝ: validuje se a
@@ -13,7 +14,6 @@ import { linkCitations } from '../intelligence/citations';
 
 const PRIORITIES = ['Low', 'Medium', 'High'] as const;
 const AUDIO_MIME = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a', 'audio/aac'] as const;
-const DONE_COLUMN = /hotovo|done|dokon/i;
 
 const noEmptyBoard = (board: Column[]) => {
   if (board.length === 0) {
@@ -187,7 +187,7 @@ export const aiFeatures = {
     run: ({ input, board, project }) => {
       // Plánuje se jen otevřená práce: ne archivované a ne karty ve sloupcích „Hotovo".
       const cards = board
-        .filter((c) => !DONE_COLUMN.test(c.name))
+        .filter((c) => !isDoneColumn(c))
         .flatMap((c) => c.cards)
         .filter((k) => !k.archived);
       if (cards.length === 0) throw new AiGatewayError('bad_request', 'V projektu nejsou žádné otevřené úkoly k naplánování.');

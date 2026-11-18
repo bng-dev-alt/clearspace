@@ -14,6 +14,8 @@ import {
 } from '../../services/meetingService';
 import { kanbanService } from '../../services/kanbanService';
 import type { Transcript } from '../../lib/intelligence/types';
+import type { ColumnRole } from '../../types/kanban';
+import { todayInTz } from '../../lib/intelligence/facts';
 import { KIND_LABEL, KIND_ORDER, STATUS_LABEL, STEPS, stepIndex } from './labels';
 import ItemCard from './ItemCard';
 import TranscriptView from './TranscriptView';
@@ -25,10 +27,11 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [run, setRun] = useState<MeetingRun | null>(null);
   const [items, setItems] = useState<IntelligenceItem[]>([]);
-  const [columns, setColumns] = useState<{ id: string; name: string }[]>([]);
+  const [columns, setColumns] = useState<{ id: string; name: string; role?: ColumnRole | null }[]>([]);
   const [cards, setCards] = useState<{ id: string; title: string }[]>([]);
   const [members, setMembers] = useState<{ id: string; fullName: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const meetingDay = useMemo(() => (meeting ? todayInTz(new Date(meeting.occurredAt)) : undefined), [meeting]);
   const [notice, setNotice] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [confirmRerun, setConfirmRerun] = useState(false);
@@ -53,7 +56,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
       setTranscript(t);
       setRun(r);
       setItems(it);
-      setColumns(board.map((c) => ({ id: c.id, name: c.name })));
+      setColumns(board.map((c) => ({ id: c.id, name: c.name, role: c.role ?? null })));
       setCards(board.flatMap((c) => c.cards.filter((k) => !k.archived).map((k) => ({ id: k.id, title: k.title }))));
       setMembers(mem);
       setError(null);
@@ -216,6 +219,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
                         columns={columns}
                         cards={cards}
                         members={members}
+                        meetingDay={meetingDay}
                         onJump={setHighlight}
                         onChanged={(msg) => {
                           if (msg) setNotice(msg);

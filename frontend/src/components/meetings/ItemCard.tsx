@@ -4,14 +4,19 @@ import React, { useMemo, useState } from 'react';
 import { Badge, Button } from '../ui';
 import { meetingService, MeetingServiceError, type IntelligenceItem } from '../../services/meetingService';
 import { candidateDuplicateCards, suggestAssignee } from '../../lib/intelligence/duplicates';
+import { DUE_BASIS_LABEL, suggestDueDate } from '../../lib/intelligence/dates';
+import { isDoneColumn } from '../../lib/projectIntelligence';
+import type { ColumnRole } from '../../types/kanban';
 import { fmtMs, STATE_LABEL } from './labels';
 import './meetings.css';
 
 export interface ItemCardProps {
   item: IntelligenceItem;
-  columns: { id: string; name: string }[];
+  columns: { id: string; name: string; role?: ColumnRole | null }[];
   cards: { id: string; title: string }[];
   members: { id: string; fullName: string }[];
+  /** Den porady (YYYY-MM-DD, časová zóna projektu): základ pro relativní termíny typu "do pátku". */
+  meetingDay?: string;
   onJump: (segmentId: string) => void;
   onChanged: (message?: string) => void;
 }
@@ -20,13 +25,13 @@ export interface ItemCardProps {
  * Jedna navržená položka s důkazy a rozhodnutím člověka. Nic se do projektu nezapíše, dokud uživatel
  * nepotvrdí konkrétní akci (vytvořit kartu / propojit / zamítnout). Opakované potvrzení je bezpečné (idempotentní RPC).
  */
-export default function ItemCard({ item, columns, cards, members, onJump, onChanged }: ItemCardProps) {
+export default function ItemCard({ item, columns, cards, members, meetingDay, onJump, onChanged }: ItemCardProps) {
   const [mode, setMode] = useState<null | 'create' | 'link'>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forceUndo, setForceUndo] = useState(false);
 
-  const [colId, setColId] = useState(columns.find((c) => !/hotovo|done|dokon/i.test(c.name))?.id ?? columns[0]?.id ?? '');
+  const [colId, setColId] = useState(columns.find((c) => !isDoneColumn(c))?.id ?? columns[0]?.id ?? '');
   const [title, setTitle] = useState(item.text.slice(0, 300));
   const [assignee, setAssignee] = useState(item.assigneeMemberId ?? '');
   const [due, setDue] = useState(item.dueDate ?? '');
@@ -35,6 +40,7 @@ export default function ItemCard({ item, columns, cards, members, onJump, onChan
   const [addComment, setAddComment] = useState(true);
 
   const suggestedMember = useMemo(() => suggestAssignee(item.ownerText, members), [item.ownerText, members]);
+  const dueSuggestion = useMemo(() => (meetingDay ? suggestDueDate(item.dueText, meetingDay) : null), [item.dueText, meetingDay]);
   const similar = useMemo(() => candidateDuplicateCards(item.text, cards), [item.text, cards]);
   const appliedCard = cards.find((c) => c.id === item.appliedCardId);
   const canCreateCard = item.kind === 'action_item' || item.kind === 'follow_up';
@@ -178,6 +184,11 @@ export default function ItemCard({ item, columns, cards, members, onJump, onChan
             )}
             <label htmlFor={`d-${item.id}`}>Termín</label>
             <input id={`d-${item.id}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} data-testid="create-due" />
+            {dueSuggestion && due !== dueSuggestion.date && (
+              <Button size="sm" type="button" onClick={() => setDue(dueSuggestion.date)} data-testid="use-suggested-due">
+                Použít návrh termínu: {dueSuggestion.date} ({DUE_BASIS_LABEL[dueSuggestion.basis]})
+              </Button>
+            )}
           </div>
           {item.duplicateOf && (
             <label>

@@ -71,6 +71,7 @@ export default function ProjectBoardPage() {
     deleteCard,
     moveCard,
     renameColumn,
+    setColumnRole,
     addColumn,
     deleteColumn,
     moveColumn,
@@ -613,6 +614,7 @@ export default function ProjectBoardPage() {
             onDrop={handleDrop}
             onDeleteColumn={handleInitiateDeleteColumn}
             onMoveColumn={moveColumn}
+            onSetColumnRole={setColumnRole}
             isFirst={index === 0}
             isLast={index === processedColumns.length - 1}
             onColumnDragStart={handleColumnDragStart}

@@ -2,7 +2,9 @@ import type { Card, Column, ProjectActivityLog, TeamMember } from '../../types/k
 import {
   computeProjectIntelligence,
   dueDateKey,
-  isDoneColumnName,
+  doneNameMatcher,
+  columnRole,
+  isDoneColumn,
   type HealthStatus,
   type Insight,
 } from '../projectIntelligence';
@@ -130,10 +132,9 @@ export function computeProjectFacts(
   const weekEnd = addDays(today, 7);
   const intel = computeProjectIntelligence(columns, now, today);
 
-  const doneColIds = new Set(columns.filter((c) => isDoneColumnName(c.name)).map((c) => c.id));
-  const reviewColIds = new Set(
-    columns.filter((c) => /reviz|review|kontrol/i.test(c.name)).map((c) => c.id)
-  );
+  const doneColIds = new Set(columns.filter((c) => isDoneColumn(c)).map((c) => c.id));
+  const isDoneName = doneNameMatcher(columns);
+  const reviewColIds = new Set(columns.filter((c) => columnRole(c) === 'review').map((c) => c.id));
 
   const all = columns.flatMap((col) => col.cards.map((card) => ({ card, colId: col.id })));
   const live = all.filter(({ card }) => !card.archived);
@@ -214,7 +215,7 @@ export function computeProjectFacts(
       windowDays: RECENT_DAYS,
       created: countType('card_created'),
       movedToDone: recent.filter(
-        (a) => a.actionType === 'card_moved' && typeof a.details?.to === 'string' && isDoneColumnName(a.details.to)
+        (a) => a.actionType === 'card_moved' && typeof a.details?.to === 'string' && isDoneName(a.details.to)
       ).length,
       archived: countType('card_archived'),
       memberChanges: countType('member_added') + countType('member_removed'),

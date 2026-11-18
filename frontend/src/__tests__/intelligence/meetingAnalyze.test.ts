@@ -140,7 +140,7 @@ describe('meeting analyze (gateway feature)', () => {
     expect((items[1].evidence as Array<Record<string, unknown>>)[0]).toMatchObject({ ref: 'segment:seg-1', quoteFound: true });
     expect(items[0].dedupe_key).toMatch(/^[0-9a-f]{64}$/);
     const run = p.args.p_run as Record<string, unknown>;
-    expect(run).toMatchObject({ transcript_revision: 'a'.repeat(64), prompt_version: MEETING_PROMPT_VERSION, validator_version: 'cs-evidence-v1', ai_request_id: 'req-1', model: 'gemini-test' });
+    expect(run).toMatchObject({ transcript_revision: 'a'.repeat(64), prompt_version: MEETING_PROMPT_VERSION, validator_version: 'cs-evidence-v2', ai_request_id: 'req-1', model: 'gemini-test' });
   });
 
   test('ordering: quota is reserved BEFORE the model, usage is booked BEFORE the result is stored', async () => {

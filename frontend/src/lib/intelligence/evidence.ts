@@ -1,4 +1,5 @@
 import { fold, foldedWords, letterCount } from './fold';
+import { aliasInWords } from './names';
 import type { Evidence, SourceRecord, Support, Transcript, TranscriptSegment } from './types';
 
 /**
@@ -7,9 +8,11 @@ import type { Evidence, SourceRecord, Support, Transcript, TranscriptSegment } f
  * Port scribe_ BriefValidator + MicroCRM groundedOwner, podle UMC `umc-validator-1`.
  */
 
-export const VALIDATOR_VERSION = 'cs-evidence-v1';
+export const VALIDATOR_VERSION = 'cs-evidence-v2';
 
 export const MIN_QUOTE_LETTERS = 6;
+/** v2: jedno slovo není důkaz (ani dlouhé, např. "migrace"): citace musí mít aspoň 2 slova. */
+export const MIN_QUOTE_WORDS = 2;
 export const MAX_QUOTE_CHARS = 200;
 export const MAX_ITEM_TEXT = 800;
 const MAX_PER_SECTION = 40;
@@ -35,7 +38,8 @@ export function quoteSupported(quote: string, sourceText: string): boolean {
     .map((p) => fold(p))
     .filter((p) => p.length > 0);
   if (parts.length === 0) return false;
-  if (letterCount(parts.join(' ')) < MIN_QUOTE_LETTERS) return false;
+  const joined = parts.join(' ');
+  if (letterCount(joined) < MIN_QUOTE_LETTERS || joined.split(' ').length < MIN_QUOTE_WORDS) return false;
   const hay = fold(sourceText);
   return parts.every((p) => hay.includes(p));
 }
@@ -87,7 +91,8 @@ export function groundedOwner(owner: string | null, cited: TranscriptSegment[], 
     ...cited.flatMap((s) => foldedWords(s.text)),
     ...cited.flatMap((s) => foldedWords(realSpeakerName(s, transcript) ?? '')),
   ];
-  return f.split(' ').every((t) => tokenInWords(t, words)) ? clipped : null;
+  // v2: domácké tvary (Honza = Jan) a skloňování (Honzovi) se berou jako stejné jméno
+  return f.split(' ').every((t) => tokenInWords(t, words) || aliasInWords(t, words)) ? clipped : null;
 }
 
 // ------------------------------------------------------------------ Meeting brief
@@ -142,6 +147,8 @@ export function validateMeetingBrief(
   if (!summary) return { ok: false, code: 'empty_summary', message: 'Model nevrátil shrnutí.' };
 
   const segById = new Map(transcript.segments.map((s) => [s.id, s]));
+  const segIndex = new Map(transcript.segments.map((s, i) => [s.id, i]));
+  const seenItems = new Set<string>();
   const activeCards = new Set(opts.activeCardIds ?? []);
   const items: ValidatedMeetingItem[] = [];
   let rejected = 0;
@@ -162,15 +169,24 @@ export function validateMeetingBrief(
       const text = clipStr(rawItem.text, MAX_ITEM_TEXT);
       const evidence: Evidence[] = [];
       const cited: TranscriptSegment[] = [];
+      const seenEvidence = new Set<string>();
       for (const e of arr(rawItem.evidence).slice(0, MAX_EVIDENCE)) {
         if (!isObj(e) || typeof e.segment_id !== 'string') continue;
         const seg = segById.get(e.segment_id);
         if (!seg) continue; // vymyšlený segment
         const quote = typeof e.quote === 'string' && e.quote.trim() ? clipStr(e.quote, MAX_QUOTE_CHARS) : null;
+        // v2: stejná dvojice segment + citace se nepočítá dvakrát
+        const dupKey = `${seg.id}|${quote ? fold(quote) : ''}`;
+        if (seenEvidence.has(dupKey)) continue;
+        seenEvidence.add(dupKey);
+        // v2: citace, která přesahuje z citovaného segmentu do sousedního (věta rozdělená na dva řádky přepisu)
+        const i = segIndex.get(seg.id) ?? -1;
+        const next = i >= 0 ? transcript.segments[i + 1] : undefined;
+        const found = quote !== null && (quoteSupported(quote, seg.text) || (next !== undefined && quoteSupported(quote, `${seg.text} ${next.text}`)));
         evidence.push({
           ref: `segment:${seg.id}`,
           quote,
-          quoteFound: quote !== null && quoteSupported(quote, seg.text),
+          quoteFound: found,
           startMs: seg.startMs,
           endMs: seg.endMs,
         });
@@ -185,6 +201,14 @@ export function validateMeetingBrief(
         rejected += 1;
         continue;
       }
+
+      // v2: model, který opakuje stejnou položku (stejný druh a složený text), ji nezdvojí
+      const itemKey = `${kind}:${fold(text)}`;
+      if (seenItems.has(itemKey)) {
+        rejected += 1;
+        continue;
+      }
+      seenItems.add(itemKey);
 
       let ownerText: string | null = null;
       let dueText: string | null = null;

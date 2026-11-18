@@ -97,6 +97,14 @@ docker run --rm -e PGPASSWORD -v "$PWD/frontend/supabase:/w:ro" $IMG psql "$DB" 
 unset PGPASSWORD
 # 2.3 application smoke against the hosted database with the OLD production build still live: hosted-verify.sh (disposable accounts, deleted afterwards)
 ```
+* **Exact final command** (a guarded wrapper of the steps above; **run only after the written B2 approval**):
+```bash
+cd /Volumes/WORKSPACE/Dev/Apps/ClearSpace/V1-intelligence
+CONFIRM_B2_HOSTED_MIGRATIONS=twjlnsxjtuntujarwner frontend/scripts/apply-b2-hosted.sh
+```
+  The script refuses (before any hosted write) unless: the confirmation names the project; the working tree is clean; the backup matches its SHA256SUMS; the three migrations (`14cde02e…adb8b`, `ebe53cfa…79b2`, `c0777a18…d7cf`) and the verification script (`4d0d85a1…fd65`) have the rehearsed checksums;
+  hosted holds exactly the four markers 0100-0400 and none of the new objects. It then applies the three files one by one (one transaction each, stop at the first failure and print the rollback), runs `verify_hosted_intelligence.sql` and exits non-zero if any `GATE` is not `PASS`.
+  It never applies 0800, never registers an STT secret and touches nothing outside the database. Afterwards, separately: `hosted-verify.sh` against the still-live old build.
 * **Order note:** the new migrations are additive. Old app + new database is harmless (the old build never selects the new objects); new app + old database shows clear errors on Meetings/Brief only.
   Therefore B2 may run **before** B3 and stays safe if B3 is delayed.
 * **Gate:** every `GATE` line PASS; `hosted-verify.sh` green (16 passed + Realtime); old-table counts unchanged.

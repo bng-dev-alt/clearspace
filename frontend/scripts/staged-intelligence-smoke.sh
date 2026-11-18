@@ -35,6 +35,6 @@ cleanup() {
 trap cleanup EXIT
 A=cs-p5-sa-$RUN@example.test; B=cs-p5-sb-$RUN@example.test
 IDS+=("$(mk $A)"); IDS+=("$(mk $B)"); for id in "${IDS[@]}"; do [ -n "$id" ] || { echo "account creation failed"; exit 1; }; done
-BASE=$BASE BYPASS=$BYPASS SB=$URL ANON=$ANON A=$A B=$B PW=$PW node "$HERE/scripts/staged-intelligence-smoke.cjs"; RC=$?
+BASE=$BASE BYPASS=$BYPASS SB=$URL ANON=$ANON A=$A B=$B PW=$PW node "$HERE/scripts/staged-intelligence-smoke.mjs"; RC=$?
 [ "$RC" = 0 ] || exit "$RC"
 trap - EXIT; cleanup; [ "$DEL_BAD" = 0 ]

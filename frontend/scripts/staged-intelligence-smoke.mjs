@@ -1,7 +1,7 @@
 // Smoke of the Intelligence screens on a STAGED deployment (or a local server) against the hosted database; disposable accounts, no AI call can succeed (firewall deny).
 // Run through scripts/staged-intelligence-smoke.sh (it creates and deletes the accounts and checks that nothing is left).
-const { createRequire } = require('module');
-const req = createRequire('/Volumes/WORKSPACE/Dev/Apps/ClearSpace/V1-intelligence/frontend/package.json');
+import { createRequire } from 'node:module';
+const req = createRequire(new URL('../package.json', import.meta.url));
 const { chromium } = req('playwright-core');
 const { BASE, BYPASS, SB, ANON, A, B, PW } = process.env;
 const origin = new URL(BASE).origin;

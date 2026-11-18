@@ -121,10 +121,23 @@ const renderItem = (it: IntelligenceItem, extra: Partial<React.ComponentProps<ty
   return { onJump, onChanged };
 };
 
+describe('ItemCard: honest evidence labels', () => {
+  test('"Ověřeno" is gone: the badge says only that the quote text was found; a negation flag is shown prominently', () => {
+    renderItem(item({ evidence: [{ ref: 'segment:seg-1', quote: 'nebudeme nasazovat', quoteFound: true, flag: 'negation_nearby' }], support: 'unverified' }));
+    expect(screen.queryByText('Ověřeno')).toBeNull();
+    expect(screen.getByTestId('negation-flag')).toHaveTextContent('Pozor: zápor');
+    expect(screen.getByText('Citace nenalezena')).toBeInTheDocument();
+  });
+  test('the tooltip tells the user that a found quote does not prove the claim', () => {
+    renderItem(item());
+    expect(document.querySelector('[title*="Neověřuje, že tvrzení z ní plyne"]')).not.toBeNull();
+  });
+});
+
 describe('ItemCard: evidence, hints and approval', () => {
   test('shows verified badge, evidence quote with time, and the owner/due hints as TEXT (not as data)', () => {
     renderItem(item());
-    expect(screen.getByText('Ověřeno')).toBeInTheDocument();
+    expect(screen.getByText('Citace nalezena')).toBeInTheDocument();
     expect(screen.getByTestId('evidence-link')).toHaveTextContent('„Honza připraví migraci databáze"');
     expect(screen.getByTestId('evidence-link')).toHaveTextContent('0:05');
     expect(screen.getByTestId('item-hints')).toHaveTextContent('Vlastník z textu: Honza');
@@ -137,7 +150,7 @@ describe('ItemCard: evidence, hints and approval', () => {
   });
   test('unverified items are clearly marked', () => {
     renderItem(item({ kind: 'risk', support: 'unverified', evidence: [{ ref: 'segment:seg-2', quote: 'něco', quoteFound: false }] }));
-    expect(screen.getByText('Neověřeno')).toBeInTheDocument();
+    expect(screen.getByText('Citace nenalezena')).toBeInTheDocument();
     expect(screen.getByTestId('evidence-link')).toHaveTextContent('citace nenalezena');
   });
   test('decisions and risks can be linked or accepted but never turned into a card', () => {

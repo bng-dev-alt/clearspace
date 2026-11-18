@@ -286,9 +286,9 @@ describe('validateProjectBrief', () => {
     expect(v.risks[0].support).toBe('unverified');
   });
   test('dates in the claim must exist in the cited sources/metadata, otherwise unverified', () => {
-    expect(val({ ...good, blockers: [{ text: 'Termín je 2026-11-20.', refs: ['card:k1'] }] }).blockers[0].support).toBe('linked');
+    expect(val({ ...good, blockers: [{ text: 'Termín je 2026-11-20.', refs: ['card:k1'] }] }).blockers[0].support).toBe('sourced');
     expect(val({ ...good, blockers: [{ text: 'Termín je 2026-12-24.', refs: ['card:k1'] }] }).blockers[0].support).toBe('unverified');
-    expect(val({ ...good, blockers: [{ text: 'Termín je 20.11.2026.', refs: ['card:k1'] }] }).blockers[0].support).toBe('linked');
+    expect(val({ ...good, blockers: [{ text: 'Termín je 20.11.2026.', refs: ['card:k1'] }] }).blockers[0].support).toBe('sourced');
   });
   test('next action targets must be active cards, else null; kind falls back to clarify', () => {
     const v = val({ ...good, next_actions: [{ text: 'A.', kind: 'delete-everything', refs: ['card:k1'], target_card_id: 'k-foreign' }] });
@@ -308,5 +308,70 @@ describe('validateProjectBrief', () => {
   test('fatal: not an object, or empty summary', () => {
     expect(validateProjectBrief('x', sources)).toMatchObject({ ok: false, code: 'unparseable' });
     expect(validateProjectBrief({ summary: '' }, sources)).toMatchObject({ ok: false, code: 'empty_summary' });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Hardening: a textual match is NOT semantic verification (Czech and English adversarial cases)
+// ---------------------------------------------------------------------------------------------------------------
+import { hasNegation, negationBeforeQuote, negationRisk } from '../../lib/intelligence/evidence';
+
+describe('quoteSupported: whole words, in order (no substring games)', () => {
+  test.each([
+    ['budeme nasazovat v pátek', 'Petr: nebudeme nasazovat v pátek', false, 'Czech negation prefix is a different word'],
+    ['posuneme release na pátek', 'Petr: neposuneme release na pátek', false, 'Czech: ne- + verb'],
+    ['we will deploy', 'We will deploy on Friday', true, 'plain English match'],
+    ['will deploy friday', 'We will not deploy on Friday', false, 'English: a word is missing in between'],
+    ['deploy on friday', 'We will not deploy on Friday', true, 'the quote itself exists (the negation is flagged separately)'],
+    ['pátek release posuneme', 'Rozhodli jsme, že release posuneme na pátek', false, 'reordered words'],
+    ['release posuneme na pátek', 'Rozhodli jsme, že release posuneme na pátek', true, 'exact'],
+    ['jsem nasa', 'Honza jsem nasadil', false, 'partial word does not match'],
+    ['ahoj svete tady', 'Ahoj, světe, tady jsme.', true, 'diacritics, case and punctuation are folded'],
+    ['svete ahoj … tady jsme', 'Ahoj, světe, tady jsme.', false, 'parts out of order'],
+    ['ahoj … tady jsme', 'Ahoj, světe, tady jsme.', true, 'in-order parts (3 words together)'],
+  ])('%s vs %s -> %s (%s)', (q, src, expected) => {
+    expect(quoteSupported(q as string, src as string)).toBe(expected);
+  });
+});
+
+describe('negation risk: found text, possibly opposite meaning', () => {
+  test('hasNegation: Czech and English, without false positives for "nebo", "nej-", "neděle"', () => {
+    for (const t of ['nebudeme nasazovat', 'Ne, to nejde', 'nikdy to nezvládneme', 'bez schválení', 'we will not ship', "we don't ship", 'never again', 'cannot deploy']) expect(hasNegation(t), t).toBe(true);
+    for (const t of ['kafe nebo čaj', 'nejlepší varianta', 'v neděli', 'nasadíme release', 'we will ship']) expect(hasNegation(t), t).toBe(false);
+  });
+  test('a quote that itself contains a negation the claim lacks is flagged', () => {
+    expect(negationRisk('Release se posouvá na pátek.', 'neposuneme release na pátek', 'Petr: neposuneme release na pátek')).toBe(true);
+    expect(negationRisk('Release se neposouvá.', 'neposuneme release na pátek', 'Petr: neposuneme release na pátek')).toBe(false);
+  });
+  test('a negation right BEFORE the quote is flagged ("Ne, release posuneme na pátek" as an answer)', () => {
+    expect(negationBeforeQuote('release posuneme na pátek', 'Honza: ne, release posuneme na pátek')).toBe(true);
+    expect(negationBeforeQuote('release posuneme na pátek', 'Honza: Rozhodli jsme, že release posuneme na pátek')).toBe(false);
+  });
+  test('meeting brief: a decision whose only quote carries a negation is NOT linked, so it is dropped; flag is reported on the evidence', () => {
+    const t = { speakers: [], segments: [{ id: 'a', startMs: null, endMs: null, speakerId: null, text: 'Petr: nebudeme nasazovat v pátek, počkáme na certifikát.' }] } as never;
+    const v = validateMeetingBrief({ summary: 's', decisions: [{ text: 'Nasadíme v pátek.', evidence: [{ segment_id: 'a', quote: 'nebudeme nasazovat v pátek' }] }], risks: [{ text: 'Nasazení v pátek.', evidence: [{ segment_id: 'a', quote: 'nebudeme nasazovat v pátek' }] }] }, t);
+    if (!v.ok) throw new Error(v.message);
+    expect(v.value.items.find((i) => i.kind === 'decision')).toBeUndefined(); // decisions must be linked
+    const risk = v.value.items.find((i) => i.kind === 'risk')!;
+    expect(risk.support).toBe('unverified');
+    expect(risk.evidence[0]).toMatchObject({ quoteFound: true, flag: 'negation_nearby' });
+  });
+  test('meeting brief: the same quote with a claim that carries the negation stays linked', () => {
+    const t = { speakers: [], segments: [{ id: 'a', startMs: null, endMs: null, speakerId: null, text: 'Petr: nebudeme nasazovat v pátek, počkáme na certifikát.' }] } as never;
+    const v = validateMeetingBrief({ summary: 's', decisions: [{ text: 'Nenasazujeme v pátek, čekáme na certifikát.', evidence: [{ segment_id: 'a', quote: 'nebudeme nasazovat v pátek' }] }] }, t);
+    if (!v.ok) throw new Error(v.message);
+    expect(v.value.items[0]).toMatchObject({ kind: 'decision', support: 'linked' });
+    expect(v.value.items[0].evidence[0].flag).toBeUndefined();
+  });
+  test('project brief: quote found -> linked; no quote -> "sourced" (nothing was compared); quote not found or negation risk -> unverified', () => {
+    const src = [{ ref: 'comment:c1', kind: 'comment', text: 'Dodavatel: nebudeme dodávat certifikát včas.' }] as never;
+    const val2 = (raw: unknown) => { const r = validateProjectBrief(raw, src); if (!r.ok) throw new Error(r.message); return r.value; };
+    const mk = (claim: string, quote?: string) => ({ summary: 's', risks: [{ text: claim, refs: ['comment:c1'], ...(quote ? { quote } : {}) }] });
+    expect(val2(mk('Certifikát nebude včas.', 'nebudeme dodávat certifikát včas')).risks[0].support).toBe('linked');
+    expect(val2(mk('Certifikát bude včas.')).risks[0].support).toBe('sourced');
+    expect(val2(mk('Certifikát bude včas.', 'dodáme certifikát včas')).risks[0].support).toBe('unverified');
+    const risky = val2(mk('Dodavatel dodá certifikát včas.', 'nebudeme dodávat certifikát včas')).risks[0];
+    expect(risky.support).toBe('unverified');
+    expect(risky.evidence[0].flag).toBe('negation_nearby');
   });
 });

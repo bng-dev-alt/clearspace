@@ -1,6 +1,6 @@
 import { fold, foldedWords, letterCount } from './fold';
 import { aliasInWords } from './names';
-import type { Evidence, SourceRecord, Support, Transcript, TranscriptSegment } from './types';
+import type { BriefSupport, Evidence, SourceRecord, Support, Transcript, TranscriptSegment } from './types';
 
 /**
  * Deterministický validátor výstupu modelu (ARCHITECTURE §7.2, §8.3). Je to hranice důvěry:
@@ -31,7 +31,12 @@ const clipStr = (v: unknown, max: number): string => {
   return t.length > max ? t.slice(0, max) : t;
 };
 
-/** Citace musí mít aspoň 6 písmen a každá její část (dělení na „…") musí být (složená) obsažena v textu zdroje. */
+/**
+ * Citace musí mít aspoň 6 písmen a 2 slova a každá její část (dělení na „…") musí být nalezena v textu zdroje jako
+ * posloupnost CELÝCH slov (po složení FOLD_SPEC) a části musí jít ve zdroji ZA SEBOU ve stejném pořadí.
+ * "budeme nasazovat" proto NEPODLOŽÍ text "nebudeme nasazovat" (jiné slovo) a přeházená slova citaci nepodloží.
+ * Je to textová shoda; neříká nic o tom, zda tvrzení z citace plyne.
+ */
 export function quoteSupported(quote: string, sourceText: string): boolean {
   const parts = quote
     .split(/…|\.\.\./)
@@ -40,8 +45,47 @@ export function quoteSupported(quote: string, sourceText: string): boolean {
   if (parts.length === 0) return false;
   const joined = parts.join(' ');
   if (letterCount(joined) < MIN_QUOTE_LETTERS || joined.split(' ').length < MIN_QUOTE_WORDS) return false;
-  const hay = fold(sourceText);
-  return parts.every((p) => hay.includes(p));
+  const hay = ` ${fold(sourceText)} `;
+  let pos = 0;
+  for (const p of parts) {
+    const i = hay.indexOf(` ${p} `, pos);
+    if (i === -1) return false;
+    pos = i + p.length + 1; // koncová mezera zůstává k dispozici další části
+  }
+  return true;
+}
+
+const NEG_WORDS = new Set([
+  'ne', 'nikdy', 'nikdo', 'nic', 'nelze', 'bez', 'zadny', 'zadna', 'zadne', 'zadneho',
+  'not', 'no', 'never', 'without', 'cannot', 'nobody', 'nothing', 'none', 'neither', 'nor',
+]);
+const NEG_EN_STEMS = /\b(?:don|doesn|didn|won|isn|aren|wasn|weren|couldn|shouldn|wouldn|haven|hasn|hadn|can) t\b/;
+/** České záporné sloveso/zájmeno (nebudeme, nemůžeme, neposuneme); mimo "nebo", "nej-" a "ned-" (neděle). */
+const NEG_CS_PREFIX = /^ne(?!j|bo\b|d)[a-z]{3,}$/;
+
+export function hasNegation(text: string): boolean {
+  const f = fold(text);
+  if (NEG_EN_STEMS.test(f)) return true;
+  return f.split(' ').some((w) => NEG_WORDS.has(w) || NEG_CS_PREFIX.test(w));
+}
+
+/** Je ve zdroji v těsném okolí PŘED citací (3 slova) záporné slovo? (např. "Ne, … posuneme release") */
+export function negationBeforeQuote(quote: string, sourceText: string): boolean {
+  const first = fold(quote.split(/…|\.\.\./)[0] ?? '');
+  if (!first) return false;
+  const hay = ` ${fold(sourceText)} `;
+  const i = hay.indexOf(` ${first} `);
+  if (i === -1) return false;
+  const before = hay.slice(0, i).trim().split(' ').slice(-3).join(' ');
+  return before !== '' && hasNegation(before);
+}
+
+/**
+ * Citace sedí slovo od slova, ale smysl může být opačný: citace sama nebo její těsné okolí obsahuje zápor, který tvrzení
+ * nemá. Takovou shodu NEOZNAČUJEME za podloženou (zůstává neověřená) a UI na ni upozorní.
+ */
+export function negationRisk(claim: string, quote: string, sourceText: string): boolean {
+  return (hasNegation(quote) || negationBeforeQuote(quote, sourceText)) && !hasNegation(claim);
 }
 
 function commonPrefix(a: string, b: string): number {
@@ -182,13 +226,15 @@ export function validateMeetingBrief(
         // v2: citace, která přesahuje z citovaného segmentu do sousedního (věta rozdělená na dva řádky přepisu)
         const i = segIndex.get(seg.id) ?? -1;
         const next = i >= 0 ? transcript.segments[i + 1] : undefined;
-        const found = quote !== null && (quoteSupported(quote, seg.text) || (next !== undefined && quoteSupported(quote, `${seg.text} ${next.text}`)));
+        const scope = next !== undefined ? `${seg.text} ${next.text}` : seg.text;
+        const found = quote !== null && (quoteSupported(quote, seg.text) || (next !== undefined && quoteSupported(quote, scope)));
         evidence.push({
           ref: `segment:${seg.id}`,
           quote,
           quoteFound: found,
           startMs: seg.startMs,
           endMs: seg.endMs,
+          ...(found && quote !== null && negationRisk(text, quote, scope) ? { flag: 'negation_nearby' as const } : {}),
         });
         cited.push(seg);
       }
@@ -196,7 +242,8 @@ export function validateMeetingBrief(
         rejected += 1;
         continue;
       }
-      const support: Support = evidence.some((e) => e.quoteFound) ? 'linked' : 'unverified';
+      // podloženo = citace nalezena A bez upozornění na zápor; jinak neověřeno (rozhodnutí a úkoly se pak zahodí)
+      const support: Support = evidence.some((e) => e.quoteFound && !e.flag) ? 'linked' : 'unverified';
       if (MUST_BE_LINKED.includes(kind) && support !== 'linked') {
         rejected += 1;
         continue;
@@ -271,14 +318,14 @@ export type Severity = 'low' | 'medium' | 'high';
 export interface BriefItem {
   text: string;
   severity: Severity | null;
-  support: Support;
+  support: BriefSupport;
   evidence: Evidence[];
 }
 export interface BriefAction {
   text: string;
   kind: BriefActionKind;
   targetCardId: string | null;
-  support: Support;
+  support: BriefSupport;
   evidence: Evidence[];
 }
 export interface ValidatedProjectBrief {
@@ -318,17 +365,20 @@ export function validateProjectBrief(
   let rejected = 0;
 
   /** Společná kontrola: refs musí existovat, citace musí sedět, data musí být podložená. */
-  const ground = (r: Raw): { support: Support; evidence: Evidence[] } | null => {
+  const ground = (r: Raw): { support: BriefSupport; evidence: Evidence[] } | null => {
     const refs = [...new Set(arr(r.refs).filter((x): x is string => typeof x === 'string'))]
       .filter((x) => byRef.has(x))
       .slice(0, MAX_EVIDENCE);
     if (refs.length === 0) return null;
     const quote = typeof r.quote === 'string' && r.quote.trim() ? clipStr(r.quote, MAX_QUOTE_CHARS) : null;
     const hit = quote ? refs.find((x) => quoteSupported(quote, byRef.get(x)!.text)) : undefined;
-    const evidence: Evidence[] = refs.map((ref) => ({ ref, quote: ref === hit ? quote : null, quoteFound: ref === hit }));
-    let support: Support = quote && !hit ? 'unverified' : 'linked';
-    // Datum v textu tvrzení musí být v citovaných zdrojích (text nebo metadata), jinak neověřeno.
     const text = clipStr(r.text, MAX_ITEM_TEXT);
+    const risky = quote !== null && hit !== undefined && negationRisk(text, quote, byRef.get(hit)!.text);
+    const evidence: Evidence[] = refs.map((ref) => ({ ref, quote: ref === hit ? quote : null, quoteFound: ref === hit, ...(ref === hit && risky ? { flag: 'negation_nearby' as const } : {}) }));
+    // linked = citace nalezena (a bez záporu navíc); sourced = odkaz na existující zdroj BEZ citace (nic se neporovnávalo);
+    // unverified = citace uvedena, ale nenalezena, nebo je v ní zápor, který tvrzení nemá.
+    let support: BriefSupport = quote === null ? 'sourced' : hit && !risky ? 'linked' : 'unverified';
+    // Datum v textu tvrzení musí být v citovaných zdrojích (text nebo metadata), jinak neověřeno.
     const hay = fold(refs.map((x) => `${byRef.get(x)!.text} ${JSON.stringify(byRef.get(x)!.meta ?? {})}`).join(' '));
     for (const d of datesIn(text)) if (!hay.includes(fold(d))) support = 'unverified';
     return { support, evidence };

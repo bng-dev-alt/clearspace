@@ -6,7 +6,7 @@ import { mapActivityRows, mapItemRows } from './mappers';
 export { mapActivityRows, mapItemRows };
 import { columnRole } from '../projectIntelligence';
 import { computeProjectFacts, DEFAULT_TZ, FACTS_VERSION, type ProjectFacts, type ProjectItemLite } from './facts';
-import { frameUntrusted } from './frame';
+import { frameUntrusted, sanitizeDeep } from './frame';
 import type { SourceRecord } from './types';
 
 /**
@@ -340,7 +340,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
 
 /** Fakta bez položek, které jen duplikují text (insights mají lidskou formulaci). */
 function factsForPrompt(f: ProjectFacts) {
-  return {
+  return sanitizeDeep({
     today: f.today,
     health: { score: f.health.score, level: f.health.level, reason: f.health.reason },
     counts: f.counts,
@@ -355,7 +355,7 @@ function factsForPrompt(f: ProjectFacts) {
     meetingDerived: f.meetingDerived,
     workload: f.workload,
     dataQuality: f.dataQuality,
-  };
+  });
 }
 
 export async function buildProjectContext(

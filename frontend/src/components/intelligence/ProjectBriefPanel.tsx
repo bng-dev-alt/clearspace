@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Badge, Button } from '../ui';
 import type { Column } from '../../types/kanban';
 import { intelligenceService, IntelligenceServiceError, type BriefRecord } from '../../services/intelligenceService';
-import type { Evidence, Support } from '../../lib/intelligence/types';
+import type { BriefSupport, Evidence } from '../../lib/intelligence/types';
 import SourceChips from './SourceChips';
 import '../meetings/meetings.css';
 
@@ -17,7 +17,7 @@ interface Props {
 type Freshness = 'none' | 'fresh' | 'stale' | 'unknown';
 
 function Claim({ text, support, evidence, record, projectId, onOpenCard, extra }: {
-  text: string; support: Support; evidence: Evidence[]; record: BriefRecord; projectId: string; onOpenCard?: (id: string) => void; extra?: React.ReactNode;
+  text: string; support: BriefSupport; evidence: Evidence[]; record: BriefRecord; projectId: string; onOpenCard?: (id: string) => void; extra?: React.ReactNode;
 }) {
   return (
     <li className="mi-card" data-testid="brief-claim" data-support={support}>
@@ -25,7 +25,10 @@ function Claim({ text, support, evidence, record, projectId, onOpenCard, extra }
         <span>{text}</span>
         <span className="mi-row">
           {extra}
+          {support === 'linked' ? <span title="Text citace byl nalezen ve zdroji. Neověřuje, že tvrzení z ní plyne."><Badge variant="success">Citace nalezena</Badge></span> : null}
+          {support === 'sourced' ? <span title="Tvrzení odkazuje na existující zdroj, ale AI k němu neuvedla citaci: nic nebylo porovnáno."><Badge>Zdroj uveden, bez citace</Badge></span> : null}
           {support === 'unverified' ? <Badge variant="warning">Neověřeno</Badge> : null}
+          {evidence.some((e) => e.flag === 'negation_nearby') ? <span data-testid="negation-flag" title="V citaci nebo těsně před ní je zápor, který tvrzení nemá."><Badge variant="danger">Pozor: zápor</Badge></span> : null}
         </span>
       </div>
       <SourceChips evidence={evidence} sources={record.sources} projectId={projectId} onOpenCard={onOpenCard} />

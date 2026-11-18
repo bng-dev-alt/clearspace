@@ -67,7 +67,14 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, on
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <strong>{item.text}</strong>
         <div className="mi-row">
-          <Badge variant={item.support === 'linked' ? 'success' : 'warning'}>{item.support === 'linked' ? 'Ověřeno' : 'Neověřeno'}</Badge>
+          <span title="Text citace byl nalezen v přepisu. Neověřuje, že tvrzení z ní plyne: ověřte smysl v přepisu.">
+            <Badge variant={item.support === 'linked' ? 'success' : 'warning'}>{item.support === 'linked' ? 'Citace nalezena' : 'Citace nenalezena'}</Badge>
+          </span>
+          {item.evidence.some((e) => e.flag === 'negation_nearby') && (
+            <span data-testid="negation-flag" title="V citaci nebo těsně před ní je zápor, který tvrzení nemá.">
+              <Badge variant="danger">Pozor: zápor</Badge>
+            </span>
+          )}
           <Badge variant={item.reviewState === 'applied' ? 'accent' : item.reviewState === 'rejected' ? 'danger' : 'default'}>
             {STATE_LABEL[item.reviewState]}
           </Badge>

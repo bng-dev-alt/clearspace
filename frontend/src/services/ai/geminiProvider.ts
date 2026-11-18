@@ -10,7 +10,10 @@ function getAiClient(): GoogleGenAI {
     throw new Error('GEMINI_API_KEY_MISSING');
   }
   if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey });
+    // Testovací šev: lokální falešný Gemini pro E2E (žádné reálné volání, žádné kredity). V produkci se
+    // GEMINI_BASE_URL IGNORUJE, takže klíč nikdy neodejde na jiný host než Google.
+    const baseUrl = process.env.NODE_ENV !== 'production' ? process.env.GEMINI_BASE_URL?.trim() : undefined;
+    aiInstance = new GoogleGenAI({ apiKey, ...(baseUrl ? { httpOptions: { baseUrl } } : {}) });
   }
   return aiInstance;
 }

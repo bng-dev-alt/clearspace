@@ -34,7 +34,8 @@ import { Card, Assignee, Column as ColumnType, TeamMember } from '../../../types
 import { kanbanService, Project } from '../../../services/kanbanService';
 import { computeProjectIntelligence } from '../../../lib/projectIntelligence';
 import ProjectMembersModal from '../../../components/board/ProjectMembersModal';
-import { Plus, X, LayoutGrid, CalendarDays, LayoutDashboard } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, X, LayoutGrid, CalendarDays, LayoutDashboard, CalendarClock } from 'lucide-react';
 
 export default function ProjectBoardPage() {
   const params = useParams();
@@ -560,6 +561,14 @@ export default function ProjectBoardPage() {
             <LayoutDashboard size={14} />
             Dashboard
           </button>
+          <Link
+            href={`/projects/${projectId}/meetings`}
+            className="view-switch-btn"
+            data-testid="view-switch-meetings"
+          >
+            <CalendarClock size={14} />
+            Porady
+          </Link>
         </div>
       </div>
 

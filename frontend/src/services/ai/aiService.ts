@@ -4,7 +4,7 @@ import { AiRequest, AiResponse, AiModelConfig, AiContext, AiMessage } from './ty
 import { Card, Column, TeamMember } from '../../types/kanban';
 import { AiProviderError, AiErrorCode } from '../../lib/ai/errors';
 import { serverModel } from './model';
-import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema } from './schemas';
+import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema, meetingBriefSchema } from './schemas';
 
 // Jednoduché lokální logování AI requestů na serveru
 function logAiRequest(
@@ -63,6 +63,19 @@ export const aiService = {
       logAiRequest(actionName, config.model, startTime, false, { error: error.message });
       throw this.classifyError(error);
     }
+  },
+
+  // Meeting Intelligence: strukturovaný zápis z přepisu (prompt staví lib/intelligence/meetingBrief).
+  async executeMeetingBrief(messages: AiMessage[]): Promise<AiResponse> {
+    const config: AiModelConfig = {
+      model: serverModel(),
+      temperature: 0.2,
+      maxTokens: 8192,
+      responseSchema: meetingBriefSchema,
+      // Dlouhý přepis + strukturovaný výstup: delší timeout (provider dělá 1 retry jen na přechodné chyby).
+      timeoutMs: 120000,
+    };
+    return this._execute('meeting_brief', messages, config);
   },
 
   // 1. AI Chat

@@ -433,3 +433,62 @@ export const aiVoiceActionSchema = {
 
 
 
+
+// --- Meeting Intelligence (ARCHITECTURE §8.2). Model píše snake_case; validátor je jediná hranice důvěry. ---
+const evidenceSchema = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      segment_id: { type: 'STRING', description: 'Id segmentu přepisu, např. seg-12' },
+      quote: { type: 'STRING', description: 'Doslovná citace z tohoto segmentu (max 200 znaků), původní jazyk' },
+    },
+    required: ['segment_id', 'quote'],
+  },
+};
+const meetingItemSchema = {
+  type: 'OBJECT',
+  properties: {
+    text: { type: 'STRING', description: 'Stručné znění položky' },
+    evidence: evidenceSchema,
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+  },
+  required: ['text', 'evidence'],
+};
+export const meetingBriefSchema = {
+  type: 'OBJECT',
+  properties: {
+    summary: { type: 'STRING', description: 'Shrnutí porady, max 5 vět' },
+    decisions: { type: 'ARRAY', items: meetingItemSchema },
+    action_items: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          ...meetingItemSchema.properties,
+          owner_text: { type: 'STRING', nullable: true, description: 'Jméno doslova z citace, jinak null' },
+          due_text: { type: 'STRING', nullable: true, description: 'Doslovná fráze termínu z citace, jinak null' },
+          existing_card_id: { type: 'STRING', nullable: true, description: 'Id otevřené karty, která stejnou práci už řeší' },
+        },
+        required: ['text', 'evidence'],
+      },
+    },
+    follow_ups: { type: 'ARRAY', items: meetingItemSchema },
+    risks: { type: 'ARRAY', items: meetingItemSchema },
+    blockers: { type: 'ARRAY', items: meetingItemSchema },
+    open_questions: { type: 'ARRAY', items: meetingItemSchema },
+    chapters: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          first_segment: { type: 'STRING' },
+          last_segment: { type: 'STRING' },
+        },
+        required: ['title', 'first_segment', 'last_segment'],
+      },
+    },
+  },
+  required: ['summary', 'decisions', 'action_items', 'follow_ups', 'risks', 'blockers', 'open_questions'],
+};

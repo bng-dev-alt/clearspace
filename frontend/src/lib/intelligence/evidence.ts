@@ -51,7 +51,7 @@ function commonPrefix(a: string, b: string): number {
  * Kratší z dvojice musí mít aspoň 3 písmena a třípísmenné slovo se hodí jen k tvarům do 4 písmen
  * (Jan/Jana), aby předložka „pro" nepodložila jméno „Prokop".
  */
-function tokenInWords(token: string, words: string[]): boolean {
+export function tokenInWords(token: string, words: string[]): boolean {
   return words.some((w) => {
     const short = Math.min(token.length, w.length);
     const long = Math.max(token.length, w.length);
@@ -200,7 +200,8 @@ export function validateMeetingBrief(
           if (fd && hay.includes(fd)) dueText = d;
           else nulled += 1;
         }
-        const c = typeof rawItem.existing_card_id === 'string' ? rawItem.existing_card_id : null;
+        // Model smí vrátit i celý ref z kontextu ("card:ID"); porovnává se holé id karty.
+        const c = typeof rawItem.existing_card_id === 'string' ? rawItem.existing_card_id.replace(/^card:/, '') : null;
         if (c) {
           if (activeCards.has(c)) existingCardId = c;
           else nulled += 1;

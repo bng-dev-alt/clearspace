@@ -4,6 +4,8 @@
  */
 export type AiErrorCode =
   | 'bad_request'
+  | 'not_found'
+  | 'conflict'
   | 'unauthenticated'
   | 'forbidden'
   | 'payload_too_large'
@@ -19,6 +21,8 @@ export type AiErrorCode =
 
 const STATUS: Record<AiErrorCode, number> = {
   bad_request: 400,
+  not_found: 404,
+  conflict: 409,
   unauthenticated: 401,
   forbidden: 403,
   payload_too_large: 413,

@@ -32,6 +32,18 @@ export interface AiRunContext<I> {
   project: { id: string; name: string } | null;
   /** Plný kontext z Project Context Engine (jen u featur s `contextPurpose`, jinak null). */
   context: ProjectContext | null;
+  /** Klient s identitou volajícího (RLS). Feature jím čte vlastní data (např. přepis porady). */
+  db: SupabaseClient;
+  /** Výsledek `feature.prepare` (např. načtená porada a přepis). */
+  prepared: unknown;
+}
+
+export interface AiFinalizeContext<I> extends AiRunContext<I> {
+  response: AiResponse;
+  /** Výstup modelu po `parseModelJson` (jen u structured featur). */
+  parsed: unknown;
+  /** Id řádku v ledgeru `ai_requests` (provenience). */
+  requestId: string;
 }
 
 export interface AiFeature<I> {
@@ -47,7 +59,19 @@ export interface AiFeature<I> {
   /** Je-li nastaveno, server sestaví kontext přes Project Context Engine (fakta, zdroje, rámovaný text). */
   contextPurpose?: ContextPurpose;
   parse(body: Record<string, unknown>): I;
+  /**
+   * Volitelné: běží po načtení kontextu a PŘED rezervací kvóty (nic se neúčtuje). Smí vyhodit AiGatewayError,
+   * např. 409 když je výsledek už uložený (idempotence bez zbytečného volání providera).
+   */
+  prepare?(args: { db: SupabaseClient; input: I; projectId: string; context: ProjectContext | null }): Promise<unknown>;
+  /** Volitelné: kolik dalšího textu `prepare` přidá do promptu (např. přepis); započítá se do rezervace kvóty. */
+  estimateExtraChars?(prepared: unknown): number;
   run(ctx: AiRunContext<I>): Promise<AiResponse>;
+  /**
+   * Volitelné: po úspěšném volání modelu (spotřeba je už doúčtovaná). Validuje a ukládá výstup pod identitou volajícího
+   * a vrací pole, která se přidají do odpovědi. Chyba zde už nevrací zpět peníze, ale ledger zůstává přesný.
+   */
+  finalize?(ctx: AiFinalizeContext<I>): Promise<Record<string, unknown>>;
 }
 
 // --- konfigurace (z env, s bezpečnými defaulty) ---
@@ -259,6 +283,12 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
       }
     }
 
+    let prepared: unknown = null;
+    if (feature.prepare && projectId) {
+      prepared = await feature.prepare({ db: auth.db, input, projectId, context });
+      contextChars += feature.estimateExtraChars?.(prepared) ?? 0;
+    }
+
     // Odhad: ~3 znaky na token vstupu + strop výstupu dané featury.
     const reserved = Math.min(
       1_000_000,
@@ -268,7 +298,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
 
     let response: AiResponse;
     try {
-      response = await feature.run({ input, board, project, context });
+      response = await feature.run({ input, board, project, context, db: auth.db, prepared });
     } catch (err) {
       if (err instanceof AiGatewayError) throw err; // např. prázdný board -> 400
       if (err instanceof AiProviderError) {
@@ -280,6 +310,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
 
     const parsed = feature.structured ? parseModelJson(response.content) : undefined;
 
+    const finishedId = requestId;
     await complete(auth.db, requestId, 'succeeded', {
       model: response.model,
       usage: response.usage,
@@ -287,10 +318,18 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
     });
     requestId = null;
 
-    return NextResponse.json(
-      feature.structured ? { ...response, parsed } : { ...response },
-      { headers: { 'Cache-Control': 'no-store' } }
-    );
+    // Validace + uložení výstupu až po doúčtování: spotřeba tokenů je v ledgeru přesná i když uložení selže.
+    const extra = feature.finalize
+      ? await feature.finalize({ input, board, project, context, db: auth.db, prepared, response, parsed, requestId: finishedId })
+      : {};
+
+    // Featury s `finalize` vracejí jen ověřený výsledek (ne surový výstup modelu).
+    const body_ = feature.finalize
+      ? { model: response.model, usage: response.usage, ...extra }
+      : feature.structured
+        ? { ...response, parsed }
+        : { ...response };
+    return NextResponse.json(body_, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const gw =
       err instanceof AiGatewayError

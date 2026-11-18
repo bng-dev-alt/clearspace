@@ -1,0 +1,19 @@
+/* Meeting Intelligence: jen rozložení a informační architektura; barvy a tvary přebírají tokeny z design systému. */
+.mi-page { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.mi-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mi-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) { .mi-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); } }
+.mi-card { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 12px; display: grid; gap: 8px; }
+.mi-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mi-steps { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.mi-step { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); }
+.mi-step[aria-current='step'] { color: var(--text); border-color: var(--border-strong); font-weight: 600; }
+.mi-seg { padding: 4px 6px; border-radius: 4px; scroll-margin-top: 80px; }
+.mi-seg[data-highlight='true'] { background: var(--surface-3); outline: 1px solid var(--border-strong); }
+.mi-speaker { font-weight: 600; margin-right: 6px; }
+.mi-time { color: var(--text-muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.mi-quote { border-left: 3px solid var(--border-strong); padding-left: 8px; color: var(--text-secondary); text-align: left; background: none; border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; }
+.mi-field { display: grid; gap: 4px; }
+.mi-field label { font-weight: 600; }
+.mi-muted { color: var(--text-muted); }
+.mi-error { color: var(--danger, #b3261e); }

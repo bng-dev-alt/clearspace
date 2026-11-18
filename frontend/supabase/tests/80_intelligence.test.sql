@@ -101,10 +101,7 @@ BEGIN
     jsonb_set(run, '{transcript_revision}', to_jsonb(rev2))::text, items::text), '22023', 'unknown transcript revision is refused');
   PERFORM test.throws(format($q$select public.persist_meeting_run(%L, %L::jsonb, %L::jsonb)$q$, m1, run::text,
     jsonb_build_array(jsonb_set(items -> 0, '{evidence}', jsonb_build_array(jsonb_build_object('ref','segment:seg-999','quote','Honza připraví migraci','quoteFound',true))))::text), '22023', 'FABRICATED evidence (unknown segment) is refused');
-  PERFORM test.throws(format($q$select public.persist_meeting_run(%L, %L::jsonb, %L::jsonb)$q$, m1, run::text,
-    jsonb_build_array(jsonb_set(items -> 0, '{support}', '"unverified"'))::text), '22023', 'an action item cannot be stored without verified evidence');
-  PERFORM test.throws(format($q$select public.persist_meeting_run(%L, %L::jsonb, %L::jsonb)$q$, m1, run::text,
-    jsonb_build_array(jsonb_set(items -> 3, '{support}', '"linked"'))::text), '22023', '"linked" support without a found quote is refused');
+  -- (an unsupported decision/action and a forged "linked" are no longer errors: the database downgrades/skips them; see 83_intelligence_hardening.test.sql)
   PERFORM test.throws(format($q$select public.persist_meeting_run(%L, %L::jsonb, %L::jsonb)$q$, m1, run::text,
     jsonb_build_array(jsonb_set(items -> 0, '{evidence}', '[]'))::text), '22023', 'an item without evidence is refused');
   PERFORM test.throws(format($q$select public.persist_meeting_run(%L, %L::jsonb, %L::jsonb)$q$, m1, run::text,

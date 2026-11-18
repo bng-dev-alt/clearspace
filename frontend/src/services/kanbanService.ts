@@ -473,7 +473,8 @@ export const kanbanService = {
       }
       return;
     }
-    const { error } = await supabase.from('columns').update({ role }).eq('id', columnId);
+    // role_source 'user' marks a person's choice (also an explicit clear): only those count as data on rollback and are never re-guessed
+    const { error } = await supabase.from('columns').update({ role, role_source: 'user' }).eq('id', columnId);
     if (error) persistenceStatus.report('uložení role sloupce', error);
     else persistenceStatus.clear();
   },

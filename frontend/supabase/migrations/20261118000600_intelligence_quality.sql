@@ -27,12 +27,17 @@ END $$;
 -- 1. Column roles
 -- ------------------------------------------------------------
 ALTER TABLE public.columns ADD COLUMN IF NOT EXISTS role TEXT;
+-- 'backfill' = guessed from the name by this migration; 'user' = chosen by a person (only 'user' counts as data worth protecting on rollback)
+ALTER TABLE public.columns ADD COLUMN IF NOT EXISTS role_source TEXT;
 
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'columns_role_check' AND conrelid = 'public.columns'::regclass) THEN
         ALTER TABLE public.columns
             ADD CONSTRAINT columns_role_check CHECK (role IS NULL OR role IN ('todo', 'doing', 'review', 'done'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'columns_role_source_check' AND conrelid = 'public.columns'::regclass) THEN
+        ALTER TABLE public.columns ADD CONSTRAINT columns_role_source_check CHECK (role_source IS NULL OR role_source IN ('backfill', 'user'));
     END IF;
 END $$;
 
@@ -42,8 +47,9 @@ UPDATE public.columns SET role = CASE
         WHEN name ~* '(reviz|review|kontrol|testov)' THEN 'review'
         WHEN name ~* '(prob[ií]h|rozpracov|doing|progress|vývoj|vyvoj)' THEN 'doing'
         WHEN name ~* '(to ?do|k řešení|k reseni|backlog|nové|nove|plán)' THEN 'todo'
-        ELSE NULL END
- WHERE role IS NULL;
+        ELSE NULL END,
+    role_source = 'backfill'
+ WHERE role IS NULL AND role_source IS NULL;
 
 -- ------------------------------------------------------------
 -- 2. Transcript revision lineage
@@ -77,7 +83,8 @@ END $$;
 
 GRANT INSERT (parent_revision, edit_note) ON public.meeting_transcripts TO authenticated;
 
--- Limits live in ONE place so tests, docs and the app agree.
+-- Limits live in ONE place so tests, docs and the app agree. (The audio migration 0700 uses the keys below; it does not redefine this
+-- function, so re-running the migrations in any order leaves the same definition.)
 CREATE OR REPLACE FUNCTION public.intelligence_limits()
 RETURNS JSONB
 LANGUAGE sql
@@ -87,7 +94,14 @@ AS $$
     SELECT jsonb_build_object(
         'max_meetings_per_project', 500,
         'max_meetings_per_user_per_day', 40,
-        'max_revisions_per_meeting', 25
+        'max_revisions_per_meeting', 25,
+        'stt_attempts_per_meeting', 3,
+        'audio_retention_days_default', 7,
+        'audio_retention_days_max', 30,
+        'max_audio_bytes', 52428800,
+        'max_audio_ms', 18000000,
+        'stt_stuck_minutes', 10,
+        'stt_max_objects_per_meeting', 4
     );
 $$;
 GRANT EXECUTE ON FUNCTION public.intelligence_limits() TO authenticated;
@@ -100,14 +114,20 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_max INTEGER := (public.intelligence_limits() ->> 'max_revisions_per_meeting')::integer;
+    v_machine BOOLEAN := coalesce(current_setting('app.stt_persist', true), '') = 'on';
 BEGIN
+    -- machine provenance: only the server-trusted stt_complete (migration 0700) sets this session flag
+    IF NEW.source = 'soniox' AND NOT v_machine THEN
+        RAISE EXCEPTION 'Přepis ze strojového přepisu lze vytvořit jen přes stt_complete.' USING ERRCODE = '42501';
+    END IF;
     IF NEW.source = 'edit' AND NEW.parent_revision IS NULL THEN
         RAISE EXCEPTION 'Úprava přepisu musí odkazovat na původní revizi.' USING ERRCODE = '22023';
     END IF;
     IF NEW.parent_revision IS NOT NULL AND NEW.parent_revision = NEW.revision THEN
         RAISE EXCEPTION 'Revize nemůže být svým vlastním předchůdcem.' USING ERRCODE = '22023';
     END IF;
-    IF (SELECT count(*) FROM public.meeting_transcripts WHERE meeting_id = NEW.meeting_id) >= v_max THEN
+    -- the revision cap never discards an already BILLED provider result
+    IF NOT v_machine AND (SELECT count(*) FROM public.meeting_transcripts WHERE meeting_id = NEW.meeting_id) >= v_max THEN
         RAISE EXCEPTION 'Porada má maximální počet revizí přepisu (%).', v_max USING ERRCODE = 'PT429';
     END IF;
     RETURN NEW;
@@ -132,6 +152,9 @@ DECLARE
 BEGIN
     -- Serialise concurrent creates of the same project so the count cannot be raced past the limit.
     PERFORM pg_advisory_xact_lock(hashtextextended('meeting_quota:' || NEW.project_id, 0));
+    IF NEW.created_by IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended('meeting_quota_user:' || NEW.created_by::text, 0)); -- the per-day rule spans projects
+    END IF;
     IF (SELECT count(*) FROM public.meetings WHERE project_id = NEW.project_id) >= (v_lim ->> 'max_meetings_per_project')::integer THEN
         RAISE EXCEPTION 'Projekt dosáhl maximálního počtu porad.' USING ERRCODE = 'PT429';
     END IF;

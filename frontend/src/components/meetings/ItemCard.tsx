@@ -17,6 +17,8 @@ export interface ItemCardProps {
   members: { id: string; fullName: string }[];
   /** Den porady (YYYY-MM-DD, časová zóna projektu): základ pro relativní termíny typu "do pátku". */
   meetingDay?: string;
+  /** Položka pochází z dřívější analýzy (schválený závěr přežil novou analýzu). */
+  fromEarlierRun?: boolean;
   onJump: (segmentId: string) => void;
   onChanged: (message?: string) => void;
 }
@@ -25,7 +27,7 @@ export interface ItemCardProps {
  * Jedna navržená položka s důkazy a rozhodnutím člověka. Nic se do projektu nezapíše, dokud uživatel
  * nepotvrdí konkrétní akci (vytvořit kartu / propojit / zamítnout). Opakované potvrzení je bezpečné (idempotentní RPC).
  */
-export default function ItemCard({ item, columns, cards, members, meetingDay, onJump, onChanged }: ItemCardProps) {
+export default function ItemCard({ item, columns, cards, members, meetingDay, fromEarlierRun, onJump, onChanged }: ItemCardProps) {
   const [mode, setMode] = useState<null | 'create' | 'link'>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, on
           <span title="Text citace byl nalezen v přepisu. Neověřuje, že tvrzení z ní plyne: ověřte smysl v přepisu.">
             <Badge variant={item.support === 'linked' ? 'success' : 'warning'}>{item.support === 'linked' ? 'Citace nalezena' : 'Citace nenalezena'}</Badge>
           </span>
+          {fromEarlierRun && <Badge data-testid="earlier-run">Z dřívější analýzy</Badge>}
           {item.evidence.some((e) => e.flag === 'negation_nearby') && (
             <span data-testid="negation-flag" title="V citaci nebo těsně před ní je zápor, který tvrzení nemá.">
               <Badge variant="danger">Pozor: zápor</Badge>

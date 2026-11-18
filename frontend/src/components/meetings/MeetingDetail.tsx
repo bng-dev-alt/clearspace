@@ -226,7 +226,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
           </Button>
         ) : confirmRerun ? (
           <>
-            <span>Znovu analyzovat? Neschválené návrhy budou nahrazeny a spotřebuje se AI kvóta.</span>
+            <span>Znovu analyzovat? Nahradí se jen neschválené a zamítnuté návrhy; závěry, které jste schválili, zůstanou (jsou-li zastaralé, stáhnete je ručně). Spotřebuje se AI kvóta.</span>
             <Button variant="primary" onClick={() => analyze(true)} disabled={analyzing} data-testid="meeting-rerun-confirm">Ano, analyzovat znovu</Button>
             <Button variant="ghost" onClick={() => setConfirmRerun(false)}>Zrušit</Button>
           </>
@@ -348,6 +348,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
                         cards={cards}
                         members={members}
                         meetingDay={meetingDay}
+                        fromEarlierRun={!!run && it.runId !== run.id}
                         onJump={jumpTo}
                         onChanged={(msg) => {
                           if (msg) setNotice(msg);

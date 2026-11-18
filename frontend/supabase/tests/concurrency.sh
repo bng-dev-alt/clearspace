@@ -84,6 +84,8 @@ select public.record_audio_consent(id) from public.meetings where title = 'Audio
 select id from public.meetings where title = 'Audio par';
 SQL
 )
+SEC=$(printf 's%.0s' $(seq 1 40))
+psql_admin -d "$db" -At >/dev/null -c "insert into public.server_trust (purpose, secret_sha256) values ('stt', encode(sha256(convert_to('$SEC', 'UTF8')), 'hex'))"
 APATH="par-p/$AM/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp3"
 psql_admin -d "$db" -At >/dev/null <<SQL
 $AUTH
@@ -94,7 +96,7 @@ out3=$(mktemp -d)
 for i in $(seq 1 8); do
   ( psql_admin -d "$db" -At -f - <<SQL > "$out3/s$i.txt" 2>&1
 $AUTH
-select outcome from public.stt_reserve('$AM', 60000, 7200000, 36000000);
+select outcome from public.stt_reserve('$SEC', '$AM', 60000, 7200000, 36000000);
 SQL
   ) &
 done
@@ -108,14 +110,14 @@ echo "ok - exactly one transcription was started under 8-way concurrency"
 
 psql_admin -d "$db" -At >/dev/null <<SQL
 $AUTH
-select public.stt_attach_job('$AM', 'job-par', 'stt-async-v6');
+select public.stt_attach_job('$SEC', '$AM', 'job-par', 'stt-async-v6');
 SQL
 TREV=$(printf 'e%.0s' $(seq 1 64))
 TR="'{\"revision\":\"$TREV\",\"char_count\":20,\"speakers\":[],\"segments\":[{\"id\":\"seg-0-0\",\"startMs\":0,\"endMs\":1000,\"speakerId\":null,\"text\":\"Ahoj světe tady.\"}],\"coverage\":{}}'::jsonb"
 for i in $(seq 1 8); do
   ( psql_admin -d "$db" -At -f - <<SQL > "$out3/c$i.txt" 2>&1
 $AUTH
-select public.stt_complete('$AM', 'job-par', 'stt-async-v6', 60000, $TR);
+select public.stt_complete('$SEC', '$AM', 'job-par', 'stt-async-v6', 60000, $TR);
 SQL
   ) &
 done
@@ -127,3 +129,35 @@ rm -rf "$out3"
 echo "same_revision_answers=$same transcripts=$trs billed_ms=$billed (8 parallel completions of one job)"
 [ "$same" = "8" ] && [ "$trs" = "1" ] && [ "$billed" = "60000" ] || { echo "FAIL: parallel completion is not exactly-once"; exit 1; }
 echo "ok - the transcript was stored and billed once under 8-way concurrent completion"
+
+# --- Approved knowledge: an accept racing against forced re-analyses can never end as accepted -> superseded ---
+echo "== Concurrency: accepting an item while the meeting is re-analysed in parallel never loses an accepted item"
+RUNB="'{\"status\":\"succeeded\",\"transcript_revision\":\"$REV\",\"input_fingerprint\":\"fr\",\"contract_version\":\"c\",\"prompt_version\":\"p1\",\"validator_version\":\"v\",\"output\":{\"summary\":\"s\"}}'::jsonb"
+out4=$(mktemp -d)
+for round in 1 2 3; do
+  # a fresh proposed item to accept in every round (forced re-analysis supersedes the previous round's open items)
+  psql_admin -d "$db" -At >/dev/null <<SQL
+$AUTH
+select public.persist_meeting_run('$MID', $RUNB, $ITEMS, true);
+SQL
+  CAND=$(psql_admin -d "$db" -At -c "select id from public.intelligence_items where meeting_id = '$MID' and review_state = 'proposed' order by created_at desc limit 1" | tail -1)
+  ( psql_admin -d "$db" -At -f - <<SQL > "$out4/acc$round.txt" 2>&1
+$AUTH
+select public.review_intelligence_item('$CAND', 'accept');
+SQL
+  ) &
+  for i in 1 2 3; do
+    ( psql_admin -d "$db" -At -f - <<SQL > "$out4/re$round-$i.txt" 2>&1
+$AUTH
+select public.persist_meeting_run('$MID', $RUNB, $ITEMS, true);
+SQL
+    ) &
+  done
+  wait
+  accepted_ok=$(grep -c '"review_state": "accepted"' "$out4/acc$round.txt" || true)
+  final=$(psql_admin -d "$db" -At -c "select review_state from public.intelligence_items where id = '$CAND'" | tail -1)
+  if [ "$accepted_ok" != "0" ] && [ "$final" != "accepted" ] && [ "$final" != "applied" ]; then echo "FAIL: item $CAND was accepted by a human but ended as '$final' after re-analysis"; exit 1; fi
+  echo "round $round: accept succeeded=$accepted_ok final_state=$final"
+done
+rm -rf "$out4"
+echo "ok - an item a human accepted was never superseded by a concurrent re-analysis"

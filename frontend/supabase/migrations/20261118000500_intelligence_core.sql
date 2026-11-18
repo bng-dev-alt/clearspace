@@ -86,6 +86,53 @@ $$;
 REVOKE ALL ON FUNCTION public.iso_date_or_null(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.iso_date_or_null(TEXT) TO authenticated;
 
+-- Folding for evidence checks done by the DATABASE (mirror of FOLD_SPEC in src/lib/intelligence/fold.ts for Latin scripts:
+-- strip diacritics, lowercase, every run of non-alphanumerics = one space). Other scripts keep their letters (lowercased).
+CREATE OR REPLACE FUNCTION public.fold_text(p TEXT)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $$
+    SELECT btrim(regexp_replace(lower(translate(coalesce(p, ''), 'ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĀāĂăĄąĆćĈĉĊċČčĎďĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİĴĵĶķĹĺĻļĽľŃńŅņŇňŌōŎŏŐőŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžĐđŁłØøĦħ', 'AAAAAACEEEEIIIINOOOOOUUUUYaaaaaaceeeeiiiinooooouuuuyyAaAaAaCcCcCcCcDdEeEeEeEeEeGgGgGgGgHhIiIiIiIiIJjKkLlLlLlNnNnNnOoOoOoRrRrRrSsSsSsSsTtTtUuUuUuUuUuUuWwYyYZzZzZzDdLlOoHh')), '[^[:alnum:]]+', ' ', 'g'));
+$$;
+GRANT EXECUTE ON FUNCTION public.fold_text(TEXT) TO authenticated;
+
+-- Is the quote contained in the text as WHOLE WORDS, its "..." parts in order, with >= 6 letters and >= 2 words?
+-- (same rule as quoteSupported in src/lib/intelligence/evidence.ts). Used to recompute `quoteFound` so that a client can
+-- never claim a verified quote the transcript does not contain.
+CREATE OR REPLACE FUNCTION public.quote_in_text(p_quote TEXT, p_text TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_parts TEXT[];
+    v_part TEXT;
+    v_hay TEXT := ' ' || public.fold_text(p_text) || ' ';
+    v_joined TEXT := '';
+    v_pos INTEGER := 1;
+    v_idx INTEGER;
+BEGIN
+    IF p_quote IS NULL OR btrim(p_quote) = '' THEN RETURN FALSE; END IF;
+    v_parts := regexp_split_to_array(p_quote, '…|\.\.\.');
+    FOREACH v_part IN ARRAY v_parts LOOP
+        v_part := public.fold_text(v_part);
+        IF v_part = '' THEN CONTINUE; END IF;
+        v_joined := btrim(v_joined || ' ' || v_part);
+        v_idx := position(' ' || v_part || ' ' IN substr(v_hay, v_pos));
+        IF v_idx = 0 THEN RETURN FALSE; END IF;
+        v_pos := v_pos + v_idx - 1 + char_length(v_part) + 1; -- the trailing space stays available for the next part
+    END LOOP;
+    IF v_joined = '' THEN RETURN FALSE; END IF;
+    RETURN char_length(regexp_replace(v_joined, '[^[:alpha:]]', '', 'g')) >= 6
+       AND array_length(string_to_array(v_joined, ' '), 1) >= 2;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.quote_in_text(TEXT, TEXT) TO authenticated;
+
+
 -- ------------------------------------------------------------
 -- 1. meetings
 -- ------------------------------------------------------------
@@ -144,7 +191,7 @@ CREATE POLICY "Members edit meetings" ON public.meetings FOR UPDATE TO authentic
     USING (public.is_project_member(project_id)) WITH CHECK (public.is_project_member(project_id));
 DROP POLICY IF EXISTS "Creator or owner deletes meetings" ON public.meetings;
 CREATE POLICY "Creator or owner deletes meetings" ON public.meetings FOR DELETE TO authenticated
-    USING (created_by = auth.uid() OR public.is_project_owner(project_id));
+    USING (public.is_project_member(project_id) AND (created_by = auth.uid() OR public.is_project_owner(project_id)));
 
 REVOKE ALL ON public.meetings FROM PUBLIC, anon, authenticated;
 GRANT SELECT, DELETE ON public.meetings TO authenticated;
@@ -243,6 +290,13 @@ GRANT SELECT ON public.meeting_transcripts TO authenticated;
 GRANT INSERT (meeting_id, project_id, revision, contract_version, source, speakers, segments, coverage, char_count, created_by)
     ON public.meeting_transcripts TO authenticated;
 GRANT ALL ON public.meeting_transcripts TO service_role;
+-- Re-running this file AFTER migration 0600 must not drop the lineage column grants that file adds.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'meeting_transcripts' AND column_name = 'parent_revision') THEN
+        GRANT INSERT (parent_revision, edit_note) ON public.meeting_transcripts TO authenticated;
+    END IF;
+END $$;
 
 -- ------------------------------------------------------------
 -- 3. intelligence_runs (one AI run = one validated output; project briefs and meeting briefs)
@@ -343,7 +397,13 @@ DECLARE
     v_rev TEXT;
     v_segments JSONB;
     e JSONB;
-    v_found BOOLEAN := FALSE;
+    v_seg JSONB;
+    v_ord INTEGER;
+    v_next TEXT;
+    v_quote TEXT;
+    v_found BOOLEAN;
+    v_out JSONB := '[]'::jsonb;
+    v_any_linked BOOLEAN := FALSE;
 BEGIN
     IF jsonb_typeof(NEW.evidence) <> 'array' OR jsonb_array_length(NEW.evidence) NOT BETWEEN 1 AND 4 THEN
         RAISE EXCEPTION 'Evidence musí obsahovat 1 až 4 odkazy.' USING ERRCODE = '22023';
@@ -357,24 +417,42 @@ BEGIN
     IF v_segments IS NULL THEN
         RAISE EXCEPTION 'Přepis, na který se položka odvolává, neexistuje.' USING ERRCODE = '22023';
     END IF;
+    -- The DATABASE is authoritative for evidence: `quoteFound` is recomputed from the stored transcript (a client can only
+    -- DOWNGRADE: quoteFound stays true only if the caller said so AND the quote really is in the segment or in it plus the
+    -- next one), times are taken from the segment, and `support` can never be higher than what the evidence proves.
     FOR e IN SELECT * FROM jsonb_array_elements(NEW.evidence) LOOP
         IF jsonb_typeof(e) <> 'object' OR jsonb_typeof(e -> 'ref') IS DISTINCT FROM 'string'
            OR (e ->> 'ref') !~ '^segment:[^\s\]\[#]{1,200}$' THEN
             RAISE EXCEPTION 'Neplatný odkaz na důkaz.' USING ERRCODE = '22023';
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_segments) s WHERE s ->> 'id' = substr(e ->> 'ref', 9)) THEN
+        v_seg := NULL;
+        SELECT s.val, s.ord INTO v_seg, v_ord
+          FROM jsonb_array_elements(v_segments) WITH ORDINALITY AS s(val, ord) WHERE s.val ->> 'id' = substr(e ->> 'ref', 9);
+        IF v_seg IS NULL THEN
             RAISE EXCEPTION 'Důkaz odkazuje na neexistující segment přepisu (%).', e ->> 'ref' USING ERRCODE = '22023';
         END IF;
-        IF e ? 'quote' AND jsonb_typeof(e -> 'quote') = 'string' AND char_length(e ->> 'quote') > 200 THEN
+        v_quote := CASE WHEN jsonb_typeof(e -> 'quote') = 'string' THEN e ->> 'quote' ELSE NULL END;
+        IF v_quote IS NOT NULL AND char_length(v_quote) > 200 THEN
             RAISE EXCEPTION 'Citace je příliš dlouhá (max 200 znaků).' USING ERRCODE = '22023';
         END IF;
-        IF e -> 'quoteFound' = 'true'::jsonb THEN v_found := TRUE; END IF;
+        v_next := (v_segments -> v_ord::integer) ->> 'text'; -- 0-based index v_ord = the following segment (NULL at the end)
+        v_found := (e -> 'quoteFound' = 'true'::jsonb)
+                   AND v_quote IS NOT NULL
+                   AND (public.quote_in_text(v_quote, v_seg ->> 'text')
+                        OR (v_next IS NOT NULL AND public.quote_in_text(v_quote, (v_seg ->> 'text') || ' ' || v_next)));
+        v_out := v_out || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+            'ref', e ->> 'ref', 'quote', v_quote, 'quoteFound', v_found,
+            'startMs', v_seg -> 'startMs', 'endMs', v_seg -> 'endMs',
+            'flag', CASE WHEN e ->> 'flag' = 'negation_nearby' THEN 'negation_nearby' ELSE NULL END)));
+        IF v_found AND coalesce(e ->> 'flag', '') = '' THEN v_any_linked := TRUE; END IF;
     END LOOP;
-    IF NEW.support = 'linked' AND NOT v_found THEN
-        RAISE EXCEPTION 'Položka "linked" musí mít aspoň jednu ověřenou citaci.' USING ERRCODE = '22023';
+    NEW.evidence := v_out;
+    IF NEW.support = 'linked' AND NOT v_any_linked THEN
+        NEW.support := 'unverified';
     END IF;
     IF NEW.kind IN ('decision', 'action_item') AND NEW.support <> 'linked' THEN
-        RAISE EXCEPTION 'Rozhodnutí a úkoly musí být podložené ověřenou citací.' USING ERRCODE = '22023';
+        -- 23514 (not 22023): persist_meeting_run skips such an item and counts it; every OTHER violation still aborts the whole run
+        RAISE EXCEPTION 'Rozhodnutí a úkoly musí být podložené nalezenou citací.' USING ERRCODE = '23514';
     END IF;
     IF NEW.review_state <> 'proposed' THEN
         RAISE EXCEPTION 'Nová položka musí začít ve stavu "proposed".' USING ERRCODE = '22023';
@@ -409,6 +487,21 @@ BEGIN
        OR (NEW.duplicate_of IS DISTINCT FROM OLD.duplicate_of AND NEW.duplicate_of IS NOT NULL)
        OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'Výstup AI (typ, důkazy, podpora) nelze měnit.' USING ERRCODE = '42501';
+    END IF;
+
+    -- Only an APPLIED item may point at a card (an accepted/open one cannot carry a forged applied card).
+    IF NEW.review_state <> 'applied' AND (NEW.applied_card_id IS NOT NULL OR NEW.applied_mode IS NOT NULL OR NEW.applied_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'Nepoužitá položka nesmí odkazovat na kartu.' USING ERRCODE = '55000';
+    END IF;
+    -- Who decided and when is set by the DATABASE on a state change; it cannot be written directly.
+    IF NEW.review_state IS DISTINCT FROM OLD.review_state THEN
+        IF auth.uid() IS NOT NULL THEN
+            NEW.decided_by := auth.uid();
+            NEW.decided_at := now();
+        END IF;
+    ELSIF (NEW.decided_by IS DISTINCT FROM OLD.decided_by AND NEW.decided_by IS NOT NULL)
+          OR NEW.decided_at IS DISTINCT FROM OLD.decided_at THEN
+        RAISE EXCEPTION 'Čas a autora rozhodnutí nelze měnit přímo.' USING ERRCODE = '42501';
     END IF;
 
     IF NEW.review_state = OLD.review_state THEN
@@ -493,6 +586,7 @@ DECLARE
     v_dedupe TEXT;
     v_dup UUID;
     v_suggested TEXT;
+    v_skipped INTEGER := 0;
 BEGIN
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'Musíte být přihlášeni.' USING ERRCODE = '28000';
@@ -523,6 +617,11 @@ BEGIN
     IF v_status = 'failed' AND jsonb_array_length(p_items) > 0 THEN
         RAISE EXCEPTION 'Neúspěšný běh nesmí mít položky.' USING ERRCODE = '22023';
     END IF;
+    -- the provenance link must be the caller's own ledger row of this feature (a client cannot attach someone else's request)
+    IF nullif(p_run ->> 'ai_request_id', '') IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM public.ai_requests r WHERE r.id = (p_run ->> 'ai_request_id')::uuid AND r.user_id = v_uid) THEN
+        RAISE EXCEPTION 'Neplatný záznam o AI požadavku.' USING ERRCODE = '42501';
+    END IF;
 
     IF v_status = 'succeeded' THEN
         -- Idempotency: the same transcript revision + prompt version is analysed once, unless re-run is forced.
@@ -532,13 +631,15 @@ BEGIN
            AND NOT coalesce(p_force, FALSE) THEN
             RAISE EXCEPTION 'Tato verze přepisu už byla analyzována.' USING ERRCODE = '23505';
         END IF;
-        -- Older active runs (any revision) are superseded; their unapplied items too. Applied items stay.
+        -- Older active runs (any revision) are superseded. Only OPEN suggestions (proposed / rejected) are replaced by the
+        -- new analysis; items a human ACCEPTED or APPLIED are approved project knowledge and are never touched here.
+        -- A human withdraws an accepted item explicitly (review 'reject'); the duplicate hint on new items points at them.
         FOR v_old IN SELECT r.id FROM public.intelligence_runs r
                       WHERE r.meeting_id = p_meeting_id AND r.kind = 'meeting_brief' AND r.status = 'succeeded'
                         AND r.superseded_at IS NULL LOOP
             UPDATE public.intelligence_runs SET superseded_at = now() WHERE id = v_old;
             UPDATE public.intelligence_items SET review_state = 'superseded'
-             WHERE run_id = v_old AND review_state IN ('proposed', 'accepted', 'rejected');
+             WHERE run_id = v_old AND review_state IN ('proposed', 'rejected');
         END LOOP;
     END IF;
 
@@ -562,24 +663,34 @@ BEGIN
              WHERE c.id = v_suggested AND col.project_id = v_m.project_id AND NOT c.archived) THEN
             RAISE EXCEPTION 'Navržená karta nepatří do tohoto projektu.' USING ERRCODE = '22023';
         END IF;
-        -- Possible duplicate: an equivalent open/applied item of ANOTHER run in the same project.
+        -- Possible duplicate: an equivalent open/accepted/applied item of ANOTHER run in the same project.
         SELECT i.id INTO v_dup FROM public.intelligence_items i
          WHERE i.project_id = v_m.project_id AND i.dedupe_key = v_dedupe AND i.run_id <> v_run_id
            AND i.review_state IN ('proposed', 'accepted', 'applied')
-         ORDER BY (i.review_state = 'applied') DESC, i.created_at LIMIT 1;
+         ORDER BY (i.review_state = 'applied') DESC, (i.review_state = 'accepted') DESC, i.created_at LIMIT 1;
 
-        INSERT INTO public.intelligence_items
-            (project_id, run_id, meeting_id, ordinal, kind, text, support, evidence, owner_text, due_text,
-             suggested_card_id, dedupe_key, duplicate_of)
-        VALUES
-            (v_m.project_id, v_run_id, p_meeting_id, v_ord, v_it ->> 'kind', v_it ->> 'text', v_it ->> 'support',
-             v_it -> 'evidence', nullif(v_it ->> 'owner_text', ''), nullif(v_it ->> 'due_text', ''),
-             v_suggested, v_dedupe, v_dup);
-        v_ord := v_ord + 1;
+        -- The item trigger recomputes the evidence from the stored transcript. An item the DATABASE cannot support (a decision or
+        -- task whose quote is not really in the transcript) is skipped and counted, it does not fail the whole run.
+        BEGIN
+            INSERT INTO public.intelligence_items
+                (project_id, run_id, meeting_id, ordinal, kind, text, support, evidence, owner_text, due_text,
+                 suggested_card_id, dedupe_key, duplicate_of)
+            VALUES
+                (v_m.project_id, v_run_id, p_meeting_id, v_ord, v_it ->> 'kind', v_it ->> 'text', v_it ->> 'support',
+                 v_it -> 'evidence', nullif(v_it ->> 'owner_text', ''), nullif(v_it ->> 'due_text', ''),
+                 v_suggested, v_dedupe, v_dup);
+            v_ord := v_ord + 1;
+        EXCEPTION WHEN SQLSTATE '23514' THEN
+            v_skipped := v_skipped + 1;
+        END;
     END LOOP;
+    IF v_skipped > 0 THEN
+        UPDATE public.intelligence_runs SET rejected_count = rejected_count + v_skipped WHERE id = v_run_id;
+    END IF;
 
     IF v_status = 'succeeded' THEN
-        UPDATE public.meetings SET status = 'ready', current_revision = v_rev WHERE id = p_meeting_id;
+        -- status only: the current revision is owned by the transcript trigger (analysing an OLDER revision must not rewind it)
+        UPDATE public.meetings SET status = CASE WHEN current_revision = v_rev THEN 'ready' ELSE status END WHERE id = p_meeting_id;
     END IF;
     RETURN v_run_id;
 END;

@@ -300,6 +300,30 @@ const NOT_A_NAME = new Set([
 
 const GENERIC_SPEAKER = /^(speaker|mluvci|spk|s|participant|ucastnik)( \d+)?$/;
 
+/**
+ * Model vidí přepis jako `[seg-6] Jana Svobodová: text` a občas do citace zkopíruje i úvodní „Jana Svobodová: ". Segment ale nese
+ * jen text, takže taková citace by se nenašla (a rozhodnutí nebo úkol by se zahodily). Odstraní se VÝHRADNĚ úvodní prefix, který
+ * DOSLOVA odpovídá jménu mluvčího TOHOTO segmentu (zobrazené jméno nebo technický štítek, přesně jak ho model viděl),
+ * následovaný dvojtečkou. Nic jiného před dvojtečkou se nemaže (cizí jméno, „SYSTEM:", libovolný text), velikost písmen se
+ * nepřehlíží a zbytek citace musí dál projít celou kontrolou (slova, pořadí, zápor). Vrací původní citaci, když nic nesedí.
+ */
+export function stripSpeakerPrefix(quote: string, seg: TranscriptSegment, transcript: Transcript): string {
+  if (!seg.speakerId) return quote;
+  const sp = transcript.speakers.find((s) => s.id === seg.speakerId);
+  if (!sp) return quote;
+  const names = [...new Set([sp.displayName, sp.label].filter((n): n is string => typeof n === 'string' && n.trim().length > 0).map((n) => n.trim()))];
+  const q = quote.trimStart();
+  for (const name of names) {
+    if (!q.startsWith(name)) continue;
+    const rest = q.slice(name.length);
+    const m = /^\s{0,2}:\s*/.exec(rest); // jen jedna dvojtečka hned za jménem (případně s mezerou před ní)
+    if (!m) continue;
+    const remainder = rest.slice(m[0].length).trim();
+    if (remainder) return remainder;
+  }
+  return quote;
+}
+
 /** Jméno mluvčího jen pokud je to skutečné jméno (ne „Mluvčí 1" / „Speaker 2"). */
 export function realSpeakerName(seg: TranscriptSegment, transcript: Transcript): string | null {
   if (!seg.speakerId) return null;
@@ -403,7 +427,10 @@ export function validateMeetingBrief(
         if (!isObj(e) || typeof e.segment_id !== 'string') continue;
         const seg = segById.get(e.segment_id);
         if (!seg) continue; // vymyšlený segment
-        const quote = typeof e.quote === 'string' && e.quote.trim() ? clipStr(e.quote, MAX_QUOTE_CHARS) : null;
+        const rawQuote = typeof e.quote === 'string' && e.quote.trim() ? clipStr(e.quote, MAX_QUOTE_CHARS) : null;
+        // Úvodní „Jméno mluvčího:" zkopírované z vykresleného přepisu se odstraní jen při přesné shodě s mluvčím segmentu;
+        // uložená citace je pak doslovný text segmentu (databáze ji kontroluje stejně).
+        const quote = rawQuote !== null ? stripSpeakerPrefix(rawQuote, seg, transcript) : null;
         // v2: stejná dvojice segment + citace se nepočítá dvakrát
         const dupKey = `${seg.id}|${quote ? fold(quote) : ''}`;
         if (seenEvidence.has(dupKey)) continue;

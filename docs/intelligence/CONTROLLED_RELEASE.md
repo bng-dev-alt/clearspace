@@ -117,6 +117,13 @@ CONFIRM_B2_HOSTED_MIGRATIONS=twjlnsxjtuntujarwner frontend/scripts/apply-b2-host
 
 > **Approval text B2:** „Schvaluji B2: na hostovaném Supabase `twjlnsxjtuntujarwner` aplikovat migrace `20261118000500_intelligence_core.sql`, `20261118000600_intelligence_quality.sql` a `20261118000700_meeting_audio.sql` (postupně, každou v jedné transakci jako `postgres`, záloha `20261118-v1-pre-intelligence-migration` s ověřeným obnovením už existuje), poté spustit `verify_hosted_intelligence.sql` a `hosted-verify.sh`. Bez migrace 0800, bez registrace tajemství pro přepis, bez změny Vercelu.“
 
+* **B2 RESULT — PASS (2026-11-18, owner approval received):** `apply-b2-hosted.sh` ran from HEAD `a00d257` (clean tree, backup and checksums verified, hosted held exactly markers 0100–0400 and none of the new objects).
+  Applied, each in one transaction, in this order: `20261118000500_intelligence_core`, `20261118000600_intelligence_quality`, `20261118000700_meeting_audio` (all three succeeded, only "does not exist, skipping" notices from the idempotent DROP IF EXISTS).
+  `verify_hosted_intelligence.sql`: all 10 GATEs PASS (re-run once more afterwards, identical); markers now 0100–0700; old-table counts unchanged (profiles=1 projects=1 columns=5 cards=0 workspace_members=1 invitations=0 ai_requests=0 users=1).
+  `hosted-verify.sh` against the live OLD build (`https://clearspace-ai.vercel.app`, `PRODUCTION_SMOKE_OK=1`): Realtime 3/3 ok, Playwright 16/16 passed, the 3 disposable accounts deleted (200), leftovers = none (projects=1 as before).
+  Not done: migration 0800, STT secret, any Vercel / Cloudflare / firewall / deployment / Git change. After the run: production is still `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`, live `POST /api/ai/chat` = 403, `origin/main` = `fe3b2e9`.
+  Note: `hosted-verify.sh` needs a gitignored `frontend/.env.local` with only `NEXT_PUBLIC_SUPABASE_URL=https://twjlnsxjtuntujarwner.supabase.co` and the project's anon key (no Gemini key). `V1/frontend/.env.local` points at a different Supabase project (`bjycwq…`) and must not be reused.
+
 ## B3a — staged deployment (no promote; needs approval; after B2 gates passed)
 
 Same procedure as A5 (`docs/APPROVAL_PACKAGE_A4_A6.md` §A5), with these specifics:

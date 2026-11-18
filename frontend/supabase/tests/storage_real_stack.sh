@@ -93,7 +93,7 @@ expect "member can create a signed URL" 200 "$(sign "$TA")"
 SURL=$(python3 -c "import json;d=json.load(open('$TMP/sign'));print(d.get('signedURL') or d.get('signedUrl') or '')")
 case "$SURL" in /*) SURL="$API_URL/storage/v1${SURL}";; esac
 expect "signed URL serves the file without credentials" 200 "$(get "$SURL")"
-expect "tampered signed URL is refused" "400|401|403|404" "$(get "${SURL%?}X")"
+expect "tampered signed URL is refused" "400|401|403|404" "$(get "$(python3 -c 'import sys;u=sys.argv[1];i=len(u)-12;print(u[:i]+("A" if u[i]!="A" else "B")+u[i+1:])' "$SURL")")"
 expect "non-member cannot create a signed URL" "400|401|403|404" "$(sign "$TB")"
 
 echo "== delete"

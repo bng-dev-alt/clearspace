@@ -59,7 +59,7 @@ AURL=$(python3 -c "import json,sys;d=json.loads(sys.argv[1]);print(d.get('signed
 case "$AURL" in /*) AURL="$API_URL/storage/v1${AURL}";; esac
 expect "signed URL (2 h) serves the file without credentials" 200 "$(get "$AURL")"
 expect "signed URL answers a Range request (server-side content sniffing)" "200|206" "$(get -H 'Range: bytes=0-31' "$AURL")"
-expect "tampered signed URL is refused" "400|401|403|404" "$(get "${AURL%?}X")"
+expect "tampered signed URL is refused" "400|401|403|404" "$(get "$(python3 -c 'import sys;u=sys.argv[1];i=len(u)-12;print(u[:i]+("A" if u[i]!="A" else "B")+u[i+1:])' "$AURL")")"
 # SQLSTATE 55000 reaches the client as HTTP 500 through PostgREST; what matters is that the row is NOT changed.
 expect "mark_audio_deleted is REFUSED while the object exists" "400|409|422|500" "$(rpc "$TA" mark_audio_deleted "$(jb p_meeting=$MID)")"
 STILL=$(curl -s "$API_URL/rest/v1/meetings?id=eq.$MID&select=audio_path,audio_deleted_at" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA")
@@ -68,6 +68,54 @@ curl -s -X DELETE "$API_URL/storage/v1/object/meeting-audio/$AP" -H "apikey: $AN
 expect "the object survives a non-member delete" 200 "$(get -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" "$API_URL/storage/v1/object/authenticated/meeting-audio/$AP")"
 expect "member deletes the audio" 200 "$(curl -s -X DELETE "$API_URL/storage/v1/object/meeting-audio/$AP" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" -o /dev/null -w '%{http_code}')"
 expect "now mark_audio_deleted succeeds" "200|204" "$(rpc "$TA" mark_audio_deleted "$(jb p_meeting=$MID)")"
+
+echo "== trusted STT RPCs over the real PostgREST (original audit probes: a member JWT alone must NOT be enough)"
+SRV="synthetic-server-secret-$(python3 -c 'import uuid;print(uuid.uuid4().hex)')"
+MEET2=$(curl -s -X POST "$API_URL/rest/v1/meetings" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d "$(jb project_id=$P title=Trusted source_kind=audio)")
+MT=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])[0]['id'])" "$MEET2")
+rpc "$TA" record_audio_consent "$(jb p_meeting=$MT)" >/dev/null
+TP="$P/$MT/$(python3 -c 'import uuid;print(uuid.uuid4())').mp3"
+expect "member uploads audio for the trusted-flow meeting" 200 "$(aupload "$TA" "$TP" "$TMP/ok.mp3" audio/mpeg)"
+expect "member attaches it" "200|204" "$(rpc "$TA" attach_meeting_audio "$(jb p_meeting=$MT p_path=$TP p_bytes=$SZ p_mime=audio/mpeg p_client_ms=1000)")"
+BIG='{"p_meeting":"'$MT'","p_est_audio_ms":1,"p_user_daily_ms":999999999,"p_global_daily_ms":999999999}'
+expect "PROBE: a legitimate member calling stt_reserve WITHOUT the server secret does not even resolve (no such 4-argument function)" "404" "$(rpc "$TA" stt_reserve "$BIG")"
+expect "PROBE: ... nor with a FORGED secret and forged budgets (42501)" "401|403" "$(rpc "$TA" stt_reserve "$(jb p_server_secret=$SRV p_meeting=$MT p_est_audio_ms=1 p_user_daily_ms=999999999 p_global_daily_ms=999999999)")"
+expect "PROBE: stt_complete with a forged transcript is refused" "401|403" "$(rpc "$TA" stt_complete "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=x p_model=m p_audio_ms=1 'p_transcript={"revision":"a","speakers":[],"segments":[{"id":"seg-0","speaker":"S1","startMs":0,"endMs":1,"text":"FORGED"}],"coverage":{},"char_count":6}')")"
+expect "PROBE: stt_fail (booking / releasing budget) is refused" "401|403" "$(rpc "$TA" stt_fail "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=null p_error_type=x p_billing=none)")"
+expect "PROBE: stt_attach_job / stt_mark_unknown / stt_resolve_unknown / stt_cleanup_result are refused" "401|403" "$(rpc "$TA" stt_attach_job "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=j p_model=m)")"
+expect "PROBE: stt_resolve_unknown is refused" "401|403" "$(rpc "$TA" stt_resolve_unknown "$(jb p_server_secret=$SRV p_meeting=$MT p_resolution=absent)")"
+expect "PROBE: server_trust is invisible to a member" "401|403" "$(get -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" "$API_URL/rest/v1/server_trust?select=*")"
+expect "PROBE: a member cannot forge the ledger (ai_requests insert)" "401|403" "$(post "$TA" ai_requests "$(jb feature=meeting-transcribe status=succeeded)")"
+expect "PROBE: a member cannot write stt_jobs" "401|403" "$(post "$TA" stt_jobs "$(jb meeting_id=$MT project_id=$P attempt=1)")"
+expect "PROBE: a member cannot flip the STT state of the meeting directly" "401|403" "$(curl -s -X PATCH "$API_URL/rest/v1/meetings?id=eq.$MT" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" -H 'Content-Type: application/json' -d '{"stt_state":"completed"}' -o "$TMP/last" -w '%{http_code}')"
+expect "PROBE: a member cannot insert a provider transcript revision (source soniox) directly" "401|403|400" "$(post "$TA" meeting_transcripts "$(jb meeting_id=$MT project_id=$P revision=$(python3 -c 'print("c"*64)') source=soniox 'speakers=[]' 'segments=[]' char_count=1)")"
+expect "PROBE: B (another project) cannot read the orphan queue" "200" "$(OUT="$TMP/orph" get -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TB" "$API_URL/rest/v1/meeting_audio_orphans?select=path")"
+python3 -c "import json;sys=__import__('sys');sys.exit(0 if json.load(open('$TMP/orph'))==[] else 1)" && ok "  ...and it is empty for B" || bad "B can see orphan paths"
+
+if [ -n "${DB_CONTAINER:-}" ]; then
+  HASH=$(python3 -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$SRV")
+  docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('stt', '$HASH') ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256" >/dev/null
+  ok "the OWNER registered the hash of the server secret (only the hash is in the database)"
+  expect "the server (secret + the member's JWT) reserves with ITS budgets" 200 "$(rpc "$TA" stt_reserve "$(jb p_server_secret=$SRV p_meeting=$MT p_est_audio_ms=600000 p_user_daily_ms=7200000 p_global_daily_ms=36000000)")"
+  grep -q '"outcome":"started"' "$TMP/rpc" && ok "  ...outcome started, client_reference present: $(grep -c client_reference "$TMP/rpc")" || bad "unexpected reserve answer: $(head -c 200 "$TMP/rpc")"
+  expect "a second reserve is idempotent (in_progress, nothing double-booked)" 200 "$(rpc "$TA" stt_reserve "$(jb p_server_secret=$SRV p_meeting=$MT p_est_audio_ms=600000 p_user_daily_ms=7200000 p_global_daily_ms=36000000)")"
+  grep -q '"outcome":"in_progress"' "$TMP/rpc" && ok "  ...in_progress" || bad "expected in_progress: $(head -c 200 "$TMP/rpc")"
+  expect "the WRONG secret is refused even for the legitimate member" "401|403" "$(rpc "$TA" stt_attach_job "$(jb p_server_secret=wrong-secret-wrong-secret-wrong-secret p_meeting=$MT p_job_id=j p_model=m)")"
+  expect "the server attaches the provider job id" 200 "$(rpc "$TA" stt_attach_job "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=tr-real-1 p_model=stt-async-v6)")"
+  expect "B (not a member) cannot use the secret on A's meeting" "401|403" "$(rpc "$TB" stt_fail "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=tr-real-1 p_error_type=cancelled p_billing=estimated)")"
+  expect "cancel keeps the cost: stt_fail with billing=estimated" "200|204" "$(rpc "$TA" stt_fail "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=tr-real-1 p_error_type=cancelled p_billing=estimated)")"
+  LEDGER=$(docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" psql -h localhost -U supabase_admin -d postgres -At -c "select status||':'||billing_state||':'||audio_ms from public.ai_requests where feature='meeting-transcribe' order by created_at desc limit 1")
+  [ "$LEDGER" = "failed:estimated:600000" ] && ok "the cancelled estimate stays in the ledger ($LEDGER)" || bad "ledger after cancel: $LEDGER"
+  JOB=$(docker exec -i -e PGPASSWORD=postgres "$DB_CONTAINER" psql -h localhost -U supabase_admin -d postgres -At -c "select state||':'||cleanup_state||':'||provider_job_id from public.stt_jobs order by created_at desc limit 1")
+  [ "$JOB" = "cancelled:pending:tr-real-1" ] && ok "the provider job id is kept and queued for deletion ($JOB)" || bad "job row after cancel: $JOB"
+  expect "a retry is a NEW attempt and the old job id survives" 200 "$(rpc "$TA" stt_reserve "$(jb p_server_secret=$SRV p_meeting=$MT p_est_audio_ms=600000 p_user_daily_ms=7200000 p_global_daily_ms=36000000)")"
+  grep -q '"attempt":2' "$TMP/rpc" && ok "  ...attempt 2" || bad "expected attempt 2: $(head -c 200 "$TMP/rpc")"
+  expect "the failed second attempt is booked as UNCERTAIN (network_error: the provider may have created it)" "200|204" "$(rpc "$TA" stt_fail "$(jb p_server_secret=$SRV p_meeting=$MT p_job_id=null p_error_type=network_error p_billing=uncertain)")"
+  expect "the budget now counts the uncertain attempt" 200 "$(rpc "$TA" stt_reserve "$(jb p_server_secret=$SRV p_meeting=$MT p_est_audio_ms=600000 p_user_daily_ms=1000000 p_global_daily_ms=36000000)")"
+  grep -q '"outcome":"budget_exceeded"' "$TMP/rpc" && ok "  ...budget_exceeded (uncertain / cancelled estimates are NOT free)" || bad "expected budget_exceeded: $(head -c 200 "$TMP/rpc")"
+else
+  echo "skip - DB_CONTAINER not set: the secret-holding half of the trusted-RPC checks needs the owner step (register the hash)"
+fi
 
 
 [ $fail = 0 ] && echo "ALL MEETING-AUDIO STORAGE CHECKS PASSED" || { echo "MEETING-AUDIO STORAGE CHECKS FAILED"; exit 1; }

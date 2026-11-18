@@ -13,7 +13,7 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const AUDIO_ENABLED = process.env.NEXT_PUBLIC_ENABLE_MEETING_AUDIO === '1';
 
 export const CONSENT_TEXT =
-  'Všichni účastníci byli informováni a souhlasí s tím, že záznam bude zpracován službami Soniox (přepis) a Google (analýza textu).';
+  'Potvrzuji, že mám právo tento záznam zpracovat a že všichni účastníci byli informováni o jeho zpracování (zvuk přepíše služba Soniox, text pak analyzuje Google Gemini). Je to moje prohlášení; samo o sobě nezaručuje splnění právních povinností (souhlasy, smlouvy o zpracování, oblast zpracování).';
 
 /** Délka z metadat souboru (jen pro odhad rozpočtu; server ji nepovažuje za důvěryhodnou). Selhání = null. */
 function readDuration(file: File): Promise<number | null> {
@@ -138,7 +138,7 @@ export default function NewMeetingForm({ projectId, onCreated }: Props) {
           <label>
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="audio-consent" /> {CONSENT_TEXT}
           </label>
-          <span className="mi-muted">Zvuk se uloží do soukromého úložiště a k přepisu se odešle až po vašem kliknutí na „Přepsat zvuk&ldquo;. Po přepisu se po 7 dnech smaže.</span>
+          <span className="mi-muted">Zvuk se uloží do soukromého úložiště a k přepisu se odešle až po vašem kliknutí na „Přepsat zvuk&ldquo;. Má termín uchování (výchozí 7 dní od nahrání). Smaže se při prvním otevření porad po termínu, nebo ručně kdykoli; aplikace nemá plánovač, takže bez návštěvy se sám nesmaže. Poskytovateli se neposílají jména členů ani název projektu.</span>
         </div>
       ) : (
       <div className="mi-field">

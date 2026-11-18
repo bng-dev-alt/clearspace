@@ -101,12 +101,21 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
 
     const path = url.pathname.slice(3); // "/transcriptions..."
 
+    if (path === '/transcriptions' && req.method === 'GET') {
+      if (state.mode === 'list_500') return err(res, 500, 'internal_error');
+      const limit = Math.min(Number(url.searchParams.get('limit') || 100), 100);
+      const start = Number(url.searchParams.get('cursor') || 0);
+      const all = [...state.jobs.entries()].filter(([, j]) => !j.deleted).map(([id, j]) => ({ id, status: 'queued', model: j.body.model, client_reference_id: j.body.client_reference_id ?? null }));
+      const slice = all.slice(start, start + limit);
+      return json(res, 200, { transcriptions: slice, next_page_cursor: start + limit < all.length ? String(start + limit) : null });
+    }
     if (path === '/transcriptions' && req.method === 'POST') {
       if (state.mode === 'create_400') return err(res, 400, 'invalid_request');
       if (state.mode === 'create_402') return err(res, 402, 'organization_balance_exhausted');
       if (state.mode === 'create_429') return err(res, 429, 'limit_exceeded');
       if (state.mode === 'create_500') return err(res, 500, 'internal_error');
       if (state.mode === 'create_503') return err(res, 503, 'service_unavailable');
+      if (state.mode === 'create_hang') { await new Promise((r) => setTimeout(r, 5000)); return err(res, 504, 'timeout'); } // nothing is created
       if (!body || typeof body.model !== 'string' || (!body.audio_url && !body.file_id) || (body.audio_url && body.file_id)) return err(res, 400, 'invalid_request');
       const id = `tr-${++state.n}`;
       const job = { polls: 0, body, deleted: false, audioStatus: null };
@@ -120,6 +129,8 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
           state.audioFetches.push({ status: r.status, bytes: buf.length, head: buf.subarray(0, 4).toString('hex') });
         } catch { job.audioStatus = 0; state.audioFetches.push({ status: 0, bytes: 0, head: '' }); }
       }
+      if (state.mode === 'create_lost_response') { req.socket.destroy(); return; } // the job EXISTS, the client never sees the answer
+      if (state.mode === 'create_500_created') return err(res, 500, 'internal_error'); // the job EXISTS, the answer is an error
       return json(res, 201, { id, status: 'queued', model: body.model, created_at: new Date().toISOString(), audio_url: body.audio_url ?? null, file_id: body.file_id ?? null, client_reference_id: body.client_reference_id ?? null, error_type: null, error_message: null });
     }
 

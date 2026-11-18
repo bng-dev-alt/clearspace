@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { AUDIO_ENABLED } from './NewMeetingForm';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CalendarClock } from 'lucide-react';
@@ -33,7 +34,9 @@ export default function MeetingList({ projectId }: { projectId: string }) {
     // Načtení dat z externího systému (Supabase); setState proběhne až po await.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+    // Úklid zvuku po termínu a osiřelých souborů (aplikace nemá plánovač): jen s povoleným přepisem, best-effort
+    if (AUDIO_ENABLED) void meetingService.sweepAudio(projectId);
+  }, [load, projectId]);
 
   return (
     <section className="mi-page" aria-labelledby="mi-heading" data-testid="meetings-page">

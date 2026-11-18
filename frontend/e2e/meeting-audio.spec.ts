@@ -1,16 +1,19 @@
+import { createHash } from 'node:crypto';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 /**
  * Meeting audio end to end (R5) against a THROWAWAY local Supabase stack (real GoTrue, PostgREST, RLS, Storage) with a LOCAL FAKE
  * Soniox (e2e/support/fake-soniox.mjs) and a LOCAL FAKE Gemini. No real provider call, no keys, no credits.
- * App must run with STT_ENABLED=1, NEXT_PUBLIC_ENABLE_MEETING_AUDIO=1, SONIOX_API_KEY=fake-soniox-key, SONIOX_BASE_URL=<fake>/v1.
+ * App must run with STT_ENABLED=1, NEXT_PUBLIC_ENABLE_MEETING_AUDIO=1, SONIOX_API_KEY=fake-soniox-key, SONIOX_BASE_URL=<fake>/v1 and
+ * STT_SERVER_SECRET=<the same value as E2E_STT_SERVER_SECRET>; this spec registers only its SHA-256 in server_trust (the owner step).
  * Skipped unless E2E_SUPABASE_URL and E2E_FAKE_SONIOX_URL are set. See docs/intelligence/RELEASE_PLAN_R1_R7.md for the recipe.
  */
 const SB = process.env.E2E_SUPABASE_URL;
 const ANON = process.env.E2E_SUPABASE_ANON_KEY ?? '';
 const SERVICE = process.env.E2E_SUPABASE_SERVICE_KEY ?? '';
 const SONIOX = process.env.E2E_FAKE_SONIOX_URL ?? '';
-test.skip(!SB || !SONIOX, 'needs E2E_SUPABASE_URL and E2E_FAKE_SONIOX_URL (isolated local stack + fake Soniox)');
+const SERVER_SECRET = process.env.E2E_STT_SERVER_SECRET ?? '';
+test.skip(!SB || !SONIOX || SERVER_SECRET.length < 32, 'needs E2E_SUPABASE_URL, E2E_FAKE_SONIOX_URL and E2E_STT_SERVER_SECRET (>= 32 chars; isolated local stack + fake Soniox)');
 test.describe.configure({ mode: 'serial' });
 
 const run = Date.now().toString(36);
@@ -80,6 +83,9 @@ test.beforeAll(async ({ request }) => {
   const wm = await sb(request, '/rest/v1/workspace_members', { method: 'POST', token: owner.token, headers: { Prefer: 'return=minimal' }, data: { id: `wm-honza-${run}`, owner_id: owner.id, full_name: 'Honza Novák', initials: 'HN' } });
   expect(wm.status, JSON.stringify(wm.json)).toBe(201);
   await sb(request, '/rest/v1/project_members', { method: 'POST', token: owner.token, headers: { Prefer: 'return=minimal' }, data: { project_id: PROJECT, member_id: `wm-honza-${run}` } });
+  // The OWNER step of the real deployment: register the hash of the server secret (service role = the Supabase dashboard / SQL editor).
+  const reg = await sb(request, '/rest/v1/server_trust', { method: 'POST', token: SERVICE, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, data: { purpose: 'stt', secret_sha256: createHash('sha256').update(SERVER_SECRET).digest('hex') } });
+  expect(reg.status, JSON.stringify(reg.json)).toBeLessThan(300);
   await control(request, { reset: true, mode: 'ok', pollsUntilDone: 1, durationMs: 12_000, fetchAudio: true });
 });
 
@@ -122,9 +128,11 @@ test('transcription: start -> provider fetches the signed URL -> sync stores the
   await expect(page.getByTestId('stt-state')).toHaveText(/Přepisuji|Odesílám/, { timeout: 15_000 });
   const s1 = await stats(request);
   expect(s1.jobs).toHaveLength(1);
-  expect(s1.jobs[0].body).toMatchObject({ model: 'stt-async-v6', language_hints: ['cs', 'en'], enable_speaker_diarization: true, client_reference_id: meetingId });
+  expect(s1.jobs[0].body).toMatchObject({ model: 'stt-async-v6', language_hints: ['cs', 'en'], enable_speaker_diarization: true, client_reference_id: `${meetingId}:1` });
   expect(String(s1.jobs[0].body.audio_url)).toContain('/storage/v1/object/sign/meeting-audio/'); // a signed URL, not the file bytes
-  expect(JSON.stringify(s1.jobs[0].body.context)).toContain('Honza Novák'); // project members as spelling hints
+  // PRIVACY: no member name (here the project has member "Honza Novák"), no meeting title, no project name goes to the provider
+  expect(s1.jobs[0].body.context).toEqual({ general: [{ key: 'domain', value: 'Project meeting' }] });
+  expect(JSON.stringify(s1.jobs[0].body)).not.toMatch(/Honza|Novák|Týdenní|Zvuk E2E/);
   expect(s1.audioFetches[0].status).toBe(200); expect(s1.audioFetches[0].head.startsWith('494433')).toBe(true); // the provider could read the audio through the signed URL
 
   await checkUntil(page, /Přepis hotov/);
@@ -223,6 +231,66 @@ test('deleting a meeting removes its audio from Storage first (no orphan file)',
   await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings$`), { timeout: 20_000 });
   expect(await listObjects(request, id)).toHaveLength(0);
   expect((await rest(request, owner.token, `meetings?id=eq.${id}&select=id`)).json).toEqual([]);
+});
+
+test('AUDIT PROBES: a legitimate member calling the trusted STT RPCs with their own JWT is refused (no budgets, no forged transcript)', async ({ request }) => {
+  const call = (fn: string, data: Record<string, unknown>) => sb(request, `/rest/v1/rpc/${fn}`, { method: 'POST', token: owner.token, data });
+  expect((await call('stt_reserve', { p_meeting: meetingId, p_est_audio_ms: 1, p_user_daily_ms: 999999999, p_global_daily_ms: 999999999 })).status).toBe(404); // the old, secret-less signature no longer exists
+  const forged = 'x'.repeat(40);
+  expect((await call('stt_reserve', { p_server_secret: forged, p_meeting: meetingId, p_est_audio_ms: 1, p_user_daily_ms: 999999999, p_global_daily_ms: 999999999 })).status).toBe(403);
+  expect((await call('stt_complete', { p_server_secret: forged, p_meeting: meetingId, p_job_id: 'x', p_model: 'm', p_audio_ms: 1, p_transcript: { revision: 'a', speakers: [], segments: [], coverage: {}, char_count: 1 } })).status).toBe(403);
+  expect((await call('stt_fail', { p_server_secret: forged, p_meeting: meetingId, p_job_id: null, p_error_type: 'x', p_billing: 'none' })).status).toBe(403);
+  expect((await sb(request, '/rest/v1/ai_requests', { method: 'POST', token: owner.token, data: { feature: 'meeting-transcribe', status: 'succeeded' } })).status).toBe(403);
+  expect((await rest(request, owner.token, 'server_trust?select=*')).status).toBe(403);
+});
+
+test('an UNCERTAIN provider answer is never re-sent: the page says "unknown", reconciliation ADOPTS the existing job, exactly ONE paid request', async ({ page, request }) => {
+  await control(request, { reset: true, mode: 'create_lost_response', pollsUntilDone: 1, fetchAudio: true });
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'Ztracená odpověď');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  await page.getByTestId('stt-start').click();
+  await expect(page.getByTestId('stt-state')).toHaveText(/Ověřuji/, { timeout: 15_000 });
+  await expect(page.getByTestId('stt-unknown')).toContainText('neví, jestli přepis vznikl');
+  const s1 = await stats(request);
+  expect(s1.calls.filter((c) => c.method === 'POST' && c.path === '/v1/transcriptions')).toHaveLength(1);
+  expect(s1.jobs).toHaveLength(1); // the job EXISTS at the provider although the answer was lost
+  const led = (await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=status,billing_state,audio_ms')).json[0];
+  expect(led.billing_state).toBe('uncertain'); // the estimate stays in the budget while the outcome is unknown
+  await control(request, { mode: 'ok' });
+  await checkUntil(page, /Přepis hotov/);
+  const s2 = await stats(request);
+  expect(s2.calls.filter((c) => c.method === 'POST' && c.path === '/v1/transcriptions')).toHaveLength(1); // NEVER a second paid request
+  expect((await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_state,stt_attempts,stt_job_id`)).json[0]).toMatchObject({ stt_state: 'completed', stt_attempts: 1, stt_job_id: 'tr-1' });
+  const done = (await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=status,billing_state,audio_ms')).json[0];
+  expect(done).toMatchObject({ status: 'succeeded', billing_state: 'actual', audio_ms: 12_000 });
+});
+
+test('cancel keeps the cost and the provider job id; the provider copy is deleted later and the page tells the truth meanwhile', async ({ page, request }) => {
+  await control(request, { reset: true, mode: 'ok', pollsUntilDone: 99, fetchAudio: true });
+  await loginUi(page, ownerEmail);
+  await createAudioMeeting(page, 'Zrušená porada');
+  await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
+  const id = page.url().split('/').pop()!;
+  await page.getByTestId('stt-start').click();
+  await expect(page.getByTestId('stt-state')).toHaveText(/Přepisuji/, { timeout: 15_000 });
+  await page.getByTestId('stt-cancel').click();
+  await expect(page.getByTestId('stt-state')).toHaveText(/Přepis selhal/, { timeout: 15_000 });
+  const led = (await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&order=created_at.desc&limit=1&select=status,billing_state,audio_ms')).json[0];
+  expect(led).toMatchObject({ status: 'failed', billing_state: 'estimated' });
+  expect(led.audio_ms).toBeGreaterThan(0); // the cancelled estimate is NOT released (the provider may still bill it)
+  const m = (await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_state,stt_job_id,stt_cleanup_pending,audio_delete_after`)).json[0];
+  expect(m).toMatchObject({ stt_state: 'failed', stt_job_id: 'tr-1', stt_cleanup_pending: true });
+  expect(m.audio_delete_after).toBeTruthy(); // a failed / cancelled meeting still has a deletion deadline
+  expect((await stats(request)).jobs[0].deleted).toBe(false); // a still-running job cannot be deleted yet
+  await expect(page.getByTestId('stt-cleanup')).toBeVisible(); // honest: the provider copy still exists
+  await control(request, { pollsUntilDone: -1 }); // the provider no longer runs it
+  // the failed deletion was rescheduled with a back-off; make it due now (the owner would simply wait)
+  expect((await sb(request, `/rest/v1/stt_jobs?meeting_id=eq.${id}`, { method: 'PATCH', token: SERVICE, headers: { Prefer: 'return=minimal' }, data: { cleanup_due_at: new Date(Date.now() - 60_000).toISOString() } })).status).toBeLessThan(300);
+  await page.reload();
+  await expect.poll(async () => (await stats(request)).jobs[0].deleted, { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_cleanup_pending`)).json[0].stt_cleanup_pending, { timeout: 20_000 }).toBe(false);
 });
 
 test('the provider key never reaches the browser: the page bundle and responses contain no key', async ({ page }) => {

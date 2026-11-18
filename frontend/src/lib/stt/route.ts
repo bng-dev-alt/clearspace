@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AiGatewayError } from '../ai/errors';
 import { authenticate, errorResponse, readJsonBody, requireProjectId } from '../ai/gateway';
 import { SonioxClient, SonioxError, sonioxConfigFromEnv } from './soniox';
-import { sttEnabled, sttLimitsFromEnv, toGatewayError, type SttLimits } from './pipeline';
+import { sttEnabled, sttLimitsFromEnv, sttServerSecret, toGatewayError, type SttLimits } from './pipeline';
 
 /**
  * Společný obal STT rout (R5): feature flag -> JSON tělo -> autentizace (JWT, RLS klient) -> projekt -> handler.
@@ -19,12 +19,15 @@ export interface SttRouteCtx<I> {
   meetingId: string;
   input: I;
   limits: SttLimits;
+  /** Serverové tajemství pro důvěryhodná RPC (z prostředí, nikdy z požadavku). */
+  secret: string;
 }
 
 export async function runStt<I = Record<string, never>>(
   req: NextRequest,
   handler: (ctx: SttRouteCtx<I>) => Promise<Record<string, unknown>>,
-  parse: (body: Record<string, unknown>) => I = () => ({}) as I
+  parse: (body: Record<string, unknown>) => I = () => ({}) as I,
+  opts: { needsMeeting: boolean } = { needsMeeting: true }
 ): Promise<NextResponse> {
   try {
     if (!sttEnabled()) throw new AiGatewayError('stt_disabled', 'Přepis zvuku je v této instalaci zatím vypnutý.');
@@ -32,10 +35,11 @@ export async function runStt<I = Record<string, never>>(
     const auth = await authenticate(req);
     const projectId = requireProjectId(body);
     const meetingId = typeof body.meetingId === 'string' && UUID.test(body.meetingId) ? body.meetingId.toLowerCase() : null;
-    if (!meetingId) throw new AiGatewayError('bad_request', 'Neplatný identifikátor porady.');
+    if (opts.needsMeeting && !meetingId) throw new AiGatewayError('bad_request', 'Neplatný identifikátor porady.');
     const input = parse(body);
+    const secret = sttServerSecret();
     const soniox = new SonioxClient(sonioxConfigFromEnv());
-    const out = await handler({ db: auth.db, soniox, projectId, meetingId, input, limits: sttLimitsFromEnv() });
+    const out = await handler({ db: auth.db, soniox, projectId, meetingId: meetingId ?? '', input, limits: sttLimitsFromEnv(), secret });
     return NextResponse.json(out, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     if (err instanceof AiGatewayError) return errorResponse(err);

@@ -9,6 +9,7 @@ import './meetings.css';
 export const STT_STATE_LABEL: Record<SttState, string> = {
   none: 'Zvuk nahrán, přepis nespuštěn',
   submitting: 'Odesílám k přepisu…',
+  unknown: 'Ověřuji, zda přepis vznikl…',
   transcribing: 'Přepisuji…',
   completed: 'Přepis hotov',
   failed: 'Přepis selhal',
@@ -52,7 +53,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
   const [error, setError] = useState<string | null>(null);
   const [stuck, setStuck] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const inFlight = a.sttState === 'submitting' || a.sttState === 'transcribing';
+  const inFlight = a.sttState === 'submitting' || a.sttState === 'unknown' || a.sttState === 'transcribing';
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -80,7 +81,8 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
   // Dotazování jen dokud je stránka otevřená a úloha běží; po dokončení se ještě jednou dokončí úklid / retence.
   // "Dnes" se bere při vykreslení stránky (useState-inicializátor je čistý pro React); stačí hrubá přesnost.
   const [now] = useState(() => Date.now());
-  const needsSettle = a.sttState === 'completed' && (a.cleanupPending || (!!a.deleteAfter && !a.deletedAt && Date.parse(a.deleteAfter) <= now));
+  // Platí i pro selhané / zrušené porady: termín smazání zvuku a úklid u poskytovatele se na ně vztahují stejně.
+  const needsSettle = !inFlight && (a.cleanupPending || (!!a.deleteAfter && !a.deletedAt && Date.parse(a.deleteAfter) <= now));
   useEffect(() => {
     if (!inFlight && !needsSettle) return;
     let stop = false;
@@ -143,6 +145,15 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
           {STT_ERROR_LABEL[a.errorType ?? ''] ?? 'Přepis se nezdařil.'} {a.attempts >= MAX_ATTEMPTS ? 'Počet pokusů je vyčerpán: nahrajte zvuk znovu.' : `Pokus ${a.attempts} z ${MAX_ATTEMPTS}.`}
         </p>
       )}
+      {a.sttState === 'unknown' && (
+        <p role="status" className="mi-muted" data-testid="stt-unknown">
+          Odpověď poskytovatele nepřišla, takže se neví, jestli přepis vznikl. Nic se neodesílá znovu automaticky (hrozila by dvojí platba): stav se
+          ověřuje u poskytovatele. Když to nevyjde, přepis můžete ukončit; odhadovaná cena zůstane započtena do limitu.
+        </p>
+      )}
+      {a.cleanupPending && (
+        <p role="status" className="mi-muted" data-testid="stt-cleanup">Úklid dat u poskytovatele přepisu ještě neproběhl; zopakuje se při dalším otevření porady.</p>
+      )}
       {stuck && inFlight && (
         <p role="status" className="mi-muted" data-testid="stt-stuck">Přepis trvá nezvykle dlouho. Můžete to zkontrolovat znovu, nebo přepis zrušit.</p>
       )}
@@ -162,7 +173,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         {inFlight && (
           <>
             <Button onClick={() => void sync()} disabled={busy} data-testid="stt-check">Zkontrolovat stav</Button>
-            <Button variant="ghost" onClick={() => act(async () => { await meetingService.syncTranscription(projectId, meeting.id, true); }, 'Přepis zrušen.')} disabled={busy} data-testid="stt-cancel">Zrušit přepis</Button>
+            <Button variant="ghost" onClick={() => act(async () => { await meetingService.syncTranscription(projectId, meeting.id, true); }, 'Přepis zrušen.')} disabled={busy} data-testid="stt-cancel">{a.sttState === 'unknown' ? 'Ukončit (cena zůstane započtena)' : 'Zrušit přepis'}</Button>
           </>
         )}
         {a.path && !a.deletedAt && !inFlight && (

@@ -14,9 +14,10 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => {
     h.created += 1;
     const builder = (table: string) => {
-      const res = () => (table === 'meetings' ? { data: h.visible ? h.meeting : null, error: null } : table === 'projects' ? { data: { name: 'P' }, error: null } : { data: [], error: null });
+      let single = false;
+      const res = () => (table === 'meetings' ? { data: single ? (h.visible ? h.meeting : null) : [], error: null } : table === 'projects' ? { data: { name: 'P' }, error: null } : { data: [], error: null });
       const b: Record<string, unknown> = {};
-      b.select = () => b; b.eq = () => b; b.maybeSingle = () => Promise.resolve(res());
+      b.select = () => b; b.eq = () => b; b.lte = () => b; b.not = () => b; b.limit = () => b; b.delete = () => b; b.maybeSingle = () => { single = true; return Promise.resolve(res()); };
       b.then = (r: (v: unknown) => unknown) => Promise.resolve(res()).then(r);
       return b;
     };
@@ -25,10 +26,10 @@ vi.mock('@supabase/supabase-js', () => ({
       from: builder,
       rpc: async (name: string, args: Record<string, unknown>) => {
         h.rpc.push({ name, args });
-        if (name === 'stt_reserve') return { data: [{ outcome: 'started', request_id: 'r', attempt: 1, audio_path: 'pA/m/x.mp3', audio_mime: 'audio/mpeg', project_id: 'pA' }], error: null };
+        if (name === 'stt_reserve') return { data: [{ outcome: 'started', request_id: 'r', attempt: 1, audio_path: 'pA/m/x.mp3', audio_mime: 'audio/mpeg', project_id: 'pA', client_reference: 'ref-1' }], error: null };
         return { data: null, error: null };
       },
-      storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: h.signedUrl }, error: null }), remove: async () => ({ data: [], error: null }) }) },
+      storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: h.signedUrl }, error: null }), remove: async () => ({ data: [], error: null }), list: async () => ({ data: [], error: null }) }) },
     };
   },
 }));
@@ -36,11 +37,13 @@ vi.mock('@supabase/supabase-js', () => ({
 import { POST as transcribe } from '../../app/api/ai/meetings/transcribe/route';
 import { POST as sync } from '../../app/api/ai/meetings/sync/route';
 import { POST as purge } from '../../app/api/ai/meetings/purge/route';
+import { POST as sweep } from '../../app/api/ai/meetings/sweep/route';
 
 let fake: FakeSoniox;
 const MID = '22222222-2222-4222-8222-222222222222';
 const GOOD = 'g'.repeat(40);
 const SECRET = 'sk-soniox-SECRET-123456';
+const SERVER_SECRET = 'srv-trust-SECRET-0123456789-abcdefghij';
 const post = (route: (r: NextRequest) => Promise<Response>, body: unknown, opts: { token?: string | null; ct?: string } = {}) =>
   route(new NextRequest('http://localhost/api/ai/meetings/x', { method: 'POST', headers: { 'content-type': opts.ct ?? 'application/json', ...(opts.token === null ? {} : { authorization: `Bearer ${opts.token ?? GOOD}` }) }, body: JSON.stringify(body) }));
 const meeting = () => ({ id: MID, project_id: 'pA', title: 'P', source_kind: 'audio', language_hint: null, audio_path: 'pA/m/x.mp3', audio_bytes: 1000, audio_client_ms: 5000, audio_deleted_at: null, audio_delete_after: null, stt_state: 'none', stt_job_id: null, stt_cleanup_pending: false, stt_submitted_at: null, stt_attempts: 0, stt_error_type: null, speaker_names: {} });
@@ -54,14 +57,14 @@ describe('STT routes', () => {
     h.created = 0; h.visible = true; h.meeting = meeting(); h.rpc.length = 0; h.signedUrl = `${fake.origin}/__audio/ok.mp3?t=1`;
     logs.length = 0;
     vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { logs.push(a); });
-    process.env = { ...env, STT_ENABLED: '1', SONIOX_API_KEY: SECRET, SONIOX_BASE_URL: fake.url, NEXT_PUBLIC_SUPABASE_URL: 'http://sb.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' };
+    process.env = { ...env, STT_ENABLED: '1', STT_SERVER_SECRET: SERVER_SECRET, SONIOX_API_KEY: SECRET, SONIOX_BASE_URL: fake.url, NEXT_PUBLIC_SUPABASE_URL: 'http://sb.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' };
     delete process.env.NEXT_PUBLIC_FORCE_DEMO;
   });
   afterEach(() => { process.env = env; vi.restoreAllMocks(); });
 
   test('feature flag: without STT_ENABLED=1 every route answers 503 stt_disabled BEFORE auth or any database access', async () => {
     delete process.env.STT_ENABLED;
-    for (const route of [transcribe, sync, purge]) {
+    for (const route of [transcribe, sync, purge, sweep]) {
       const r = await post(route, { projectId: 'pA', meetingId: MID });
       expect(r.status).toBe(503);
       expect((await r.json()).code).toBe('stt_disabled');
@@ -110,6 +113,31 @@ describe('STT routes', () => {
     expect(h.rpc.map((x) => x.name)).toEqual(['stt_reserve', 'stt_attach_job']);
   });
 
+  test('FAIL CLOSED: without STT_SERVER_SECRET (or with a short one) no trusted RPC is ever called', async () => {
+    for (const v of [undefined, 'short']) {
+      if (v === undefined) delete process.env.STT_SERVER_SECRET; else process.env.STT_SERVER_SECRET = v;
+      for (const route of [transcribe, sync, purge, sweep]) {
+        const r = await post(route, { projectId: 'pA', meetingId: MID });
+        expect(r.status).toBe(503);
+        expect((await r.json()).code).toBe('stt_unavailable');
+      }
+    }
+    expect(h.rpc).toHaveLength(0);
+  });
+
+  test('the server secret is sent only as an RPC argument, never taken from the request', async () => {
+    const r = await post(transcribe, { projectId: 'pA', meetingId: MID, secret: 'attacker', p_server_secret: 'attacker' });
+    expect(r.status).toBe(200);
+    for (const c of h.rpc) expect(c.args.p_server_secret).toBe(SERVER_SECRET);
+  });
+
+  test('sweep: a project-scoped cleanup that needs no meeting id', async () => {
+    const r = await post(sweep, { projectId: 'pA' });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ audioPurged: 0, orphansRemoved: 0, providerCleanupPending: 0 });
+    expect((await post(sweep, {})).status).toBe(400);
+  });
+
   test('a missing provider key is "unavailable" for the user and never a crash or a leak', async () => {
     delete process.env.SONIOX_API_KEY;
     const r = await post(transcribe, { projectId: 'pA', meetingId: MID });
@@ -132,14 +160,16 @@ describe('STT routes', () => {
     await take(await post(transcribe, { projectId: 'pA', meetingId: MID }));
     expect(seen.join('\n')).not.toContain(SECRET);
     expect(JSON.stringify(logs)).not.toContain(SECRET);
+    expect(seen.join('\n')).not.toContain(SERVER_SECRET);
+    expect(JSON.stringify(logs)).not.toContain(SERVER_SECRET);
     expect(seen.join('\n')).not.toMatch(/provider message that must never reach the app/);
     expect(JSON.stringify(logs)).not.toMatch(/provider message that must never reach the app/);
   });
 
   test('sync reports the state; cancel=true is passed through; purge defaults to deleting provider data too', async () => {
-    h.meeting = { ...meeting(), stt_state: 'transcribing', stt_job_id: 'tr-9', stt_submitted_at: new Date().toISOString() };
+    h.meeting = { ...meeting(), stt_state: 'transcribing', stt_job_id: 'tr-9', stt_attempts: 1, stt_submitted_at: new Date().toISOString() };
     await post(sync, { projectId: 'pA', meetingId: MID, cancel: true });
-    expect(h.rpc.find((x) => x.name === 'stt_fail')?.args.p_error_type).toBe('cancelled');
+    expect(h.rpc.find((x) => x.name === 'stt_fail')?.args).toMatchObject({ p_error_type: 'cancelled', p_billing: 'estimated' });
     h.meeting = { ...meeting(), stt_state: 'completed', stt_job_id: 'tr-1', stt_cleanup_pending: true };
     const r = await post(purge, { projectId: 'pA', meetingId: MID });
     expect(r.status).toBe(200);

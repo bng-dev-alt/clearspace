@@ -6,8 +6,6 @@ import { purgeAudio } from '../../../../../lib/stt/pipeline';
 export const POST = (req: NextRequest) =>
   runStt<{ includeProvider: boolean }>(
     req,
-    async ({ db, soniox, projectId, meetingId, input }) => ({
-      ...(await purgeAudio({ db, soniox, meetingId, projectId, includeProvider: input.includeProvider })),
-    }),
+    async (ctx) => ({ ...(await purgeAudio({ ...ctx, includeProvider: ctx.input.includeProvider })) }),
     (b) => ({ includeProvider: b.includeProvider !== false })
   );

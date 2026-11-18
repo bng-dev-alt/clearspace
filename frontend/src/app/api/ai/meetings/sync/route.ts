@@ -3,12 +3,11 @@ import { runStt } from '../../../../../lib/stt/route';
 import { syncTranscription } from '../../../../../lib/stt/pipeline';
 
 // Jeden krátký krok: zeptá se poskytovatele na stav, při dokončení uloží přepis a uklidí data u poskytovatele.
-// Volá ho otevřená stránka porady (dotazování), nic neběží na pozadí. `cancel: true` ukončí zaseklou úlohu.
+// Volá ho otevřená stránka porady (dotazování), nic neběží na pozadí. `cancel: true` ukončí běžící nebo nejistou úlohu
+// (už vzniklé náklady zůstávají v rozpočtu).
 export const POST = (req: NextRequest) =>
   runStt<{ cancel: boolean }>(
     req,
-    async ({ db, soniox, projectId, meetingId, limits, input }) => ({
-      ...(await syncTranscription({ db, soniox, meetingId, projectId, limits, cancel: input.cancel })),
-    }),
+    async (ctx) => ({ ...(await syncTranscription({ ...ctx, cancel: ctx.input.cancel })) }),
     (b) => ({ cancel: b.cancel === true })
   );

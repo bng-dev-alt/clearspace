@@ -33,7 +33,7 @@ export interface Meeting {
   audio: MeetingAudio;
 }
 
-export type SttState = 'none' | 'submitting' | 'transcribing' | 'completed' | 'failed';
+export type SttState = 'none' | 'submitting' | 'unknown' | 'transcribing' | 'completed' | 'failed';
 
 /** Zvuk a stav strojového přepisu (R5). U textových porad a starších databází jsou to prázdné výchozí hodnoty. */
 export interface MeetingAudio {
@@ -485,7 +485,7 @@ export const meetingService = {
   },
 
   /** Volání STT rout (server drží klíč Soniox; prohlížeč s poskytovatelem nikdy nemluví). */
-  async callStt(endpoint: 'transcribe' | 'sync' | 'purge', body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async callStt(endpoint: 'transcribe' | 'sync' | 'purge' | 'sweep', body: Record<string, unknown>): Promise<Record<string, unknown>> {
     requireSupabase();
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
@@ -510,6 +510,15 @@ export const meetingService = {
 
   async syncTranscription(projectId: string, meetingId: string, cancel = false): Promise<SttSyncResult> {
     return (await this.callStt('sync', { projectId, meetingId, cancel })) as unknown as SttSyncResult;
+  },
+
+  /** Projektový úklid bez cronu (zvuk po termínu, osiřelé soubory, úklid u poskytovatele). Chyby se tiše ignorují. */
+  async sweepAudio(projectId: string): Promise<void> {
+    try {
+      await this.callStt('sweep', { projectId });
+    } catch {
+      /* úklid je best-effort; ruční mazání zůstává vždy k dispozici */
+    }
   },
 
   async purgeAudio(projectId: string, meetingId: string): Promise<void> {

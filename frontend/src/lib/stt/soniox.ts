@@ -186,6 +186,32 @@ export class SonioxClient {
     });
   }
 
+  /**
+   * Výpis úloh (nejnovější i starší, pořadí dokumentace neslibuje): jediná cesta, jak po nejistém POST najít úlohu podle
+   * `client_reference_id`. Stránkuje se kurzorem; `nextCursor` null = konec výpisu.
+   */
+  async listTranscriptions(limit: number, cursor: string | null): Promise<{ items: { id: string; clientReferenceId: string | null; model: string | null; status: SonioxStatus }[]; nextCursor: string | null }> {
+    return this.withRetry(async () => {
+      const qs = new URLSearchParams({ limit: String(Math.min(Math.max(limit, 1), 100)) });
+      if (cursor) qs.set('cursor', cursor);
+      const res = await this.raw('GET', `/transcriptions?${qs.toString()}`);
+      if (!res.ok) return this.fail(res);
+      const j = (await res.json().catch(() => null)) as { transcriptions?: unknown; next_page_cursor?: unknown } | null;
+      const items = (Array.isArray(j?.transcriptions) ? (j?.transcriptions as unknown[]) : []).flatMap((t) => {
+        if (typeof t !== 'object' || t === null || typeof (t as { id?: unknown }).id !== 'string') return [];
+        const o = t as { id: string; client_reference_id?: unknown; model?: unknown; status?: unknown };
+        const st = o.status;
+        return [{
+          id: o.id,
+          clientReferenceId: typeof o.client_reference_id === 'string' ? o.client_reference_id : null,
+          model: typeof o.model === 'string' ? o.model.slice(0, 64) : null,
+          status: (st === 'queued' || st === 'processing' || st === 'completed' ? st : 'error') as SonioxStatus,
+        }];
+      });
+      return { items, nextCursor: typeof j?.next_page_cursor === 'string' && j.next_page_cursor ? j.next_page_cursor : null };
+    });
+  }
+
   /** 404 = už smazáno = úspěch. 409 (ještě běží) se vrací jako SonioxError('wait'). */
   async deleteTranscription(id: string): Promise<void> {
     await this.withRetry(async () => {

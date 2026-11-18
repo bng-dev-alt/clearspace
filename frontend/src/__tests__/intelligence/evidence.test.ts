@@ -328,7 +328,8 @@ describe('quoteSupported: whole words, in order (no substring games)', () => {
     ['jsem nasa', 'Honza jsem nasadil', false, 'partial word does not match'],
     ['ahoj svete tady', 'Ahoj, světe, tady jsme.', true, 'diacritics, case and punctuation are folded'],
     ['svete ahoj … tady jsme', 'Ahoj, světe, tady jsme.', false, 'parts out of order'],
-    ['ahoj … tady jsme', 'Ahoj, světe, tady jsme.', true, 'in-order parts (3 words together)'],
+    ['ahoj světe … tady jsme', 'Ahoj, světe, tady jsme.', true, 'in-order parts, each at least 2 words'],
+    ['ahoj … tady jsme', 'Ahoj, světe, tady jsme.', false, 'a one-word part (4 letters) is not evidence'],
   ])('%s vs %s -> %s (%s)', (q, src, expected) => {
     expect(quoteSupported(q as string, src as string)).toBe(expected);
   });

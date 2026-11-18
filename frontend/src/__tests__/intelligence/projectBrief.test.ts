@@ -32,7 +32,7 @@ vi.mock('@google/genai', () => {
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => {
     const from = (table: string) => {
-      const q = { table, filters: {} as Record<string, unknown> };
+      const q = { table, filters: {} as Record<string, unknown>, in: {} as Record<string, unknown> };
       h.queries.push(q);
       const result = () => {
         switch (table) {
@@ -40,13 +40,14 @@ vi.mock('@supabase/supabase-js', () => ({
           case 'columns': return { data: [{ id: 'col-1', name: 'K řešení', position: 0 }], error: null };
           case 'cards': return { data: h.cards.map((c) => ({ details: '', tag: null, priority: null, assignee_name: null, assignee_initials: null, assignee_color: null, assignees: null, due_date: null, position: 0, created_at: '', updated_at: '2026-11-17T10:00:00Z', task_checklists: [], task_comments: [], task_activities: [], card_assignees: [], archived: false, column_id: 'col-1', ...c })), error: null };
           case 'activity_logs': return { data: [], error: null };
-          case 'intelligence_items': return { data: h.items, error: null };
+          case 'intelligence_items': return { data: h.items.filter((r) => { const st = (r as { review_state?: string }).review_state ?? ''; return q.filters.review_state ? st === q.filters.review_state : !q.in.review_state || (q.in.review_state as string[]).includes(st); }), error: null };
           case 'intelligence_runs': return { data: h.existingRuns, error: null };
           default: return { data: null, error: null };
         }
       };
       const b: Record<string, unknown> = {};
-      for (const m of ['select', 'order', 'in', 'is']) b[m] = () => b;
+      for (const m of ['select', 'order', 'is']) b[m] = () => b;
+      b.in = (c: string, v: unknown) => { q.in[c] = v; return b; };
       b.eq = (c: string, v: unknown) => { q.filters[c] = v; return b; };
       b.limit = () => Promise.resolve(result());
       b.maybeSingle = () => Promise.resolve(result());

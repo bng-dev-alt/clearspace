@@ -126,7 +126,26 @@ describe('ItemCard: honest evidence labels', () => {
     renderItem(item({ evidence: [{ ref: 'segment:seg-1', quote: 'nebudeme nasazovat', quoteFound: true, flag: 'negation_nearby' }], support: 'unverified' }));
     expect(screen.queryByText('Ověřeno')).toBeNull();
     expect(screen.getByTestId('negation-flag')).toHaveTextContent('Pozor: zápor');
+    // the quote WAS found: the badge must not say "nenalezena"
+    expect(screen.queryByText('Citace nenalezena')).toBeNull();
+    expect(screen.getByText('Citace nalezena, ale může znamenat opak: ověřte v přepisu')).toBeInTheDocument();
+  });
+  test('quote really not found: "Citace nenalezena"; found and clean: "Citace nalezena"', () => {
+    renderItem(item({ support: 'unverified', evidence: [{ ref: 'segment:seg-1', quote: 'vymyšlená citace', quoteFound: false }] }));
     expect(screen.getByText('Citace nenalezena')).toBeInTheDocument();
+  });
+  test('found and clean', () => {
+    renderItem(item());
+    expect(screen.getByText('Citace nalezena')).toBeInTheDocument();
+    expect(screen.queryByTestId('negation-flag')).toBeNull();
+  });
+  test('earlier-run badge is shown only for fromEarlierRun', () => {
+    renderItem(item({ reviewState: 'accepted' }), { fromEarlierRun: true });
+    expect(screen.getByTestId('earlier-run')).toHaveTextContent('Z dřívější analýzy');
+  });
+  test('earlier-run badge is absent otherwise', () => {
+    renderItem(item({ reviewState: 'accepted' }));
+    expect(screen.queryByTestId('earlier-run')).toBeNull();
   });
   test('the tooltip tells the user that a found quote does not prove the claim', () => {
     renderItem(item());
@@ -357,6 +376,29 @@ describe('MeetingDetail', () => {
     expect(svc().analyze).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('meeting-rerun-confirm'));
     await waitFor(() => expect(svc().analyze).toHaveBeenCalledWith('p1', 'm-1', true));
+  });
+  test('MeetingDetail: an approved item from an earlier run carries the earlier-run badge, items of the current run do not; re-analysis copy keeps approved conclusions', async () => {
+    setup({
+      meeting: { ...meeting, status: 'ready' },
+      run: runOn(REV_A),
+      items: [
+        item({ id: 'it-old', runId: 'r-old', reviewState: 'accepted', text: 'Starší závěr.' }),
+        item({ id: 'it-new', runId: 'r1', ordinal: 1, text: 'Nový návrh.' }),
+      ],
+    });
+    render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+    await screen.findByTestId('meeting-results');
+    expect(await screen.findByTestId('item-it-old')).toBeInTheDocument();
+    expect(within(screen.getByTestId('item-it-old')).getByTestId('earlier-run')).toBeInTheDocument();
+    expect(within(screen.getByTestId('item-it-new')).queryByTestId('earlier-run')).toBeNull();
+    fireEvent.click(await screen.findByTestId('meeting-rerun'));
+    expect(screen.getByText(/Nahradí se jen neschválené a zamítnuté návrhy; závěry, které jste schválili, zůstanou/)).toBeInTheDocument();
+  });
+  test('MeetingDetail: an empty result does not claim the items were verified', async () => {
+    setup({ meeting: { ...meeting, status: 'ready' }, run: runOn(REV_A), items: [] });
+    render(<MeetingDetail projectId="p1" meetingId="m-1" />);
+    expect(await screen.findByText('AI v přepisu nenašla žádné položky s nalezenou citací.')).toBeInTheDocument();
+    expect(screen.queryByText(/ověřitelné/)).toBeNull();
   });
   test('deleting a meeting asks for confirmation first', async () => {
     setup();

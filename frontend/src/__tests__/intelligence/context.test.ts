@@ -193,7 +193,7 @@ describe('project scoping (loading under the caller identity)', () => {
     expect(calls.find((x) => x.table === 'columns')!.eq.project_id).toBe('p1');
     expect(calls.find((x) => x.table === 'activity_logs')!.eq.project_id).toBe('p1');
     expect(calls.find((x) => x.table === 'intelligence_items')!.eq.project_id).toBe('p1');
-    expect(calls.map((x) => x.table).sort()).toEqual(['activity_logs', 'cards', 'columns', 'intelligence_items', 'projects']);
+    expect(calls.map((x) => x.table).sort()).toEqual(['activity_logs', 'cards', 'columns', 'intelligence_items', 'intelligence_items', 'projects']); // intelligence_items twice: approved + proposal pool
   });
   test('a project the caller cannot see (RLS) is refused with forbidden and no further data is read', async () => {
     const { db, calls } = fakeDb(false);

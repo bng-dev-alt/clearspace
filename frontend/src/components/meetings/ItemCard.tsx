@@ -47,6 +47,9 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
   const appliedCard = cards.find((c) => c.id === item.appliedCardId);
   const canCreateCard = item.kind === 'action_item' || item.kind === 'follow_up';
   const open = item.reviewState === 'proposed' || item.reviewState === 'accepted';
+  // Příznak zápor/otázka: text citace v přepisu JE, jen může znamenat opak; "nenalezena" by tvrdilo opak pravdy.
+  const foundButFlagged = item.support !== 'linked' && item.evidence.some((e) => e.quoteFound && e.flag);
+  const supportLabel = item.support === 'linked' ? 'Citace nalezena' : foundButFlagged ? 'Citace nalezena, ale může znamenat opak: ověřte v přepisu' : 'Citace nenalezena';
 
   async function run(fn: () => Promise<void>, doneMessage?: string) {
     if (busy) return;
@@ -70,12 +73,12 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
         <strong>{item.text}</strong>
         <div className="mi-row">
           <span title="Text citace byl nalezen v přepisu. Neověřuje, že tvrzení z ní plyne: ověřte smysl v přepisu.">
-            <Badge variant={item.support === 'linked' ? 'success' : 'warning'}>{item.support === 'linked' ? 'Citace nalezena' : 'Citace nenalezena'}</Badge>
+            <Badge variant={item.support === 'linked' ? 'success' : 'warning'}>{supportLabel}</Badge>
           </span>
-          {fromEarlierRun && <Badge data-testid="earlier-run">Z dřívější analýzy</Badge>}
+          {fromEarlierRun && <span data-testid="earlier-run"><Badge>Z dřívější analýzy</Badge></span>}
           {item.evidence.some((e) => e.flag === 'negation_nearby') && (
-            <span data-testid="negation-flag" title="V citaci nebo těsně před ní je zápor, který tvrzení nemá.">
-              <Badge variant="danger">Pozor: zápor</Badge>
+            <span data-testid="negation-flag" title="V citaci nebo v její větě je zápor, nebo je citovaná věta otázka, takže smysl může být opačný.">
+              <Badge variant="danger">Pozor: zápor nebo otázka</Badge>
             </span>
           )}
           <Badge variant={item.reviewState === 'applied' ? 'accent' : item.reviewState === 'rejected' ? 'danger' : 'default'}>

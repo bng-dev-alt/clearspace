@@ -335,7 +335,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
                   ))}
                 </ul>
               )}
-              {items.length === 0 && <p className="mi-muted">AI v přepisu nenašla žádné ověřitelné položky.</p>}
+              {items.length === 0 && <p className="mi-muted">AI v přepisu nenašla žádné položky s nalezenou citací.</p>}
               {grouped.map((g) => (
                 <div key={g.kind}>
                   <h3>{KIND_LABEL[g.kind]} ({g.list.length})</h3>

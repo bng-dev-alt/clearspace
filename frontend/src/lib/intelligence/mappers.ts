@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ProjectActivityLog } from '../../types/kanban';
 import type { ProjectItemLite } from './facts';
 
@@ -61,3 +62,34 @@ export function mapItemRows(rows: unknown): ProjectItemLite[] {
   return out;
 }
 
+
+/** Schválené závěry (accepted/applied) a fond návrhů (proposed) mají každý vlastní limit: nové návrhy nevytlačí starší závěry. */
+export const APPROVED_ITEM_LIMIT = 200;
+export const PROPOSAL_ITEM_LIMIT = 200;
+const ITEM_COLUMNS = 'id, meeting_id, kind, text, review_state, decided_at, created_at, applied_card_id';
+
+/**
+ * Položky z porad pro kontext AI, podpis čerstvosti i Znalosti: schválené (`accepted`, `applied`; nejnověji rozhodnuté první)
+ * a zvlášť fond návrhů (`proposed`; nejnovější první). Sdílí server (Context Engine) i klient, aby podpis vycházel z týchž dat.
+ * Chyba dotazu (např. tabulka v starší DB chybí) = žádné položky z daného dotazu, nikdy výjimka.
+ */
+export async function fetchProjectItems(db: SupabaseClient, projectId: string): Promise<ProjectItemLite[]> {
+  const [approved, proposed] = await Promise.all([
+    db
+      .from('intelligence_items')
+      .select(ITEM_COLUMNS)
+      .eq('project_id', projectId)
+      .in('review_state', ['accepted', 'applied'])
+      .order('decided_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(APPROVED_ITEM_LIMIT),
+    db
+      .from('intelligence_items')
+      .select(ITEM_COLUMNS)
+      .eq('project_id', projectId)
+      .eq('review_state', 'proposed')
+      .order('created_at', { ascending: false })
+      .limit(PROPOSAL_ITEM_LIMIT),
+  ]);
+  return [...(approved.error ? [] : mapItemRows(approved.data)), ...(proposed.error ? [] : mapItemRows(proposed.data))];
+}

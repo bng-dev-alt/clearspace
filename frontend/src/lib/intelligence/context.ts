@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Card, Column, ProjectActivityLog } from '../../types/kanban';
 import { loadBoard } from '../ai/board';
-import { mapActivityRows, mapItemRows } from './mappers';
+import { fetchProjectItems, mapActivityRows, mapItemRows } from './mappers';
 export { mapActivityRows, mapItemRows };
 import { columnRole } from '../projectIntelligence';
 import { computeProjectFacts, DEFAULT_TZ, FACTS_VERSION, type ProjectFacts, type ProjectItemLite } from './facts';
@@ -32,8 +32,6 @@ export const CONTEXT_BUDGETS: Record<ContextPurpose, number> = {
 };
 
 const ACTIVITY_LIMIT = 100;
-const ITEM_LIMIT = 200;
-const ITEM_STATES = ['proposed', 'accepted', 'applied'];
 const DETAILS_CAP = 600;
 const COMMENT_CAP = 500;
 const COMMENTS_PER_CARD = 3;
@@ -95,14 +93,8 @@ export async function loadProjectData(db: SupabaseClient, projectId: string): Pr
     .order('created_at', { ascending: false })
     .limit(ACTIVITY_LIMIT);
   // Závěry z porad: chyba (např. migrace ještě není v DB) kontext nerozbije, jen zůstane bez nich.
-  const { data: itemRows, error: itemErr } = await db
-    .from('intelligence_items')
-    .select('id, meeting_id, kind, text, review_state, decided_at, created_at, applied_card_id')
-    .eq('project_id', projectId)
-    .in('review_state', ITEM_STATES)
-    .order('created_at', { ascending: false })
-    .limit(ITEM_LIMIT);
-  return { project, columns, activities: mapActivityRows(data, projectId), items: itemErr ? [] : mapItemRows(itemRows) };
+  const items = await fetchProjectItems(db, projectId);
+  return { project, columns, activities: mapActivityRows(data, projectId), items };
 }
 
 interface Item {

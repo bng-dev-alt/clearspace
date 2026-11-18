@@ -31,61 +31,246 @@ const clipStr = (v: unknown, max: number): string => {
   return t.length > max ? t.slice(0, max) : t;
 };
 
+// ------------------------------------------------------------------ Tokenizace a hledání citace
+
+interface Tok {
+  /** Složené (FOLD_SPEC) slovo. */
+  w: string;
+  /** Offsety slova v původním textu. */
+  s: number;
+  e: number;
+}
+
+/**
+ * Slova původního textu s offsety. Shoduje se s `foldedWords` (stejné dělení na písmena/číslice), ale pamatuje si pozice,
+ * aby šlo poznat hranice vět a klauzí (fold interpunkci zahazuje).
+ */
+function tokenize(text: string): Tok[] {
+  const out: Tok[] = [];
+  for (const m of text.matchAll(/[\p{L}\p{N}\p{M}]+/gu)) {
+    const f = fold(m[0]);
+    if (!f) continue;
+    for (const w of f.split(' ')) out.push({ w, s: m.index, e: m.index + m[0].length });
+  }
+  return out;
+}
+
+/** Hranice věty/klauze mezi dvěma slovy: . ! ? ; … : (jmenovka mluvčího), nový řádek. Tečka v "2.0" hranice není. */
+const BOUNDARY_INNER = /[!?;…\n\r]|[.:]\s/;
+const BOUNDARY_EDGE = /[!?;…\n\r]|[.:](?:\s|$)/;
+
+interface Analysed {
+  toks: Tok[];
+  words: string[];
+  /** brk[k]: mezi slovem k-1 a k je hranice (k = 0 a k = n jsou okraje textu). */
+  brk: boolean[];
+  /** qm[k]: mezera před slovem k obsahuje otazník. */
+  qm: boolean[];
+}
+
+function analyse(text: string): Analysed {
+  const toks = tokenize(text);
+  const n = toks.length;
+  const brk: boolean[] = [];
+  const qm: boolean[] = [];
+  for (let k = 0; k <= n; k += 1) {
+    const gap = text.slice(k === 0 ? 0 : toks[k - 1].e, k === n ? text.length : toks[k].s);
+    brk.push((k === 0 || k === n ? BOUNDARY_EDGE : BOUNDARY_INNER).test(gap));
+    qm.push(gap.includes('?'));
+  }
+  return { toks, words: toks.map((t) => t.w), brk, qm };
+}
+
+export const MAX_ELLIPSIS_GAP_WORDS = 12;
+/** Každá část citace oddělená "…" musí mít aspoň 2 slova nebo 8 písmen ("jsme … jsme" tedy není důkaz). */
+const MIN_PART_WORDS = 2;
+const MIN_PART_LETTERS = 8;
+
+/** Části citace (dělení na "…" / "...") jako složená slova; bez kontroly minimální délky. */
+function rawParts(quote: string): string[][] {
+  return quote
+    .split(/…|\.\.\./)
+    .map(foldedWords)
+    .filter((p) => p.length > 0);
+}
+
+/** Části citace, jen pokud splňují pravidla délky; jinak null. */
+function quoteParts(quote: string): string[][] | null {
+  const parts = rawParts(quote);
+  if (parts.length === 0) return null;
+  const all = parts.flat();
+  if (letterCount(all.join(' ')) < MIN_QUOTE_LETTERS || all.length < MIN_QUOTE_WORDS) return null;
+  if (parts.some((p) => p.length < MIN_PART_WORDS && letterCount(p.join(' ')) < MIN_PART_LETTERS)) return null;
+  if (new Set(parts.map((p) => p.join(' '))).size !== parts.length) return null; // stejná část dvakrát = trik se vzdáleným slovem
+  return parts;
+}
+
+interface Occurrence {
+  /** První a poslední slovo výskytu (včetně) v tokenech zdroje. */
+  a: number;
+  b: number;
+  /** V mezeře mezi částmi ("…") je zápor: citace by tvrdila opak toho, co je ve zdroji. */
+  gapNeg: boolean;
+}
+
+/** Všechny výskyty citace: části za sebou, mezera mezi nimi nejvýš MAX_ELLIPSIS_GAP_WORDS slov. */
+function findOccurrences(parts: string[][], words: string[]): Occurrence[] {
+  const at = (p: string[], i: number) => p.every((w, k) => words[i + k] === w);
+  const out: Occurrence[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (!at(parts[0], i)) continue;
+    let end = i + parts[0].length; // exkluzivně
+    let gapNeg = false;
+    let ok = true;
+    for (let k = 1; k < parts.length && ok; k += 1) {
+      let found = -1;
+      for (let j = end; j <= end + MAX_ELLIPSIS_GAP_WORDS && j + parts[k].length <= words.length; j += 1) {
+        if (at(parts[k], j)) {
+          found = j;
+          break;
+        }
+      }
+      if (found < 0) ok = false;
+      else {
+        if (wordsHaveNegation(words.slice(end, found))) gapNeg = true;
+        end = found + parts[k].length;
+      }
+    }
+    if (ok) out.push({ a: i, b: end - 1, gapNeg });
+  }
+  return out;
+}
+
 /**
  * Citace musí mít aspoň 6 písmen a 2 slova a každá její část (dělení na „…") musí být nalezena v textu zdroje jako
- * posloupnost CELÝCH slov (po složení FOLD_SPEC) a části musí jít ve zdroji ZA SEBOU ve stejném pořadí.
+ * posloupnost CELÝCH slov (po složení FOLD_SPEC); části jdou ve zdroji ZA SEBOU, s mezerou nejvýš 12 slov, a samy mají
+ * aspoň 2 slova nebo 8 písmen. Obsahuje-li vynechaná mezera zápor ("nasadíme … v pátek" vs "Nasadíme, ale ne v pátek"),
+ * citace NENÍ podložená.
  * "budeme nasazovat" proto NEPODLOŽÍ text "nebudeme nasazovat" (jiné slovo) a přeházená slova citaci nepodloží.
  * Je to textová shoda; neříká nic o tom, zda tvrzení z citace plyne.
  */
 export function quoteSupported(quote: string, sourceText: string): boolean {
-  const parts = quote
-    .split(/…|\.\.\./)
-    .map((p) => fold(p))
-    .filter((p) => p.length > 0);
-  if (parts.length === 0) return false;
-  const joined = parts.join(' ');
-  if (letterCount(joined) < MIN_QUOTE_LETTERS || joined.split(' ').length < MIN_QUOTE_WORDS) return false;
-  const hay = ` ${fold(sourceText)} `;
-  let pos = 0;
-  for (const p of parts) {
-    const i = hay.indexOf(` ${p} `, pos);
-    if (i === -1) return false;
-    pos = i + p.length + 1; // koncová mezera zůstává k dispozici další části
-  }
-  return true;
+  const parts = quoteParts(quote);
+  if (!parts) return false;
+  return findOccurrences(parts, tokenize(sourceText).map((t) => t.w)).some((o) => !o.gapNeg);
 }
+
+// ------------------------------------------------------------------ Zápor
 
 const NEG_WORDS = new Set([
-  'ne', 'nikdy', 'nikdo', 'nic', 'nelze', 'bez', 'zadny', 'zadna', 'zadne', 'zadneho',
-  'not', 'no', 'never', 'without', 'cannot', 'nobody', 'nothing', 'none', 'neither', 'nor',
+  // česky
+  'ne', 'nikdy', 'nikdo', 'nic', 'nikde', 'nikam', 'nikoli', 'nikoliv', 'nikoho', 'nikomu', 'nikym', 'nelze', 'bez',
+  'zadny', 'zadna', 'zadne', 'zadneho', 'zadnou', 'zadnym', 'zadnemu', 'zadni',
+  // anglicky
+  'not', 'no', 'nope', 'never', 'without', 'cannot', 'nobody', 'nothing', 'none', 'neither', 'nor', 'nowhere',
+  // zkratky bez apostrofu ("dont")
+  'dont', 'doesnt', 'didnt', 'wont', 'isnt', 'arent', 'wasnt', 'werent', 'cant', 'couldnt', 'shouldnt', 'wouldnt',
+  'havent', 'hasnt', 'hadnt', 'aint', 'mustnt', 'neednt', 'shant',
 ]);
-const NEG_EN_STEMS = /\b(?:don|doesn|didn|won|isn|aren|wasn|weren|couldn|shouldn|wouldn|haven|hasn|hadn|can) t\b/;
-/** České záporné sloveso/zájmeno (nebudeme, nemůžeme, neposuneme); mimo "nebo", "nej-" a "ned-" (neděle). */
-const NEG_CS_PREFIX = /^ne(?!j|bo\b|d)[a-z]{3,}$/;
+/** "don't" se složí na "don t": kmen + samostatné "t". */
+const EN_NT_STEMS = new Set(['don', 'doesn', 'didn', 'won', 'isn', 'aren', 'wasn', 'weren', 'couldn', 'shouldn', 'wouldn', 'haven', 'hasn', 'hadn', 'ain', 'mustn', 'needn', 'can', 'shan']);
+/** Zrušení / odložení / storno mění smysl rozhodnutí stejně jako zápor. */
+const NEG_STEMS = /^(?:zadn|zrus|odloz|odklad|storn|cancel|postpon)/;
+/** "nej-" je nejčastěji superlativ (nejlépe, nejdřív, nejspíš); záporem jsou jen tvary sloves být a jít. */
+const NEJ_VERBS = new Set(['nejde', 'nejdu', 'nejdeme', 'nejdete', 'nejdou', 'nejsem', 'nejsi', 'nejsme', 'nejste', 'nejsou']);
+/**
+ * Slova začínající "ne", která zápor nejsou (výslovný seznam, ne volný regex): nebo, než, neděle, nedávno, nemocnice,
+ * někdo/něco/několik, nezbytné, neustále, nesmírně, a anglické next/new/need/network...
+ * ponytail: seznam je ruční; slova mimo něj se berou jako zápor (konzervativně: položka jen zůstane "neověřená").
+ */
+const NOT_NEG = /^(?:nebo|nebot|nez|nebe|nebesa|nebesky|neco|nekdo|nekde|nekdy|nekam|nekolik\w*|nekter\w*|nedele|nedeli|nedelni|nedelou|nedelich|nedavn\w*|nemocn\w*|nemoc|nemoci|nemec\w*|nemci|nemovit\w*|neustal\w*|nesmirn\w*|nesmysl\w*|nese|nesu|nesou|nesl|nesla|nesli|neslo|nezbyt\w*|nepochyb\w*|neodklad\w*|negativ\w*|neutral\w*|nerv\w*|next|need\w*|new\w*|net|nets|network\w*|neat|near\w*|necessar\w*|neck|nest|nexus)$/;
 
-export function hasNegation(text: string): boolean {
-  const f = fold(text);
-  if (NEG_EN_STEMS.test(f)) return true;
-  return f.split(' ').some((w) => NEG_WORDS.has(w) || NEG_CS_PREFIX.test(w));
+function isNegWord(w: string): boolean {
+  if (NEG_WORDS.has(w) || NEG_STEMS.test(w)) return true;
+  if (w.startsWith('nej')) return NEJ_VERBS.has(w);
+  return /^ne./.test(w) && !NOT_NEG.test(w);
 }
 
-/** Je ve zdroji v těsném okolí PŘED citací (3 slova) záporné slovo? (např. "Ne, … posuneme release") */
+function wordsHaveNegation(words: string[]): boolean {
+  return words.some((w, i) => isNegWord(w) || (w === 't' && i > 0 && EN_NT_STEMS.has(words[i - 1])));
+}
+
+export function hasNegation(text: string): boolean {
+  return wordsHaveNegation(foldedWords(text));
+}
+
+/** Krátká odpověď na začátku sousední klauze ("Ne, nebudeme."): zápor v ní se vztahuje k citované větě. */
+const SHORT_ANSWERS = new Set(['ne', 'ano', 'no', 'yes', 'nope', 'nikoli', 'nikoliv', 'jo', 'yep', 'yeah']);
+const ANSWER_WORDS = 6;
+
+interface Scan {
+  before: string[];
+  inside: string[];
+  after: string[];
+  /** Věta s citací končí otazníkem: tázání není tvrzení. */
+  question: boolean;
+  gapNeg: boolean;
+  /** Offset prvního slova výskytu v textu zdroje. */
+  start: number;
+}
+
+/** Pro každý výskyt citace: okno od hranice klauze k hranici klauze (+ krátká odpověď v sousední klauzi). */
+function scanOccurrences(quote: string, sourceText: string): Scan[] {
+  const parts = rawParts(quote);
+  if (parts.length === 0) return [];
+  const { toks, words, brk, qm } = analyse(sourceText);
+  const n = words.length;
+  const clauseStart = (i: number) => { let k = i; while (k > 0 && !brk[k]) k -= 1; return k; };
+  const clauseEnd = (j: number) => { let k = j + 1; while (k < n && !brk[k]) k += 1; return k; };
+  return findOccurrences(parts, words).map((o) => {
+    const cs = clauseStart(o.a);
+    const ce = clauseEnd(o.b);
+    let before = words.slice(cs, o.a);
+    let after = words.slice(o.b + 1, ce);
+    if (cs > 0) {
+      const ps = clauseStart(cs - 1);
+      if (SHORT_ANSWERS.has(words[ps])) before = [...words.slice(ps, Math.min(ps + ANSWER_WORDS, cs)), ...before];
+    }
+    if (ce < n && SHORT_ANSWERS.has(words[ce])) after = [...after, ...words.slice(ce, Math.min(ce + ANSWER_WORDS, clauseEnd(ce)))];
+    let question = false;
+    for (let k = o.a + 1; k <= ce; k += 1) if (qm[k]) question = true;
+    return { before, inside: words.slice(o.a, o.b + 1), after, question, gapNeg: o.gapNeg, start: toks[o.a].s };
+  });
+}
+
+/** Je ve zdroji PŘED kterýmkoli výskytem citace (v téže větě/klauzi, nebo v krátké odpovědi před ní) záporné slovo? */
 export function negationBeforeQuote(quote: string, sourceText: string): boolean {
-  const first = fold(quote.split(/…|\.\.\./)[0] ?? '');
-  if (!first) return false;
-  const hay = ` ${fold(sourceText)} `;
-  const i = hay.indexOf(` ${first} `);
-  if (i === -1) return false;
-  const before = hay.slice(0, i).trim().split(' ').slice(-3).join(' ');
-  return before !== '' && hasNegation(before);
+  return scanOccurrences(quote, sourceText).some((s) => wordsHaveNegation(s.before));
+}
+
+/** Je ve zdroji ZA kterýmkoli výskytem citace (do konce věty, nebo v krátké odpovědi za ní: "Ne, to jsem nemyslel") zápor? */
+export function negationAfterQuote(quote: string, sourceText: string): boolean {
+  return scanOccurrences(quote, sourceText).some((s) => wordsHaveNegation(s.after));
 }
 
 /**
- * Citace sedí slovo od slova, ale smysl může být opačný: citace sama nebo její těsné okolí obsahuje zápor, který tvrzení
- * nemá. Takovou shodu NEOZNAČUJEME za podloženou (zůstává neověřená) a UI na ni upozorní.
+ * Citace sedí slovo od slova, ale smysl může být opačný: citace sama, její věta, mezera za "…" nebo krátká odpověď
+ * vedle ní ("Ne, nebudeme.") obsahuje zápor, který tvrzení nemá, nebo je citovaná věta otázka (otázka není rozhodnutí;
+ * vypíná se `question: false` pro druhy položek, které otázku smějí citovat). Takovou shodu NEOZNAČUJEME za podloženou
+ * (zůstává neověřená) a UI na ni upozorní. Zkoumají se VŠECHNY výskyty citace; riziko kteréhokoli je riziko, pokud
+ * `citedRange` (rozsah citovaného segmentu v `sourceText`) nezúží výskyty na ty v citovaném segmentu.
+ *
+ * Parita s SQL: DB (`quote_in_text`) umí jen shodu celých slov celé citace za sebou a příznak `negation_nearby` bere
+ * od klienta (jiné hodnoty zahodí, `quoteFound` z klientského `false` nikdy nezvedne). Jediná vrstva, která zápor
+ * a otázku skutečně hledá, je tento validátor; ten běží na serveru před zápisem. Proto se příznak pro otázku
+ * znovu používá jako `negation_nearby` (nová hodnota by v DB zmizela).
  */
-export function negationRisk(claim: string, quote: string, sourceText: string): boolean {
-  return (hasNegation(quote) || negationBeforeQuote(quote, sourceText)) && !hasNegation(claim);
+export function negationRisk(
+  claim: string,
+  quote: string,
+  sourceText: string,
+  opts: { citedRange?: [number, number]; question?: boolean } = {}
+): boolean {
+  const claimNeg = hasNegation(claim);
+  let scans = scanOccurrences(quote, sourceText);
+  if (opts.citedRange) {
+    const [lo, hi] = opts.citedRange;
+    const own = scans.filter((s) => s.start >= lo && s.start < hi);
+    if (own.length > 0) scans = own;
+  }
+  if (scans.length === 0) return hasNegation(quote) && !claimNeg;
+  const neg = scans.some((s) => s.gapNeg || wordsHaveNegation([...s.before, ...s.inside, ...s.after]));
+  return (neg && !claimNeg) || (opts.question !== false && scans.some((s) => s.question));
 }
 
 function commonPrefix(a: string, b: string): number {
@@ -228,13 +413,18 @@ export function validateMeetingBrief(
         const next = i >= 0 ? transcript.segments[i + 1] : undefined;
         const scope = next !== undefined ? `${seg.text} ${next.text}` : seg.text;
         const found = quote !== null && (quoteSupported(quote, seg.text) || (next !== undefined && quoteSupported(quote, scope)));
+        // zápor/otázka se hledá v širším okolí (předchozí + citovaný + další segment); výskyty v sousedních segmentech
+        // se ignorují, pokud je citace v citovaném segmentu
+        const prev = i > 0 ? transcript.segments[i - 1] : undefined;
+        const around = [prev?.text, seg.text, next?.text].filter((t): t is string => t !== undefined).join(' ');
+        const lo = prev ? prev.text.length + 1 : 0;
         evidence.push({
           ref: `segment:${seg.id}`,
           quote,
           quoteFound: found,
           startMs: seg.startMs,
           endMs: seg.endMs,
-          ...(found && quote !== null && negationRisk(text, quote, scope) ? { flag: 'negation_nearby' as const } : {}),
+          ...(found && quote !== null && negationRisk(text, quote, around, { citedRange: [lo, lo + seg.text.length], question: MUST_BE_LINKED.includes(kind) }) ? { flag: 'negation_nearby' as const } : {}),
         });
         cited.push(seg);
       }
@@ -365,7 +555,7 @@ export function validateProjectBrief(
   let rejected = 0;
 
   /** Společná kontrola: refs musí existovat, citace musí sedět, data musí být podložená. */
-  const ground = (r: Raw): { support: BriefSupport; evidence: Evidence[] } | null => {
+  const ground = (r: Raw, question: boolean): { support: BriefSupport; evidence: Evidence[] } | null => {
     const refs = [...new Set(arr(r.refs).filter((x): x is string => typeof x === 'string'))]
       .filter((x) => byRef.has(x))
       .slice(0, MAX_EVIDENCE);
@@ -373,7 +563,7 @@ export function validateProjectBrief(
     const quote = typeof r.quote === 'string' && r.quote.trim() ? clipStr(r.quote, MAX_QUOTE_CHARS) : null;
     const hit = quote ? refs.find((x) => quoteSupported(quote, byRef.get(x)!.text)) : undefined;
     const text = clipStr(r.text, MAX_ITEM_TEXT);
-    const risky = quote !== null && hit !== undefined && negationRisk(text, quote, byRef.get(hit)!.text);
+    const risky = quote !== null && hit !== undefined && negationRisk(text, quote, byRef.get(hit)!.text, { question });
     const evidence: Evidence[] = refs.map((ref) => ({ ref, quote: ref === hit ? quote : null, quoteFound: ref === hit, ...(ref === hit && risky ? { flag: 'negation_nearby' as const } : {}) }));
     // linked = citace nalezena (a bez záporu navíc); sourced = odkaz na existující zdroj BEZ citace (nic se neporovnávalo);
     // unverified = citace uvedena, ale nenalezena, nebo je v ní zápor, který tvrzení nemá.
@@ -392,7 +582,7 @@ export function validateProjectBrief(
         continue;
       }
       const text = clipStr(r.text, MAX_ITEM_TEXT);
-      const g = text ? ground(r) : null;
+      const g = text ? ground(r, false) : null;
       if (!g) {
         rejected += 1;
         continue;
@@ -410,7 +600,7 @@ export function validateProjectBrief(
       continue;
     }
     const text = clipStr(r.text, MAX_ITEM_TEXT);
-    const g = text ? ground(r) : null;
+    const g = text ? ground(r, true) : null;
     if (!g) {
       rejected += 1;
       continue;

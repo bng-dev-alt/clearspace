@@ -3,7 +3,7 @@ import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import type { Column } from '../types/kanban';
 import { collaborationService } from './collaborationService';
 import { computeProjectFacts, freshnessSignature, maxCardUpdatedAt, type ProjectItemLite } from '../lib/intelligence/facts';
-import { mapItemRows } from '../lib/intelligence/mappers';
+import { fetchProjectItems } from '../lib/intelligence/mappers';
 import type { BriefAction, BriefItem, MeetingItemKind } from '../lib/intelligence/evidence';
 
 /**
@@ -58,18 +58,8 @@ export class IntelligenceServiceError extends Error {
   }
 }
 
-// Stejný dotaz a limit jako server (Context Engine), aby podpis čerstvosti vycházel z týchž dat.
-const ITEM_LIMIT = 200;
-async function fetchItems(projectId: string): Promise<ProjectItemLite[]> {
-  const { data, error } = await supabase
-    .from('intelligence_items')
-    .select('id, meeting_id, kind, text, review_state, decided_at, created_at, applied_card_id')
-    .eq('project_id', projectId)
-    .in('review_state', ['proposed', 'accepted', 'applied'])
-    .order('created_at', { ascending: false })
-    .limit(ITEM_LIMIT);
-  return error ? [] : mapItemRows(data);
-}
+// Stejný dotaz a limity jako server (Context Engine, `fetchProjectItems`), aby podpis čerstvosti vycházel z týchž dat.
+const fetchItems = (projectId: string): Promise<ProjectItemLite[]> => fetchProjectItems(supabase, projectId);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapBrief(r: any): BriefRecord {

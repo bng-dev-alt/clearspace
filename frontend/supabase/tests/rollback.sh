@@ -3,7 +3,7 @@
 echo "== Scenario F: rollback of 0700, 0600 and 0500 restores the previous catalog exactly"
 ROLL="$FRONTEND/supabase/rollback"; MIG="$FRONTEND/supabase/migrations"
 snapshot() { # $1 = db -> the md5 line of supabase/snapshot_catalog.sql
-  psql_admin -d "$1" -At -f "$HERE/../snapshot_catalog.sql" | tail -1
+  psql_admin -d "$1" -At -f - < "$HERE/../snapshot_catalog.sql" | tail -1
 }
 newdb cs_f
 apply cs_f "$BASELINE"

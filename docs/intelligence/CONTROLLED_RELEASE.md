@@ -156,7 +156,58 @@ creating a meeting from pasted text works, "Analyzovat" shows the clear "AI vypn
   Test data of this run was removed (the test meeting by exact id, then the user): hosted is back to users=1, projects=1, meetings=0.
   **Proposed fix (NOT applied, needs its own approval):** a new migration that lets the guard accept `NEW.created_by IS NULL` when `OLD.created_by IS NOT NULL` (the FK action only), plus a SQL scenario "delete a user who created a meeting" and the same in the upgrade test; then rehearse on the restored backup copy before touching hosted.
 
-## B3b — promote and post-promote smoke (separate approval; after B3a PASS)
+## RECOVERY after the B3a finding (2026-11-18): H1 hotfix → H2 new staged deployment → B3b → B4 → S1 real Soniox test
+
+The staged deployment `dpl_GQL6xxm4SMAJHv1Q5XQ5PUNnKywb` (commit `d0cef6a`) is **superseded**: it must not be promoted. Its frontend is functionally what production needs, but the final `HEAD` differs from it (a dormant, non-production Soniox test seam, tests, scripts), and the
+rule is "what is promoted is what is pushed". H2 below creates a new protected staged deployment from the final commit; the old one is simply left unpromoted.
+
+### H1 — hosted hotfix: migration `20261118000900_meeting_creator_erasure` (needs approval; the ONLY hosted write of this step)
+* **Fix:** `guard_meeting_identity()` keeps refusing every change of `project_id`, `source_kind` and `created_by`, EXCEPT `created_by: <uuid> → NULL` while that profile no longer exists (= the state in which `ON DELETE SET NULL` runs). SECURITY DEFINER with a pinned `search_path`, no EXECUTE for PUBLIC/anon/authenticated
+  (GoTrue's role cannot read `profiles`, which the existence check needs). Authenticated users additionally have no UPDATE privilege on `created_by` (column grant, tested over HTTP). 0800 is regenerated so it ends with the same guard (it can never reintroduce the defect, in any order).
+  Trade-off: an operator with table-owner rights could still null `created_by` by deleting a profile first - which is exactly erasure.
+* **Reproduced, then fixed:** SQL suite `85_delete_meeting_creator` fails on 0700 with the hosted error (`guard_meeting_identity()` 42501 from the FK update) and passes with 0900 (22 assertions: author, transcript, run, reviewed item and consent are nulled, content survives, the guard still refuses reassigning/moving/wiping, the owner still manages an orphaned meeting);
+  scenario **H** (hosted 0700 state without 0800, files pinned by checksum): defect reproduced, 0900 alone → catalog identical to a fresh install, idempotent, refuses without 0700, suites 40/80–85 pass, rollback restores the exact 0700 catalog; scenario **G** (older state + 0800) extended; scenario **E** (hosted role `postgres`) runs 0900 and suite 85;
+  real GoTrue over HTTP: user who created a meeting → `DELETE /auth/v1/admin/users/<id>` = 200 (before: 500), a deleted member's meeting stays with `created_by = null`, a user cannot PATCH `created_by`.
+* **Evidence about THIS hosted project (read-only):** catalog snapshot of hosted vs the rehearsed 0700 state: identical except 11 Supabase-managed Storage triggers (`pg_get_functiondef` etc. normalised for the local `auth.uid()` shim) - md5 `2af129a4d386111d1456bba9d127fecf lines=2151` is pinned in the script;
+  rehearsal on a **restore of a fresh dump of the real hosted data** (`/Volumes/WORKSPACE/_G2_BACKUP/20261118-v1-pre-hotfix-0900/`, SHA-256 `18df86dc…e6622`, `pg_dump -Fc -n public -n auth`, 50 table-data entries): deleting the author's profile fails before 0900 and succeeds after it (project and meeting cascade away, no error);
+  restored `public` counts equal hosted (profiles 1, projects 1, columns 5, cards 0, workspace_members 1, 7 markers, meetings 0). Limit (same as B2): `auth.users` does not restore into the local image because its `auth` schema is older than the hosted one; a real restore needs the same server version.
+* **Exact final command** (guarded; run only after the written approval):
+```bash
+cd /Volumes/WORKSPACE/Dev/Apps/ClearSpace/V1-intelligence
+CONFIRM_HOTFIX_0900=twjlnsxjtuntujarwner frontend/scripts/apply-hotfix-0900-hosted.sh
+```
+  It refuses (before any write) unless: confirmation names the project; clean tree; backup matches its SHA256SUMS; 0900, its rollback and the verify script have the rehearsed checksums (`333b103d…8360`, `369e4b7c…be11`, `dc8b31e2…297d`); hosted has exactly the 7 markers 0100-0700 and not 0900; the hosted catalog md5 is the pinned one; the guard is still the defective (non-definer) one.
+  Then ONE transaction; afterwards it requires: exactly one catalog function changed (2 diff lines), row counts unchanged, every `GATE` PASS (the new GATE checks the 0900 marker and the guard definition).
+* **Then (still H1):** `STAGED_URL=<staged or loopback> PW_CHROMIUM_PATH=<chromium> frontend/scripts/staged-intelligence-smoke.sh` - the same smoke that failed, hardened; its **account deletion of a user who created a meeting must answer 200** and the leftovers must be none (this is the regression check on hosted).
+* **Failure / recovery:** the migration is one transaction (a failure changes nothing: stop, report); the file only replaces one function, so no data is touched. Undo = `frontend/supabase/rollback/20261118000900_meeting_creator_erasure.down.sql` as role `postgres` (restores the 0700 catalog exactly - and with it the defect). A frontend rollback never needs a database rollback; the old production build never touches the guard.
+* `apply-b2-hosted.sh` is historical (B2 is done; it would refuse: the markers no longer match) and the B2 verify gates now include the 0900 gate (they say FAIL on a hosted database that has not received the hotfix - by design).
+
+> **Approval text H1:** „Schvaluji H1: na hostovaném Supabase `twjlnsxjtuntujarwner` aplikovat migraci `20261118000900_meeting_creator_erasure.sql` (jedna transakce jako `postgres`, záloha `20261118-v1-pre-hotfix-0900` existuje, skript `apply-hotfix-0900-hosted.sh`), ověřit `verify_hosted_intelligence.sql` a spustit smoke `staged-intelligence-smoke.sh` (jednorázové testovací účty se po testu smažou). Bez migrace 0800, bez tajemství pro přepis, bez změny Vercelu, firewallu a Cloudflare.“
+
+### H2 — new protected staged deployment from the FINAL commit (needs approval; after H1 PASS; same procedure as B3a)
+`git archive HEAD` → clean export, `vercel link --project clearspace`, remove `.env.local`, `vercel deploy --prod --skip-domain --meta releaseCommit=<HEAD>`; then `check-deployment.sh` (17 routes × GET/POST = 403, bundle), `hosted-verify.sh` against the staged URL, `staged-intelligence-smoke.sh`, `vercel inspect` (READY, no alias). Production keeps serving `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`.
+Local gates on the exact commit first: tsc, eslint, vitest, `supabase/tests/run.sh`, real-stack scripts, E2E (`meeting-flow`, `meetings`, `project-intelligence`, `meeting-audio`), build, `check-production-bundle.sh`.
+
+> **Approval text H2:** „Schvaluji H2: nový staged production deployment (`vercel deploy --prod --skip-domain`) z čistého exportu commitu `<HEAD>` s `--meta releaseCommit`, kontroly stagingu (`check-deployment.sh`, `hosted-verify.sh`, `staged-intelligence-smoke.sh`, `vercel inspect`). Bez promote, bez push, bez merge, bez změny firewallu.“
+
+### S1 — bounded REAL Soniox test (owner-only; separate approval; local app + throwaway local Supabase; nothing hosted, nothing deployed)
+* **Contract re-verified 2026-11-18** against docs.soniox.com (see `SONIOX_API_VERIFICATION.md`): model `stt-async-v6` (active; v5 deprecated, removal 2026-12-15), body fields `audio_url` / `file_id`, `language_hints`, `enable_speaker_diarization`, `client_reference_id`, `context`; `audio_url` must be "publicly accessible via HTTP"; transcript via `GET /v1/transcriptions/{id}/transcript`; deletion of transcription and file are separate calls. The adapter (`src/lib/stt/soniox.ts`) uses exactly these; the pipeline is unchanged. Statuses: the adapter accepts `queued|processing|completed|error` (and `failed` defensively). Signed-URL fetch by Soniox is the one thing still UNVERIFIED against the real service.
+* **Harness (done, dry-run PASSED against the fake provider):** `frontend/scripts/soniox-real-test.sh` + `e2e/soniox-real.spec.ts`. One synthetic Czech recording (`scripts/make-synthetic-czech-audio.sh`: macOS voice Zuzana, two pitch-shifted "speakers", a short English phrase, 19.8 s, no personal data), ONE job, `--retries=0`, Gemini not configured at all (AI routes 503), the app runs with `STT_ENABLED=1`.
+  The Soniox key is read from a hidden prompt into the environment of the local app and the one test process: never argv, file, `.env.local`, history or log (the script counts occurrences in its logs through a file descriptor and fails if any). The spec checks: consent refusal, audio validation, private Storage upload, nothing booked before the click, ONE submission (attempts = 1, one `stt_jobs` row, one ledger row), polling to completion, transcript source/segments/two speakers/monotonic timestamps within the recording, Czech word-error rate vs the spoken script (reported with and without diacritics; fails only above 0.6),
+  cost and usage in the ledger, provider-side deletion (the local state is `done` AND `GET /v1/transcriptions/<id>` answers 404), safe cleanup of the local test data. An uncertain provider outcome would end in state `unknown` with the estimate kept in the budget - it is reported, never re-sent.
+* **How Soniox reaches the local audio (decision for the owner):** Soniox downloads from the internet, the local Storage is private. The script starts an **account-less `cloudflared` quick tunnel** to `e2e/support/storage-gate.mjs`, which serves ONLY `GET/HEAD /storage/v1/object/sign/meeting-audio/…?token=…` (everything else 404; tested), for the minutes of the run; a test seam `STT_TEST_PUBLIC_STORAGE_ORIGIN` (ignored when `NODE_ENV=production`, unit-tested, not in any bundle) swaps only the origin of the signed URL.
+  Nothing is created in any Cloudflare account and no Cloudflare setting is touched. Without the tunnel the only alternative is uploading the file bytes to Soniox (`POST /v1/files`), which would not test the production path.
+* **Command (owner terminal; the key is typed into the hidden prompt, never pasted into chat):**
+```bash
+cd /Volumes/WORKSPACE/Dev/Apps/ClearSpace/V1-intelligence
+# throwaway local stack must be up (docs/intelligence/IMPLEMENTATION_REPORT.md recipe) and these set: E2E_SUPABASE_URL E2E_SUPABASE_ANON_KEY E2E_SUPABASE_SERVICE_KEY PW_CHROMIUM_PATH
+CONFIRM_REAL_SONIOX_JOBS=1 SONIOX_REGION=us frontend/scripts/soniox-real-test.sh      # SONIOX_REGION must match the region of the key's project (us|eu|jp|in)
+```
+  Cost: about 0.10 USD per audio hour, i.e. well under 0.01 USD for 20 s. The script refuses without `CONFIRM_REAL_SONIOX_JOBS=1`, a local stack URL and `cloudflared`.
+
+> **Approval text S1:** „Schvaluji S1: jeden skutečný přepis jedné syntetické české nahrávky (≤ 60 s) přes Soniox, lokální aplikace + lokální Supabase, krátkodobý účtově nezávislý `cloudflared` quick tunnel jen na podepsané URL bucketu `meeting-audio`, klíč zadám sám do skrytého promptu. Bez Gemini, bez produkce, bez změny Vercelu, Cloudflare účtu a firewallu.“
+
+## B3b — promote and post-promote smoke (separate approval; after H1 and H2 PASS - the promoted URL is the H2 staged deployment of the FINAL commit, never `dpl_GQL6xxm4…`)
 
 `$V promote <staged-url> --scope bng-dev-alt-webadvisor --yes`, then `BASE_URL=https://clearspace-ai.vercel.app PRODUCTION_SMOKE_OK=1 PW_CHROMIUM_PATH=<chromium> frontend/scripts/hosted-verify.sh`
 (disposable accounts, deleted afterwards; AI routes must answer 403 and never reach the gateway), `scripts/check-production-bundle.sh` plus the same scan against the live chunks, `POST /api/ai/chat` 403,

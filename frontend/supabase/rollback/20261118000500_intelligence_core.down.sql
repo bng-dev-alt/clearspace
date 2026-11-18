@@ -4,7 +4,7 @@
 DO $$
 BEGIN
     IF to_regclass('public.clearspace_migrations') IS NOT NULL AND EXISTS (
-        SELECT 1 FROM public.clearspace_migrations WHERE version IN ('20261118000600_intelligence_quality', '20261118000700_meeting_audio')) THEN
+        SELECT 1 FROM public.clearspace_migrations WHERE version IN ('20261118000600_intelligence_quality', '20261118000700_meeting_audio', '20261118000800_stt_stabilization_repair')) THEN
         RAISE EXCEPTION 'Rollback refused: roll back 20261118000700 and 20261118000600 first.';
     END IF;
     IF coalesce(current_setting('clearspace.force_rollback', true), '') <> 'on' THEN

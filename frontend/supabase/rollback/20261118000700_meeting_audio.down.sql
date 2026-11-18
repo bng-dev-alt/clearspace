@@ -5,12 +5,19 @@
 -- project; real Storage blocks SQL deletes, so this script only checks them). Does NOT touch functions that migration 0600 defines.
 DO $$
 BEGIN
+    IF to_regclass('public.clearspace_migrations') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM public.clearspace_migrations WHERE version = '20261118000800_stt_stabilization_repair') THEN
+        RAISE EXCEPTION 'Rollback refused: roll back 20261118000800 first.';
+    END IF;
     IF coalesce(current_setting('clearspace.force_rollback', true), '') <> 'on' THEN
         IF EXISTS (SELECT 1 FROM public.meetings WHERE consent_at IS NOT NULL OR audio_path IS NOT NULL OR stt_state <> 'none') THEN
             RAISE EXCEPTION 'Rollback refused: meetings with consent/audio/STT data exist. Delete the audio (Storage API) and export what you need first, or SET clearspace.force_rollback = ''on''.';
         END IF;
         IF EXISTS (SELECT 1 FROM public.stt_jobs) THEN
             RAISE EXCEPTION 'Rollback refused: stt_jobs rows exist (provider job ids needed for provider-side deletion).';
+        END IF;
+        IF to_regclass('public.server_trust') IS NOT NULL AND EXISTS (SELECT 1 FROM public.server_trust) THEN
+            RAISE EXCEPTION 'Rollback refused: a server secret hash is registered in server_trust (dropping it disables nothing else, but the owner must re-register it after a re-apply). Use force_rollback to proceed.';
         END IF;
         IF EXISTS (SELECT 1 FROM public.meeting_audio_orphans) THEN
             RAISE EXCEPTION 'Rollback refused: orphaned audio is still queued for deletion.';
@@ -32,11 +39,12 @@ DROP FUNCTION IF EXISTS public.queue_audio_orphan();
 DROP FUNCTION IF EXISTS public.can_access_meeting_audio(TEXT, BOOLEAN);
 DROP FUNCTION IF EXISTS public.is_orphan_meeting_audio(TEXT);
 DROP FUNCTION IF EXISTS public.meeting_audio_object_count(TEXT);
+DROP FUNCTION IF EXISTS public.list_project_audio(TEXT, BOOLEAN, INTEGER);
 DROP FUNCTION IF EXISTS public.stt_reserve(TEXT, UUID, INTEGER, BIGINT, BIGINT);
-DROP FUNCTION IF EXISTS public.stt_attach_job(TEXT, UUID, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.stt_mark_unknown(TEXT, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.stt_attach_job(TEXT, UUID, INTEGER, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.stt_mark_unknown(TEXT, UUID, INTEGER, TEXT);
 DROP FUNCTION IF EXISTS public.stt_resolve_unknown(TEXT, UUID, TEXT);
-DROP FUNCTION IF EXISTS public.stt_fail(TEXT, UUID, TEXT, TEXT, TEXT, INTEGER);
+DROP FUNCTION IF EXISTS public.stt_fail(TEXT, UUID, INTEGER, TEXT, TEXT, TEXT, INTEGER);
 DROP FUNCTION IF EXISTS public.stt_complete(TEXT, UUID, TEXT, TEXT, INTEGER, JSONB, INTEGER);
 DROP FUNCTION IF EXISTS public.stt_cleanup_result(TEXT, UUID, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.mark_audio_deleted(UUID);

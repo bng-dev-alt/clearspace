@@ -106,6 +106,17 @@ AS $$
 $$;
 GRANT EXECUTE ON FUNCTION public.intelligence_limits() TO authenticated;
 
+-- Machine provenance token: a row for the CURRENT transaction id, written only by the server-trusted stt_complete (migration 0700,
+-- which needs the server secret). Unlike a session setting (any member can SET app.*), a member cannot write this table
+-- (no grants, RLS on, no policy), so a transcript with source 'soniox' cannot be forged from SQL either.
+CREATE TABLE IF NOT EXISTS public.machine_persist_tokens (
+    txid BIGINT PRIMARY KEY,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+ALTER TABLE public.machine_persist_tokens ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.machine_persist_tokens FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.machine_persist_tokens TO service_role;
+
 CREATE OR REPLACE FUNCTION public.validate_transcript_lineage()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -114,9 +125,9 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_max INTEGER := (public.intelligence_limits() ->> 'max_revisions_per_meeting')::integer;
-    v_machine BOOLEAN := coalesce(current_setting('app.stt_persist', true), '') = 'on';
+    v_machine BOOLEAN := EXISTS (SELECT 1 FROM public.machine_persist_tokens t WHERE t.txid = txid_current());
 BEGIN
-    -- machine provenance: only the server-trusted stt_complete (migration 0700) sets this session flag
+    -- machine provenance: only the server-trusted stt_complete (migration 0700) writes a token row for this transaction
     IF NEW.source = 'soniox' AND NOT v_machine THEN
         RAISE EXCEPTION 'Přepis ze strojového přepisu lze vytvořit jen přes stt_complete.' USING ERRCODE = '42501';
     END IF;

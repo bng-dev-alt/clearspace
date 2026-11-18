@@ -98,10 +98,10 @@ BEGIN
   PERFORM test.throws(format('select * from public.stt_reserve(%L, %L, 120000, 72000000, 360000000)', bad, mA), '42501', 'stt_reserve with a WRONG secret is refused');
   PERFORM test.throws(format('select * from public.stt_reserve(%L, %L, 120000, 72000000, 360000000)', 'short', mA), '42501', 'stt_reserve with a short secret is refused');
   PERFORM test.throws(format('select * from public.stt_reserve(NULL, %L, 120000, 72000000, 360000000)', mA), '42501', 'stt_reserve without a secret is refused');
-  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, 'job-x', 'stt-async-v6')$q$, bad, mA), '42501', 'stt_attach_job is server-only');
-  PERFORM test.throws(format($q$select public.stt_mark_unknown(%L, %L, 'network_error')$q$, bad, mA), '42501', 'stt_mark_unknown is server-only');
+  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, 1, 'job-x', 'stt-async-v6')$q$, bad, mA), '42501', 'stt_attach_job is server-only');
+  PERFORM test.throws(format($q$select public.stt_mark_unknown(%L, %L, 1, 'network_error')$q$, bad, mA), '42501', 'stt_mark_unknown is server-only');
   PERFORM test.throws(format($q$select public.stt_resolve_unknown(%L, %L, 'absent')$q$, bad, mA), '42501', 'stt_resolve_unknown is server-only');
-  PERFORM test.throws(format($q$select public.stt_fail(%L, %L, NULL, 'x', 'none')$q$, bad, mA), '42501', 'stt_fail (which can zero a ledger row) is server-only');
+  PERFORM test.throws(format($q$select public.stt_fail(%L, %L, 1, NULL, 'x', 'none')$q$, bad, mA), '42501', 'stt_fail (which can zero a ledger row) is server-only');
   PERFORM test.throws(format($q$select public.stt_complete(%L, %L, 'j', 'm', 0, '{}'::jsonb)$q$, bad, mA), '42501', 'stt_complete (which writes machine provenance) is server-only');
   PERFORM test.throws(format($q$select public.stt_cleanup_result(%L, gen_random_uuid(), 'done')$q$, bad), '42501', 'stt_cleanup_result is server-only');
   PERFORM test.act_as(c, 'au-c@example.test');
@@ -137,11 +137,11 @@ BEGIN
   PERFORM test.throws(format($q$select public.attach_meeting_audio(%L, %L, 2000, 'audio/wav', 1)$q$, mA, pathA2), '55000', 'audio cannot be replaced while a job runs');
 
   -- ---- attach job ---------------------------------------------------------------------------------------------------
-  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, '', 'stt-async-v6')$q$, sec, mA), '22023', 'an empty job id is refused');
-  PERFORM test.ok(public.stt_attach_job(sec, mA, 'job-1', 'stt-async-v6') = 'attached', 'the provider job id is recorded');
+  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, 1, '', 'stt-async-v6')$q$, sec, mA), '22023', 'an empty job id is refused');
+  PERFORM test.ok(public.stt_attach_job(sec, mA, 1, 'job-1', 'stt-async-v6') = 'attached', 'the provider job id is recorded');
   PERFORM test.ok((select stt_state || ':' || stt_job_id || ':' || stt_model || ':' || stt_provider from public.meetings where id = mA) = 'transcribing:job-1:stt-async-v6:soniox', 'state machine: transcribing');
-  PERFORM test.ok(public.stt_attach_job(sec, mA, 'job-1', 'stt-async-v6') = 'attached', 'attaching the same job twice is idempotent');
-  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, 'job-2', 'stt-async-v6')$q$, sec, mA), '55000', 'an attempt cannot be given a second provider job');
+  PERFORM test.ok(public.stt_attach_job(sec, mA, 1, 'job-1', 'stt-async-v6') = 'attached', 'attaching the same job twice is idempotent');
+  PERFORM test.throws(format($q$select public.stt_attach_job(%L, %L, 1, 'job-2', 'stt-async-v6')$q$, sec, mA), '55000', 'an attempt cannot be given a second provider job');
   SELECT * INTO r FROM public.stt_reserve(sec, mA, 120000, 72000000, 360000000);
   PERFORM test.ok(r.outcome = 'in_progress', 'while transcribing a new start is in_progress');
 
@@ -207,8 +207,8 @@ BEGIN
   PERFORM public.attach_meeting_audio(mC, pth, 500, 'audio/mpeg', 30000);
   SELECT * INTO r FROM public.stt_reserve(sec, mC, 1800000, 72000000, 360000000);
   req := r.request_id;
-  PERFORM public.stt_attach_job(sec, mC, 'job-c1', 'stt-async-v6');
-  PERFORM public.stt_fail(sec, mC, 'job-c1', 'cancelled', 'estimated');
+  PERFORM public.stt_attach_job(sec, mC, 1, 'job-c1', 'stt-async-v6');
+  PERFORM public.stt_fail(sec, mC, 1, 'job-c1', 'cancelled', 'estimated');
   PERFORM test.ok((select status || ':' || billing_state || ':' || audio_ms from public.ai_requests where id = req) = 'failed:estimated:1800000', 'CANCELLING a running job keeps the reserved estimate in the ledger (the provider may still bill it)');
   PERFORM test.ok((select state || ':' || cleanup_state || ':' || provider_job_id from public.stt_jobs where meeting_id = mC and attempt = 1) = 'cancelled:pending:job-c1', 'the cancelled job id is kept and queued for provider-side deletion');
   PERFORM test.ok((select stt_cleanup_pending and stt_job_id = 'job-c1' and stt_state = 'failed' from public.meetings where id = mC), 'the meeting keeps the provider job id');
@@ -218,12 +218,12 @@ BEGIN
   PERFORM test.ok(r.outcome = 'started' AND r.attempt = 2 AND r.client_reference = mC::text || ':2', 'a retry is a NEW attempt with its own reference');
   PERFORM test.ok((select stt_job_id from public.meetings where id = mC) = 'job-c1', 'starting a retry does NOT forget the previous provider job id');
   req2 := r.request_id;
-  PERFORM public.stt_fail(sec, mC, NULL, 'invalid_audio', 'none');
+  PERFORM public.stt_fail(sec, mC, 2, NULL, 'invalid_audio', 'none');
   PERFORM test.ok((select status || ':' || billing_state || ':' || audio_ms || ':' || cost_usd from public.ai_requests where id = req2) = 'failed:not_billed:0:0.0000', 'a failure CONFIRMED not billed (e.g. audio rejected before any provider call) is released from the budget');
   SELECT * INTO r FROM public.stt_reserve(sec, mC, 1000, 72000000, 360000000);
   PERFORM test.ok(r.outcome = 'started' AND r.attempt = 3, 'third attempt');
-  PERFORM public.stt_attach_job(sec, mC, 'job-c3', 'stt-async-v6');
-  PERFORM public.stt_fail(sec, mC, 'job-c3', 'empty_transcript', 'actual', 60000);
+  PERFORM public.stt_attach_job(sec, mC, 3, 'job-c3', 'stt-async-v6');
+  PERFORM public.stt_fail(sec, mC, 3, 'job-c3', 'empty_transcript', 'actual', 60000);
   PERFORM test.ok((select audio_ms || ':' || cost_usd || ':' || billing_state from public.ai_requests where id = (select stt_request_id from public.meetings where id = mC)) = '60000:0.0017:actual', 'a job that failed AFTER the provider processed it is booked at the provider''s real duration');
   SELECT * INTO r FROM public.stt_reserve(sec, mC, 1000, 72000000, 360000000);
   PERFORM test.ok(r.outcome = 'attempts_exhausted', 'attempts are cumulative per meeting');
@@ -244,10 +244,10 @@ BEGIN
   PERFORM public.attach_meeting_audio(mD, pth, 500, 'audio/mpeg', 30000);
   SELECT * INTO r FROM public.stt_reserve(sec, mD, 600000, 72000000, 360000000);
   req := r.request_id;
-  PERFORM public.stt_mark_unknown(sec, mD, 'network_error');
+  PERFORM public.stt_mark_unknown(sec, mD, 1, 'network_error');
   PERFORM test.ok((select stt_state || ':' || stt_error_type from public.meetings where id = mD) = 'unknown:network_error', 'an ambiguous provider POST (timeout/5xx) puts the meeting into "unknown"');
   PERFORM test.ok((select billing_state from public.ai_requests where id = req) = 'uncertain' AND (select audio_ms from public.ai_requests where id = req) = 600000, 'the estimate stays in the budget as UNCERTAIN');
-  PERFORM public.stt_mark_unknown(sec, mD, 'network_error');
+  PERFORM public.stt_mark_unknown(sec, mD, 1, 'network_error');
   PERFORM test.ok(true, 'marking unknown twice is idempotent');
   SELECT * INTO r FROM public.stt_reserve(sec, mD, 600000, 72000000, 360000000);
   PERFORM test.ok(r.outcome = 'unknown_outcome', 'a retry while the outcome is unknown is NOT started (no repeated paid POST)');
@@ -255,7 +255,7 @@ BEGIN
   PERFORM test.throws(format($q$select public.attach_meeting_audio(%L, %L, 500, 'audio/mpeg', 1)$q$, mD, pth), '55000', 'audio cannot be swapped while the outcome is unknown');
   PERFORM test.throws(format('select public.mark_audio_deleted(%L)', mD), '55000', 'and cannot be deleted before the outcome is known');
   -- reconciled: the provider list showed the job -> adopt it (no new POST)
-  PERFORM test.ok(public.stt_attach_job(sec, mD, 'job-adopted', 'stt-async-v6') = 'attached', 'RECONCILIATION: the provider job found by client_reference is adopted');
+  PERFORM test.ok(public.stt_attach_job(sec, mD, 1, 'job-adopted', 'stt-async-v6') = 'attached', 'RECONCILIATION: the provider job found by client_reference is adopted');
   PERFORM test.ok((select stt_state || ':' || stt_job_id from public.meetings where id = mD) = 'transcribing:job-adopted', 'the meeting continues as transcribing');
   -- absent: the provider list proved there is no job -> safe to retry, nothing billed
   INSERT INTO public.meetings (project_id, title, source_kind) VALUES ('pAu', 'Chybějící', 'audio') RETURNING id INTO mE;
@@ -265,15 +265,20 @@ BEGIN
   PERFORM public.attach_meeting_audio(mE, pth, 500, 'audio/mpeg', 30000);
   SELECT * INTO r FROM public.stt_reserve(sec, mE, 600000, 72000000, 360000000);
   req := r.request_id;
-  PERFORM public.stt_mark_unknown(sec, mE, 'timeout');
-  PERFORM public.stt_resolve_unknown(sec, mE, 'absent');
+  PERFORM public.stt_mark_unknown(sec, mE, 1, 'timeout');
+  PERFORM test.ok(public.stt_resolve_unknown(sec, mE, 'absent') = 'too_early', 'resolving BEFORE the submission window has passed is refused (the POST may still be in flight)');
+  PERFORM test.ok((select stt_state from public.meetings where id = mE) = 'unknown', '...and the meeting stays unknown');
+  PERFORM test.reset(); UPDATE public.meetings SET stt_submitted_at = now() - interval '11 minutes' WHERE id = mE; PERFORM test.act_as(b, 'au-b@example.test');
+  PERFORM test.ok(public.stt_resolve_unknown(sec, mE, 'absent') = 'resolved', 'after the window the provider list may prove absence');
   PERFORM test.ok((select stt_state || ':' || stt_error_type from public.meetings where id = mE) = 'failed:not_created', 'confirmed absent: the attempt failed as not_created');
   PERFORM test.ok((select billing_state || ':' || audio_ms from public.ai_requests where id = req) = 'not_billed:0', 'and the estimate is RELEASED from the budget (only now)');
   SELECT * INTO r FROM public.stt_reserve(sec, mE, 600000, 72000000, 360000000);
   PERFORM test.ok(r.outcome = 'started' AND r.attempt = 2, 'only now a retry is allowed');
   -- abandon: the user gave up waiting -> the estimate stays
-  PERFORM public.stt_mark_unknown(sec, mE, 'timeout');
+  PERFORM public.stt_mark_unknown(sec, mE, 2, 'timeout');
   req2 := (select stt_request_id from public.meetings where id = mE);
+  PERFORM test.ok(public.stt_resolve_unknown(sec, mE, 'abandon') = 'too_early', 'ABANDONING a fresh unknown attempt is refused too: no immediate second paid POST');
+  PERFORM test.reset(); UPDATE public.meetings SET stt_submitted_at = now() - interval '11 minutes' WHERE id = mE; PERFORM test.act_as(b, 'au-b@example.test');
   PERFORM public.stt_resolve_unknown(sec, mE, 'abandon');
   PERFORM test.ok((select billing_state from public.ai_requests where id = req2) = 'uncertain', 'ABANDONING an unknown outcome keeps the estimate in the budget');
   PERFORM test.ok((select cleanup_state from public.stt_jobs where meeting_id = mE and attempt = 2) = 'abandoned', 'and marks the unreachable job abandoned');
@@ -303,11 +308,17 @@ BEGIN
   INSERT INTO storage.objects (bucket_id, name, owner, metadata) VALUES ('meeting-audio', pth, b, '{"size":500,"mimetype":"audio/mpeg"}');
   PERFORM public.attach_meeting_audio(mD, pth, 500, 'audio/mpeg', 30000);
   PERFORM public.stt_reserve(sec, mD, 600000, 72000000, 360000000);
-  PERFORM public.stt_fail(sec, mD, NULL, 'cancelled', 'uncertain');
-  PERFORM test.ok(public.stt_attach_job(sec, mD, 'job-late', 'stt-async-v6') = 'orphaned', 'a job created while the user cancelled is reported as orphaned');
+  PERFORM public.stt_fail(sec, mD, 1, NULL, 'cancelled', 'uncertain');
+  PERFORM test.ok((select stt_state from public.meetings where id = mD) = 'unknown', 'F3 (database level): a cancel/failure of a SUBMITTING attempt that is not a confirmed rejection leaves the outcome UNKNOWN, never a plain failure');
+  SELECT * INTO r FROM public.stt_reserve(sec, mD, 600000, 72000000, 360000000);
+  PERFORM test.ok(r.outcome = 'unknown_outcome', 'F3: ... so no immediate retry (no second paid POST) is possible');
+  -- the user really abandons after the window: now the attempt is failed and a late job id is kept for deletion
+  PERFORM test.reset(); UPDATE public.meetings SET stt_submitted_at = now() - interval '11 minutes' WHERE id = mD; PERFORM test.act_as(b, 'au-b@example.test');
+  PERFORM test.ok(public.stt_resolve_unknown(sec, mD, 'abandon') = 'resolved', 'the user abandons after the submission window');
+  PERFORM test.ok(public.stt_attach_job(sec, mD, 1, 'job-late', 'stt-async-v6') = 'orphaned', 'a job created while the user cancelled is reported as orphaned');
   PERFORM test.ok((select provider_job_id || ':' || cleanup_state from public.stt_jobs where meeting_id = mD) = 'job-late:pending', 'but its id is KEPT and queued for deletion (not lost)');
   PERFORM test.ok((select stt_cleanup_pending and stt_state = 'failed' from public.meetings where id = mD), 'the meeting stays failed with cleanup pending');
-  PERFORM test.throws(format($q$select public.stt_fail(%L, %L, 'job-late', 'x', 'bogus')$q$, sec, mD), '22023', 'an invalid billing state is refused');
+  PERFORM test.throws(format($q$select public.stt_fail(%L, %L, 1, 'job-late', 'x', 'bogus')$q$, sec, mD), '22023', 'an invalid billing state is refused');
 
   -- ---- deleting a meeting: provider job rows and orphan audio survive for cleanup -------------------------------------
   PERFORM test.act_as(a, 'au-a@example.test');
@@ -340,7 +351,7 @@ BEGIN
       VALUES (mC, 'pAu', md5('cap' || n) || md5('Cap' || n), 'paste', '[]', jsonb_build_array(jsonb_build_object('id', 's', 'text', 'x')), 1);
   END LOOP;
   PERFORM public.stt_reserve(sec, mC, 600000, 72000000, 360000000);
-  PERFORM public.stt_attach_job(sec, mC, 'job-cap', 'stt-async-v6');
+  PERFORM public.stt_attach_job(sec, mC, 1, 'job-cap', 'stt-async-v6');
   PERFORM test.ok(public.stt_complete(sec, mC, 'job-cap', 'stt-async-v6', 60000, jsonb_set(tr, '{revision}', to_jsonb(md5('capx') || md5('capy')))) = md5('capx') || md5('capy'), 'the 26th revision is stored when it is a BILLED provider result');
   PERFORM test.throws(format($q$insert into public.meeting_transcripts (meeting_id, project_id, revision, source, speakers, segments, char_count) values (%L, 'pAu', %L, 'paste', '[]', '[{"id":"s","text":"x"}]', 1)$q$, mC, md5('human') || md5('Human')), 'PT429', 'while a human cannot add one beyond the cap');
 

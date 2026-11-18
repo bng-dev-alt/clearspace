@@ -60,6 +60,7 @@ run_test() { # $1 = db, $2 = file
   fi
 }
 
+"$HERE/../tools/build_0800.sh" --check || exit 1
 TOTAL=0
 ONLY=${ONLY:-all}   # ONLY=hosted runs just the hosted-fidelity scenarios (D, E)
 if [ "$ONLY" = all ]; then
@@ -84,6 +85,7 @@ echo "ok - preflight refused the migration, nothing was created"
 source "$HERE/legacy_upgrade.sh"
 source "$HERE/concurrency.sh"
 source "$HERE/rollback.sh"
+source "$HERE/upgrade.sh"
 fi
 source "$HERE/hosted_fidelity.sh"
 echo "ALL DATABASE TESTS PASSED ($TOTAL SQL assertions: suites run as superuser in scenario A and as the hosted non-superuser role in scenario E; plus legacy-upgrade, drift/ownership preflight and concurrency checks)"

@@ -87,18 +87,19 @@ ALTER TABLE public.meetings ADD COLUMN IF NOT EXISTS stt_cleanup_pending BOOLEAN
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meetings_stt_state_check') THEN
-        ALTER TABLE public.meetings ADD CONSTRAINT meetings_stt_state_check
-            CHECK (stt_state IN ('none', 'submitting', 'unknown', 'transcribing', 'completed', 'failed'));
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meetings_stt_misc_check') THEN
+    -- re-asserted on every run: an earlier version of this file created a narrower state list (no 'unknown')
+    ALTER TABLE public.meetings DROP CONSTRAINT IF EXISTS meetings_stt_state_check;
+    ALTER TABLE public.meetings ADD CONSTRAINT meetings_stt_state_check
+        CHECK (stt_state IN ('none', 'submitting', 'unknown', 'transcribing', 'completed', 'failed'));
+    ALTER TABLE public.meetings DROP CONSTRAINT IF EXISTS meetings_stt_misc_check;
+    BEGIN
         ALTER TABLE public.meetings ADD CONSTRAINT meetings_stt_misc_check CHECK (
             stt_attempts BETWEEN 0 AND 10
             AND (stt_error_type IS NULL OR stt_error_type ~ '^[a-z0-9_]{1,64}$')
             AND (stt_job_id IS NULL OR char_length(stt_job_id) BETWEEN 1 AND 100)
             AND (audio_bytes IS NULL OR audio_bytes BETWEEN 1 AND 52428800)
             AND (audio_client_ms IS NULL OR audio_client_ms BETWEEN 0 AND 18000000));
-    END IF;
+    END;
 END $$;
 -- No new client privileges: consent, audio and STT columns are written only by the RPCs below.
 
@@ -255,6 +256,28 @@ $$;
 REVOKE ALL ON FUNCTION public.meeting_audio_object_count(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.meeting_audio_object_count(TEXT) TO authenticated;
 
+-- Objects of a project's audio folder that are not the registered audio of any meeting: uploaded but never attached (tab closed
+-- between upload and attach), or left behind by a failed delete. They carry no deadline in `meetings`, so the sweep removes them
+-- after a grace period. With p_unattached_only = FALSE it lists EVERY object of the project (used before a project is deleted).
+-- SECURITY INVOKER: only what the caller's own storage RLS lets them see.
+CREATE OR REPLACE FUNCTION public.list_project_audio(p_project TEXT, p_unattached_only BOOLEAN DEFAULT TRUE, p_older_than_hours INTEGER DEFAULT 24)
+RETURNS TABLE (path TEXT)
+LANGUAGE sql STABLE
+SET search_path = public, pg_temp
+AS $$
+    SELECT o.name
+      FROM storage.objects o
+     WHERE o.bucket_id = 'meeting-audio'
+       AND public.is_project_member(p_project)
+       AND starts_with(o.name, p_project || '/')
+       AND o.created_at <= now() - make_interval(hours => greatest(coalesce(p_older_than_hours, 24), 0))
+       AND (NOT p_unattached_only OR NOT EXISTS (SELECT 1 FROM public.meetings m WHERE m.audio_path = o.name))
+     ORDER BY o.created_at
+     LIMIT 500;
+$$;
+REVOKE ALL ON FUNCTION public.list_project_audio(TEXT, BOOLEAN, INTEGER) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.list_project_audio(TEXT, BOOLEAN, INTEGER) TO authenticated;
+
 DROP POLICY IF EXISTS "meeting_audio_select" ON storage.objects;
 CREATE POLICY "meeting_audio_select" ON storage.objects FOR SELECT TO authenticated
     USING (bucket_id = 'meeting-audio' AND (public.can_access_meeting_audio(name) OR public.is_orphan_meeting_audio(name)));
@@ -397,6 +420,19 @@ $$;
 -- ------------------------------------------------------------
 -- 7. SERVER-TRUSTED RPCs (secret required in addition to membership)
 -- ------------------------------------------------------------
+-- Obsolete signatures. `CREATE OR REPLACE` with a different argument list creates a NEW overload and leaves the old function in
+-- place, so the earlier secret-less versions (callable by any project member with their own budgets) must be dropped explicitly.
+DROP FUNCTION IF EXISTS public.stt_reserve(UUID, INTEGER, BIGINT, BIGINT);
+DROP FUNCTION IF EXISTS public.stt_attach_job(UUID, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.stt_fail(UUID, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.stt_complete(UUID, TEXT, TEXT, INTEGER, JSONB, INTEGER);
+DROP FUNCTION IF EXISTS public.stt_mark_cleaned(UUID);
+-- signatures of the previous (not attempt-bound) hardened version
+DROP FUNCTION IF EXISTS public.stt_attach_job(TEXT, UUID, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.stt_mark_unknown(TEXT, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.stt_resolve_unknown(TEXT, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.stt_fail(TEXT, UUID, TEXT, TEXT, TEXT, INTEGER);
+
 -- Starts a job (or reports why not). Estimate and budgets come from the SERVER. An unknown provider outcome is never repeated.
 CREATE OR REPLACE FUNCTION public.stt_reserve(
     p_server_secret TEXT,
@@ -484,9 +520,10 @@ BEGIN
 END;
 $$;
 
--- Records the provider's job id for the current attempt. If the meeting was cancelled/failed meanwhile, the job id is STILL kept
--- (cleanup pending) so the provider data can be deleted: returns 'orphaned' instead of failing.
-CREATE OR REPLACE FUNCTION public.stt_attach_job(p_server_secret TEXT, p_meeting UUID, p_job_id TEXT, p_model TEXT)
+-- Records the provider's job id for a SPECIFIC attempt (p_attempt comes from stt_reserve / the job's client_reference): a late
+-- job id can therefore never attach to a newer attempt. If that attempt is no longer the live one (cancelled, abandoned, failed,
+-- superseded) the id is STILL kept and queued for provider-side deletion ('orphaned'); the meeting's current attempt is untouched.
+CREATE OR REPLACE FUNCTION public.stt_attach_job(p_server_secret TEXT, p_meeting UUID, p_attempt INTEGER, p_job_id TEXT, p_model TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -495,38 +532,44 @@ AS $$
 DECLARE
     v_m public.meetings%ROWTYPE;
     v_job public.stt_jobs%ROWTYPE;
+    v_live BOOLEAN;
 BEGIN
     PERFORM public.require_server_secret('stt', p_server_secret);
     v_m := public.lock_meeting_for_member(p_meeting);
-    IF p_job_id IS NULL OR char_length(p_job_id) NOT BETWEEN 1 AND 100 OR p_model IS NULL OR char_length(p_model) NOT BETWEEN 1 AND 64 THEN
+    IF p_attempt IS NULL OR p_attempt < 1 OR p_job_id IS NULL OR char_length(p_job_id) NOT BETWEEN 1 AND 100
+       OR p_model IS NULL OR char_length(p_model) NOT BETWEEN 1 AND 64 THEN
         RAISE EXCEPTION 'Neplatná data úlohy přepisu.' USING ERRCODE = '22023';
     END IF;
-    SELECT * INTO v_job FROM public.stt_jobs WHERE meeting_id = p_meeting AND attempt = v_m.stt_attempts FOR UPDATE;
+    SELECT * INTO v_job FROM public.stt_jobs WHERE meeting_id = p_meeting AND attempt = p_attempt FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Úloha přepisu neexistuje.' USING ERRCODE = '55000';
     END IF;
+    v_live := p_attempt = v_m.stt_attempts;
+    IF v_job.provider_job_id IS NOT NULL AND v_job.provider_job_id <> p_job_id THEN
+        RAISE EXCEPTION 'Tento pokus už má jinou úlohu u poskytovatele.' USING ERRCODE = '55000';
+    END IF;
     IF v_job.provider_job_id = p_job_id THEN
-        RETURN 'attached'; -- idempotent
+        RETURN CASE WHEN v_live AND v_m.stt_state IN ('transcribing', 'completed') THEN 'attached' ELSE 'orphaned' END; -- idempotent
     END IF;
-    IF v_job.provider_job_id IS NOT NULL THEN
-        RAISE EXCEPTION 'Tato pokus už má jinou úlohu u poskytovatele.' USING ERRCODE = '55000';
-    END IF;
-    IF v_m.stt_state IN ('submitting', 'unknown') THEN
+    IF v_live AND v_m.stt_state IN ('submitting', 'unknown') THEN
         UPDATE public.stt_jobs SET provider_job_id = p_job_id, state = 'active', updated_at = now() WHERE id = v_job.id;
         UPDATE public.meetings SET stt_job_id = p_job_id, stt_model = p_model, stt_provider = 'soniox', stt_state = 'transcribing', stt_error_type = NULL WHERE id = p_meeting;
         UPDATE public.ai_requests SET model = p_model, billing_state = 'reserved' WHERE id = v_m.stt_request_id AND status = 'reserved';
         RETURN 'attached';
     END IF;
-    -- cancelled / failed while the POST was in flight: keep the id so cleanup can delete the job at the provider
+    -- not the live attempt (or it was cancelled / failed while the POST was in flight): the job EXISTS and may be billed
     UPDATE public.stt_jobs SET provider_job_id = p_job_id, cleanup_state = 'pending', cleanup_due_at = now(), updated_at = now() WHERE id = v_job.id;
+    UPDATE public.ai_requests SET model = p_model, billing_state = CASE WHEN billing_state IN ('reserved', 'uncertain') THEN 'estimated' ELSE billing_state END
+     WHERE id = v_job.request_id;
     UPDATE public.meetings SET stt_cleanup_pending = TRUE WHERE id = p_meeting;
     RETURN 'orphaned';
 END;
 $$;
 
--- The provider POST ended in a way that does not tell whether the job was created (timeout, network, 5xx). NEVER repeated
--- automatically: the estimate stays in the budget and the outcome is reconciled by client_reference_id.
-CREATE OR REPLACE FUNCTION public.stt_mark_unknown(p_server_secret TEXT, p_meeting UUID, p_error_type TEXT)
+-- The provider POST ended in a way that does not tell whether the job was created (timeout, network, 5xx, unreadable 2xx body) or
+-- the user cancelled while it was in flight. NEVER repeated automatically: the estimate stays in the budget and the outcome is
+-- reconciled by client_reference_id. Bound to the attempt: a stale call for an older attempt changes nothing.
+CREATE OR REPLACE FUNCTION public.stt_mark_unknown(p_server_secret TEXT, p_meeting UUID, p_attempt INTEGER, p_error_type TEXT)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -538,20 +581,21 @@ DECLARE
 BEGIN
     PERFORM public.require_server_secret('stt', p_server_secret);
     v_m := public.lock_meeting_for_member(p_meeting);
-    IF v_m.stt_state = 'unknown' THEN RETURN; END IF; -- idempotent
-    IF v_m.stt_state <> 'submitting' THEN
-        RAISE EXCEPTION 'Odeslání nebylo rozpracováno.' USING ERRCODE = '55000';
+    IF p_attempt IS DISTINCT FROM v_m.stt_attempts OR v_m.stt_state <> 'submitting' THEN
+        RETURN; -- idempotent / stale: nothing to mark
     END IF;
     UPDATE public.meetings SET stt_state = 'unknown', stt_error_type = v_type WHERE id = p_meeting;
-    UPDATE public.stt_jobs SET state = 'unknown_outcome', updated_at = now() WHERE meeting_id = p_meeting AND attempt = v_m.stt_attempts AND provider_job_id IS NULL;
+    UPDATE public.stt_jobs SET state = 'unknown_outcome', updated_at = now() WHERE meeting_id = p_meeting AND attempt = p_attempt AND provider_job_id IS NULL;
     UPDATE public.ai_requests SET billing_state = 'uncertain' WHERE id = v_m.stt_request_id AND status = 'reserved';
 END;
 $$;
 
 -- Ends an unknown outcome. 'absent' = the provider's job list proved that no job exists (nothing billed, retry is safe).
--- 'abandon' = the user gave up waiting: the estimate STAYS in the budget (the job may still exist).
+-- 'abandon' = the user gave up waiting: the estimate STAYS in the budget (the job may still exist). Neither is allowed before the
+-- submission window (stt_stuck_minutes) has passed, so a POST that is still in flight can never be followed by a second paid one.
+-- Returns 'resolved', 'too_early' or 'noop'.
 CREATE OR REPLACE FUNCTION public.stt_resolve_unknown(p_server_secret TEXT, p_meeting UUID, p_resolution TEXT)
-RETURNS VOID
+RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
@@ -565,7 +609,10 @@ BEGIN
         RAISE EXCEPTION 'Neplatné vyřešení nejistého stavu.' USING ERRCODE = '22023';
     END IF;
     IF v_m.stt_state <> 'unknown' THEN
-        RETURN; -- idempotent: nothing to resolve
+        RETURN 'noop'; -- idempotent: nothing to resolve
+    END IF;
+    IF v_m.stt_submitted_at > now() - make_interval(mins => (public.intelligence_limits() ->> 'stt_stuck_minutes')::integer) THEN
+        RETURN 'too_early';
     END IF;
     UPDATE public.meetings
        SET stt_state = 'failed', status = 'failed', stt_error_type = CASE WHEN p_resolution = 'absent' THEN 'not_created' ELSE 'outcome_unknown' END
@@ -580,13 +627,14 @@ BEGIN
         UPDATE public.ai_requests SET status = 'failed', error_code = 'outcome_unknown', completed_at = now()
          WHERE id = v_m.stt_request_id AND status = 'reserved'; -- billing_state stays 'uncertain', the estimate keeps counting
     END IF;
+    RETURN 'resolved';
 END;
 $$;
 
--- Records a failure. p_billing says what we KNOW about cost: 'none' (confirmed nothing billed), 'uncertain', 'estimated'
--- (a job exists and may have run: the reserved estimate stays), 'actual' (provider reported p_audio_ms). A failure or a
--- cancellation therefore never erases cost that may have been incurred.
-CREATE OR REPLACE FUNCTION public.stt_fail(p_server_secret TEXT, p_meeting UUID, p_job_id TEXT, p_error_type TEXT, p_billing TEXT, p_audio_ms INTEGER DEFAULT NULL)
+-- Records a failure of ONE attempt. p_billing says what we KNOW about cost: 'none' (confirmed nothing billed), 'uncertain',
+-- 'estimated' (a job exists and may have run: the reserved estimate stays), 'actual' (provider reported p_audio_ms). A failure or
+-- a cancellation therefore never erases cost that may have been incurred. A stale call for an older attempt changes nothing.
+CREATE OR REPLACE FUNCTION public.stt_fail(p_server_secret TEXT, p_meeting UUID, p_attempt INTEGER, p_job_id TEXT, p_error_type TEXT, p_billing TEXT, p_audio_ms INTEGER DEFAULT NULL)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -604,14 +652,26 @@ BEGIN
     IF p_billing NOT IN ('none', 'uncertain', 'estimated', 'actual') THEN
         RAISE EXCEPTION 'Neplatný stav účtování.' USING ERRCODE = '22023';
     END IF;
+    IF p_attempt IS DISTINCT FROM v_m.stt_attempts THEN
+        RETURN; -- stale call for another attempt: never touches the live one
+    END IF;
     IF v_m.stt_state = 'failed' THEN
         RETURN; -- idempotent
     END IF;
     IF v_m.stt_state NOT IN ('submitting', 'transcribing') THEN
         RAISE EXCEPTION 'Přepis neběží, není co označit jako selhaný.' USING ERRCODE = '55000';
     END IF;
-    SELECT * INTO v_job FROM public.stt_jobs WHERE meeting_id = p_meeting AND attempt = v_m.stt_attempts FOR UPDATE;
-    v_pid := coalesce(v_job.provider_job_id, p_job_id); -- NOT v_m.stt_job_id: that is the PREVIOUS attempt's id
+    -- An attempt that is still SUBMITTING may have a paid POST in flight (or one whose answer was lost). Anything but a CONFIRMED
+    -- 'none' (the provider rejected the request) must NOT become a plain failure, because a failed attempt can be retried at once
+    -- and that would be a second paid POST. Such a call (a cancellation, a timeout) leaves the outcome UNKNOWN instead.
+    IF v_m.stt_state = 'submitting' AND p_billing <> 'none' THEN
+        UPDATE public.meetings SET stt_state = 'unknown', stt_error_type = v_type WHERE id = p_meeting;
+        UPDATE public.stt_jobs SET state = 'unknown_outcome', updated_at = now() WHERE meeting_id = p_meeting AND attempt = p_attempt AND provider_job_id IS NULL;
+        UPDATE public.ai_requests SET billing_state = 'uncertain' WHERE id = v_m.stt_request_id AND status = 'reserved';
+        RETURN;
+    END IF;
+    SELECT * INTO v_job FROM public.stt_jobs WHERE meeting_id = p_meeting AND attempt = p_attempt FOR UPDATE;
+    v_pid := coalesce(v_job.provider_job_id, p_job_id); -- NOT v_m.stt_job_id: that may be a PREVIOUS attempt's id
     IF p_job_id IS NOT NULL AND v_job.provider_job_id IS NOT NULL AND v_job.provider_job_id <> p_job_id THEN
         RAISE EXCEPTION 'Úloha přepisu nesouhlasí.' USING ERRCODE = '55000';
     END IF;
@@ -672,13 +732,14 @@ BEGIN
         RAISE EXCEPTION 'Neplatný přepis.' USING ERRCODE = '22023';
     END IF;
 
-    PERFORM set_config('app.stt_persist', 'on', true); -- transaction-local; checked by validate_transcript_lineage
+    -- machine provenance token for THIS transaction (checked by validate_transcript_lineage; members cannot write this table)
+    INSERT INTO public.machine_persist_tokens (txid) VALUES (txid_current()) ON CONFLICT (txid) DO NOTHING;
     INSERT INTO public.meeting_transcripts (meeting_id, project_id, revision, source, speakers, segments, coverage, char_count, created_by)
     VALUES (p_meeting, v_m.project_id, v_rev, 'soniox',
             coalesce(p_transcript -> 'speakers', '[]'::jsonb), p_transcript -> 'segments', coalesce(p_transcript -> 'coverage', '{}'::jsonb),
             (p_transcript ->> 'char_count')::integer, auth.uid())
     ON CONFLICT (meeting_id, revision) DO NOTHING;
-    PERFORM set_config('app.stt_persist', 'off', true);
+    DELETE FROM public.machine_persist_tokens WHERE txid = txid_current();
 
     v_cost := round(p_audio_ms::numeric / 3600000.0 * 0.10, 4); -- estimate: US$0.10 per audio hour (verified 2026-11-18)
     UPDATE public.meetings
@@ -747,8 +808,8 @@ DECLARE
 BEGIN
     FOREACH f IN ARRAY ARRAY[
         'record_audio_consent(uuid)', 'attach_meeting_audio(uuid,text,bigint,text,integer)', 'mark_audio_deleted(uuid)',
-        'stt_reserve(text,uuid,integer,bigint,bigint)', 'stt_attach_job(text,uuid,text,text)', 'stt_mark_unknown(text,uuid,text)',
-        'stt_resolve_unknown(text,uuid,text)', 'stt_fail(text,uuid,text,text,text,integer)',
+        'stt_reserve(text,uuid,integer,bigint,bigint)', 'stt_attach_job(text,uuid,integer,text,text)', 'stt_mark_unknown(text,uuid,integer,text)',
+        'stt_resolve_unknown(text,uuid,text)', 'stt_fail(text,uuid,integer,text,text,text,integer)',
         'stt_complete(text,uuid,text,text,integer,jsonb,integer)', 'stt_cleanup_result(text,uuid,text,text)']
     LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', f);

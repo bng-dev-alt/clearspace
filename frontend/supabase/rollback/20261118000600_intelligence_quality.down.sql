@@ -22,6 +22,7 @@ DROP TRIGGER IF EXISTS meetings_quota ON public.meetings;
 DROP TRIGGER IF EXISTS meeting_transcripts_lineage ON public.meeting_transcripts;
 DROP FUNCTION IF EXISTS public.enforce_meeting_quota();
 DROP FUNCTION IF EXISTS public.validate_transcript_lineage();
+DROP TABLE IF EXISTS public.machine_persist_tokens;
 DROP FUNCTION IF EXISTS public.project_intelligence_stamp(TEXT);
 DROP FUNCTION IF EXISTS public.intelligence_limits();
 

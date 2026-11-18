@@ -110,7 +110,7 @@ echo "ok - exactly one transcription was started under 8-way concurrency"
 
 psql_admin -d "$db" -At >/dev/null <<SQL
 $AUTH
-select public.stt_attach_job('$SEC', '$AM', 'job-par', 'stt-async-v6');
+select public.stt_attach_job('$SEC', '$AM', 1, 'job-par', 'stt-async-v6');
 SQL
 TREV=$(printf 'e%.0s' $(seq 1 64))
 TR="'{\"revision\":\"$TREV\",\"char_count\":20,\"speakers\":[],\"segments\":[{\"id\":\"seg-0-0\",\"startMs\":0,\"endMs\":1000,\"speakerId\":null,\"text\":\"Ahoj světe tady.\"}],\"coverage\":{}}'::jsonb"

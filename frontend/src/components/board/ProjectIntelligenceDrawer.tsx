@@ -23,10 +23,22 @@ import {
 } from '../../lib/projectIntelligence';
 import { aiClient } from '../../services/ai/aiClient';
 import AiModelSelector from '../ai/AiModelSelector';
+import ProjectBriefPanel from '../intelligence/ProjectBriefPanel';
+import KnowledgePanel from '../intelligence/KnowledgePanel';
+
+interface ChatCitation {
+  n: number;
+  ref: string;
+  label: string;
+  cardId: string | null;
+  meetingId: string | null;
+}
 
 interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
+  /** Ověřené zdroje odpovědi: [n] v textu odkazuje na položku seznamu (server zahazuje neexistující). */
+  citations?: ChatCitation[];
 }
 
 type PiMode = 'right' | 'left' | 'focused';
@@ -43,6 +55,10 @@ interface ProjectIntelligenceDrawerProps {
   onOpenDailyBrief?: () => void;
   onOpenCapacityPlanner?: () => void;
   onOpenVoiceCopilot?: () => void;
+  /** Projekt (pro Brief a Znalosti z porad); bez něj drawer funguje jako dřív. */
+  projectId?: string;
+  /** Otevře kartu (zdroj tvrzení). */
+  onOpenCard?: (cardId: string) => void;
 }
 
 const SEVERITY_ICON: Record<InsightSeverity, React.ComponentType<{ size?: number }>> = {
@@ -72,7 +88,10 @@ export default function ProjectIntelligenceDrawer({
   onOpenDailyBrief,
   onOpenCapacityPlanner,
   onOpenVoiceCopilot,
+  projectId,
+  onOpenCard,
 }: ProjectIntelligenceDrawerProps) {
+  const [tab, setTab] = useState<'overview' | 'brief' | 'knowledge'>('overview');
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Pozice panelu (Left / Focused / Right) -- stejný systém i animace jako TaskDetailDrawer.
@@ -135,12 +154,51 @@ export default function ProjectIntelligenceDrawer({
         data && typeof data.content === 'string' && data.content.trim()
           ? data.content.trim()
           : 'Nepodařilo se získat odpověď.';
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
+      const citations: ChatCitation[] = Array.isArray(data?.citations) ? data.citations : [];
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: answer, citations }]);
     } catch (err) {
       setChatError((err as Error).message || 'Při volání AI došlo k chybě.');
     } finally {
       setChatLoading(false);
     }
+  };
+
+  // Karta jako zdroj tvrzení: panel se plynule zavře a otevře se detail karty.
+  const openCardFromSource = useCallback(
+    (cardId: string) => {
+      if (!onOpenCard) return;
+      setIsClosing(true);
+      window.setTimeout(() => {
+        onClose();
+        onOpenCard(cardId);
+      }, 230);
+    },
+    [onClose, onOpenCard]
+  );
+
+  // [n] v odpovědi chatu -> tlačítko se zdrojem (karta se otevře, porada vede na detail).
+  const renderAnswer = (m: ChatMsg): React.ReactNode => {
+    if (!m.citations || m.citations.length === 0) return m.content;
+    return m.content.split(/(\[\d+\])/g).map((part, i) => {
+      const hit = /^\[(\d+)\]$/.exec(part);
+      const c = hit ? m.citations!.find((x) => x.n === Number(hit[1])) : undefined;
+      if (!c) return <React.Fragment key={i}>{part}</React.Fragment>;
+      return (
+        <button
+          key={i}
+          type="button"
+          className="cs-badge"
+          title={c.label}
+          data-testid="pi-chat-citation"
+          onClick={() => {
+            if (c.cardId) openCardFromSource(c.cardId);
+            else if (c.meetingId && projectId) window.location.assign(`/projects/${projectId}/meetings/${c.meetingId}`);
+          }}
+        >
+          {c.n}
+        </button>
+      );
+    });
   };
 
   // Akce nejdřív plynule zavře panel, teprve pak otevře příslušný modal (aby se overlaye nepřekrývaly).
@@ -255,6 +313,32 @@ export default function ProjectIntelligenceDrawer({
           {/* Sub -- klidná deklarace, žádná persona */}
           <p className="pi-sub">Přehled projektu „{projectName}“ · aktualizováno teď</p>
 
+          {projectId && (
+            <div role="tablist" aria-label="Sekce Project Intelligence" className="pi-mode-switch" data-testid="pi-tabs" style={{ marginBottom: '0.75rem' }}>
+              {([['overview', 'Přehled'], ['brief', 'Brief'], ['knowledge', 'Znalosti']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  className={`pi-mode-btn ${tab === id ? 'active' : ''}`}
+                  onClick={() => setTab(id)}
+                  data-testid={`pi-tab-${id}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {projectId && tab === 'brief' && (
+            <ProjectBriefPanel projectId={projectId} columns={columns} onOpenCard={onOpenCard ? openCardFromSource : undefined} />
+          )}
+          {projectId && tab === 'knowledge' && (
+            <KnowledgePanel projectId={projectId} onOpenCard={onOpenCard ? openCardFromSource : undefined} />
+          )}
+
+          {(!projectId || tab === 'overview') && (<>
           {/* PULSE / zdraví */}
           <section className={`pi-pulse pi-level-${health.level}`} data-testid="pi-health">
             <div className="pi-pulse-line">
@@ -465,7 +549,7 @@ export default function ProjectIntelligenceDrawer({
               <div className="pi-chat-log" ref={chatLogRef} data-testid="pi-chat-log">
                 {chatMessages.map((m, i) => (
                   <div key={i} className={`pi-chat-msg pi-chat-${m.role}`}>
-                    {m.content}
+                    {renderAnswer(m)}
                   </div>
                 ))}
                 {chatLoading && (
@@ -502,6 +586,7 @@ export default function ProjectIntelligenceDrawer({
               </button>
             </form>
           </section>
+          </>)}
         </div>
       </div>
     </>

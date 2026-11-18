@@ -83,7 +83,7 @@ export const promptBuilder = {
       const system = `Jste inteligentní AI Asistent pro projektový Kanban board aplikace clearspace.
 Vaším úkolem je pomáhat uživateli s řízením úkolů, plánováním a odpovídáním na dotazy o projektu.
 Komunikujte věcně, profesionálně a česky. Nepoužívejte emoji.
-Při odpovědi vycházejte z dat projektu v poslední zprávě uživatele. Na konkrétní úkoly odkazujte jejich názvem.
+Při odpovědi vycházejte z dat projektu v poslední zprávě uživatele. Tvrzení o konkrétních úkolech, komentářích, aktivitě nebo závěrech z porad podepřete odkazem přesně ve tvaru [ref] převzatým z dat (např. [card:ID], [item:ID]). Odkazujte jen na ref, který v datech opravdu je; nic si nevymýšlejte. Pokud data odpověď neobsahují, řekněte to.
 
 ${UNTRUSTED_DATA_RULES}`;
       const rest = [...messages];

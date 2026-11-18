@@ -4,7 +4,7 @@ import { AiRequest, AiResponse, AiModelConfig, AiContext, AiMessage } from './ty
 import { Card, Column, TeamMember } from '../../types/kanban';
 import { AiProviderError, AiErrorCode } from '../../lib/ai/errors';
 import { serverModel } from './model';
-import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema, meetingBriefSchema } from './schemas';
+import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema, meetingBriefSchema, projectBriefSchema } from './schemas';
 
 // Jednoduché lokální logování AI requestů na serveru
 function logAiRequest(
@@ -76,6 +76,18 @@ export const aiService = {
       timeoutMs: 120000,
     };
     return this._execute('meeting_brief', messages, config);
+  },
+
+  // Project Intelligence 2.0: Project Brief (prompt staví lib/ai/projectBrief).
+  async executeProjectBrief(messages: AiMessage[]): Promise<AiResponse> {
+    const config: AiModelConfig = {
+      model: serverModel(),
+      temperature: 0.2,
+      maxTokens: 4096,
+      responseSchema: projectBriefSchema,
+      timeoutMs: 90000,
+    };
+    return this._execute('project_brief', messages, config);
   },
 
   // 1. AI Chat

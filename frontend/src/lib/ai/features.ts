@@ -4,6 +4,7 @@ import { Card, Column, TeamMember } from '../../types/kanban';
 import { AiFeature } from './gateway';
 import { AiGatewayError } from './errors';
 import { int, isRecord, list, oneOf, optStr, record, str } from './validate';
+import { linkCitations } from '../intelligence/citations';
 
 /**
  * Definice 11 AI featur. Vstup od klienta je NEDŮVĚRYHODNÝ: validuje se a
@@ -92,6 +93,8 @@ export const aiFeatures = {
         messages: input.messages,
         context: { project: project ?? undefined, columns: board, renderedContext: context?.rendered },
       }),
+    // Citace [card:ID] z odpovědi se ověří proti zdrojům kontextu a převedou na [1], [2]... (falešné se zahodí).
+    finalize: async ({ response, context }) => linkCitations(response.content, context?.sources ?? []),
   }),
 
   improve: feature<{ card: Card }>({

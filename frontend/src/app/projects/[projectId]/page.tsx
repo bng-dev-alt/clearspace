@@ -861,6 +861,16 @@ export default function ProjectBoardPage() {
           onOpenDailyBrief={() => setIsDailyBriefOpen(true)}
           onOpenCapacityPlanner={() => setIsCapacityPlannerOpen(true)}
           onOpenVoiceCopilot={() => setIsVoiceCopilotOpen(true)}
+          projectId={projectId}
+          onOpenCard={(cardId) => {
+            for (const col of columns) {
+              const card = col.cards.find((c) => c.id === cardId);
+              if (card) {
+                handleOpenDrawer(col.id, card);
+                return;
+              }
+            }
+          }}
         />
       )}
 

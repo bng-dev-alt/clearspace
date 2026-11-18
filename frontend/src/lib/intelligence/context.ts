@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Card, Column, ProjectActivityLog } from '../../types/kanban';
 import { loadBoard } from '../ai/board';
-import { computeProjectFacts, DEFAULT_TZ, FACTS_VERSION, type ProjectFacts } from './facts';
+import { mapActivityRows, mapItemRows } from './mappers';
+export { mapActivityRows, mapItemRows };
+import { computeProjectFacts, DEFAULT_TZ, FACTS_VERSION, type ProjectFacts, type ProjectItemLite } from './facts';
 import { frameUntrusted } from './frame';
 import type { SourceRecord } from './types';
 
@@ -23,6 +25,8 @@ export const CONTEXT_BUDGETS: Record<ContextPurpose, number> = {
 };
 
 const ACTIVITY_LIMIT = 100;
+const ITEM_LIMIT = 200;
+const ITEM_STATES = ['proposed', 'accepted', 'applied'];
 const DETAILS_CAP = 600;
 const COMMENT_CAP = 500;
 const COMMENTS_PER_CARD = 3;
@@ -39,6 +43,8 @@ export interface ProjectContext {
   /** sha256(rendered + FACTS_VERSION): klíč cache a detekce zastaralosti. */
   fingerprint: string;
   truncated: { kind: string; omitted: number }[];
+  /** Id všech přijatých/použitých závěrů z porad (ne jen těch, co se vešly do promptu); vstup podpisu čerstvosti. */
+  knowledgeItemIds: string[];
 }
 
 export interface ContextOptions {
@@ -53,6 +59,8 @@ export interface ProjectData {
   project: { id: string; name: string };
   columns: Column[];
   activities: ProjectActivityLog[];
+  /** Návrhy a závěry z porad (proposed/accepted/applied); chybí-li tabulka (starší DB), je to prázdné pole. */
+  items?: ProjectItemLite[];
 }
 
 /** Gramatika ref: typ:id. Id jsou klientem generované TEXT identifikátory, proto jen negativní omezení. */
@@ -70,41 +78,7 @@ function clip(s: string, max: number): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-interface DbActivityRow {
-  id?: unknown;
-  card_id?: unknown;
-  actor_id?: unknown;
-  actor_name?: unknown;
-  action_type?: unknown;
-  entity_type?: unknown;
-  details?: unknown;
-  created_at?: unknown;
-}
-
-/** Tolerantní mapování řádku activity_logs; neúplný řádek se přeskočí. */
-export function mapActivityRows(rows: unknown, projectId: string): ProjectActivityLog[] {
-  if (!Array.isArray(rows)) return [];
-  const out: ProjectActivityLog[] = [];
-  for (const r of rows as DbActivityRow[]) {
-    if (typeof r?.id !== 'string' || typeof r.action_type !== 'string' || typeof r.created_at !== 'string') continue;
-    out.push({
-      id: r.id,
-      projectId,
-      cardId: typeof r.card_id === 'string' ? r.card_id : undefined,
-      actorId: typeof r.actor_id === 'string' ? r.actor_id : undefined,
-      actorName: typeof r.actor_name === 'string' ? r.actor_name : '',
-      actionType: r.action_type,
-      entityType: (['task', 'column', 'project', 'member'] as const).includes(r.entity_type as never)
-        ? (r.entity_type as ProjectActivityLog['entityType'])
-        : 'task',
-      details: r.details && typeof r.details === 'object' && !Array.isArray(r.details) ? (r.details as Record<string, unknown>) : undefined,
-      createdAt: r.created_at,
-    });
-  }
-  return out;
-}
-
-/** Načte projekt + board + poslední aktivity pod identitou volajícího (RLS). */
+/** Načte projekt + board + poslední aktivity + závěry z porad pod identitou volajícího (RLS). */
 export async function loadProjectData(db: SupabaseClient, projectId: string): Promise<ProjectData> {
   const { project, columns } = await loadBoard(db, projectId);
   const { data } = await db
@@ -113,12 +87,20 @@ export async function loadProjectData(db: SupabaseClient, projectId: string): Pr
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
     .limit(ACTIVITY_LIMIT);
-  return { project, columns, activities: mapActivityRows(data, projectId) };
+  // Závěry z porad: chyba (např. migrace ještě není v DB) kontext nerozbije, jen zůstane bez nich.
+  const { data: itemRows, error: itemErr } = await db
+    .from('intelligence_items')
+    .select('id, meeting_id, kind, text, review_state, decided_at, created_at, applied_card_id')
+    .eq('project_id', projectId)
+    .in('review_state', ITEM_STATES)
+    .order('created_at', { ascending: false })
+    .limit(ITEM_LIMIT);
+  return { project, columns, activities: mapActivityRows(data, projectId), items: itemErr ? [] : mapItemRows(itemRows) };
 }
 
 interface Item {
   tier: number;
-  kind: 'card' | 'comment' | 'check' | 'activity';
+  kind: 'card' | 'comment' | 'check' | 'activity' | 'item';
   key: string; // pro dohledání při vykreslení
   cost: number;
 }
@@ -151,7 +133,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
   const now = opts.now ?? new Date();
   const tz = opts.tz ?? DEFAULT_TZ;
   const budget = opts.budgetChars ?? CONTEXT_BUDGETS[opts.purpose];
-  const facts = computeProjectFacts(data.columns, data.activities, now, tz);
+  const facts = computeProjectFacts(data.columns, data.activities, now, tz, data.items ?? []);
 
   const cards = new Map<string, { card: Card; colName: string; colIdx: number; pos: number }>();
   data.columns.forEach((col, colIdx) =>
@@ -166,7 +148,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     if (opts.focus?.cardId === id) return 1;
     if (prio.has(id)) return 2;
     const u = Date.parse(card.updatedAt ?? '');
-    if (Number.isFinite(u) && u >= recentCut) return 3;
+    if (Number.isFinite(u) && u >= recentCut) return 3.5;
     return 5;
   };
 
@@ -228,11 +210,29 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     sources.set(activityRef(a.id), { ref: activityRef(a.id), kind: 'activity', text, at: a.createdAt, meta: { actionType: a.actionType, cardId: a.cardId ?? null } });
   }
 
+  // Přijaté závěry z porad (accepted/applied) jsou citovatelné; nepřijaté návrhy AI se jako zdroj NIKDY nepoužijí.
+  const knowledge = (data.items ?? []).filter((i) => i.reviewState === 'accepted' || i.reviewState === 'applied');
+  const itemLineOf = new Map<string, string>();
+  for (const it of knowledge) {
+    const text = clip(it.text, 400);
+    const line = `[${itemRef(it.id)}] ${it.kind}: ${text}`;
+    itemLineOf.set(it.id, line);
+    items.push({ tier: 3, kind: 'item', key: it.id, cost: line.length + 10 });
+    sources.set(itemRef(it.id), {
+      ref: itemRef(it.id),
+      kind: 'item',
+      text,
+      label: clip(text, 80),
+      at: it.decidedAt ?? it.createdAt,
+      meta: { kind: it.kind, reviewState: it.reviewState, meetingId: it.meetingId, appliedCardId: it.appliedCardId },
+    });
+  }
+
   // --- výběr podle priority a rozpočtu ---
   const factsBlock = `FACTS (spočítáno aplikací, závazné; verze ${FACTS_VERSION}):\n${JSON.stringify(factsForPrompt(facts))}`;
   let used = factsBlock.length + data.project.name.length + 200; // rezerva na hlavičky
   const included = new Set<string>();
-  const omitted = { card: 0, comment: 0, check: 0, activity: 0 };
+  const omitted = { card: 0, comment: 0, check: 0, activity: 0, item: 0 };
   const includedCards = new Set<string>();
 
   const ordered = items
@@ -275,11 +275,14 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     .filter((a) => included.has(`activity:${a.id}`))
     .map((a) => `[${activityRef(a.id)}] ${activityText(a)}`);
 
+  const itemLines = knowledge.filter((i) => included.has(`item:${i.id}`)).map((i) => itemLineOf.get(i.id)!);
+
   // zdroje, které model nedostal, z mapy odstraníme (cituje jen to, co viděl)
   for (const [ref] of sources) {
     const [kind, rest] = [ref.slice(0, ref.indexOf(':')), ref.slice(ref.indexOf(':') + 1)];
     if (kind === 'card' && !included.has(`card:${rest}`)) sources.delete(ref);
     else if (kind === 'activity' && !included.has(`activity:${rest}`)) sources.delete(ref);
+    else if (kind === 'item' && !included.has(`item:${rest}`)) sources.delete(ref);
   }
   const keptCommentIds = new Set<string>();
   for (const { card } of colOrder)
@@ -304,6 +307,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     '',
     '--- Nedávná aktivita (nejnovější první) ---',
     ...actLines,
+    ...(itemLines.length ? ['', '--- Přijaté závěry z porad (schváleno člověkem) ---', ...itemLines] : []),
   ].join('\n');
 
   const note = truncated.length
@@ -320,6 +324,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     rendered,
     fingerprint,
     truncated,
+    knowledgeItemIds: knowledge.map((i) => i.id),
   };
 }
 
@@ -337,6 +342,7 @@ function factsForPrompt(f: ProjectFacts) {
       archived: f.recentChanges.archived,
       memberChanges: f.recentChanges.memberChanges,
     },
+    meetingDerived: f.meetingDerived,
     workload: f.workload,
     dataQuality: f.dataQuality,
   };

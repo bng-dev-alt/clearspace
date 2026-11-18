@@ -14,7 +14,7 @@ import { computeTeamWorkload, type WorkloadLevel } from '../dashboardStats';
  * převzaté z computeProjectIntelligence (jediná definice vzorce).
  */
 
-export const FACTS_VERSION = 'facts-1';
+export const FACTS_VERSION = 'facts-2';
 export const DEFAULT_TZ = 'Europe/Prague';
 const LIST_CAP = 20;
 const RECENT_DAYS = 7;
@@ -27,6 +27,18 @@ export interface FactsWorkloadEntry {
   highPriority: number;
   dueThisWeek: number;
   level: WorkloadLevel;
+}
+
+/** Odlehčená položka znalostí (z porad) pro fakta a kontext. */
+export interface ProjectItemLite {
+  id: string;
+  meetingId: string | null;
+  kind: string;
+  text: string;
+  reviewState: 'proposed' | 'accepted' | 'applied';
+  decidedAt: string | null;
+  createdAt: string;
+  appliedCardId: string | null;
 }
 
 export interface RecentChange {
@@ -71,6 +83,18 @@ export interface ProjectFacts {
     entries: RecentChange[];
   };
   workload: FactsWorkloadEntry[];
+  /** Co do projektu přinesly porady (počítá kód z review stavů, ne model). */
+  meetingDerived: {
+    /** Návrhy z porad čekající na rozhodnutí člověka. */
+    pendingProposals: number;
+    /** Přijaté úkoly/follow-upy, ze kterých zatím nevznikla karta. */
+    acceptedNotApplied: number;
+    decisionsLast30d: number;
+    openQuestions: number;
+    risks: number;
+    blockers: number;
+    recentDecisionItemIds: string[];
+  };
   dataQuality: { invalidDueDateCardIds: string[] };
 }
 
@@ -99,7 +123,8 @@ export function computeProjectFacts(
   columns: Column[],
   activities: ProjectActivityLog[],
   now: Date = new Date(),
-  tz: string = DEFAULT_TZ
+  tz: string = DEFAULT_TZ,
+  items: ProjectItemLite[] = []
 ): ProjectFacts {
   const today = todayInTz(now, tz);
   const weekEnd = addDays(today, 7);
@@ -201,6 +226,52 @@ export function computeProjectFacts(
       })),
     },
     workload,
+    meetingDerived: meetingDerived(items, today),
     dataQuality: { invalidDueDateCardIds: invalid.slice(0, LIST_CAP).map((c) => c.id) },
   };
+}
+
+function meetingDerived(items: ProjectItemLite[], today: string): ProjectFacts['meetingDerived'] {
+  const known = items.filter((i) => i.reviewState === 'accepted' || i.reviewState === 'applied');
+  const cutoff = Date.parse(`${addDays(today, -30)}T00:00:00Z`);
+  const decisions = known
+    .filter((i) => i.kind === 'decision' && Number.isFinite(Date.parse(i.decidedAt ?? '')) && Date.parse(i.decidedAt!) >= cutoff)
+    .sort((a, b) => Date.parse(b.decidedAt!) - Date.parse(a.decidedAt!));
+  return {
+    pendingProposals: items.filter((i) => i.reviewState === 'proposed').length,
+    acceptedNotApplied: items.filter((i) => i.reviewState === 'accepted' && (i.kind === 'action_item' || i.kind === 'follow_up')).length,
+    decisionsLast30d: decisions.length,
+    openQuestions: known.filter((i) => i.kind === 'open_question').length,
+    risks: known.filter((i) => i.kind === 'risk').length,
+    blockers: known.filter((i) => i.kind === 'blocker').length,
+    recentDecisionItemIds: decisions.slice(0, 10).map((i) => i.id),
+  };
+}
+
+/**
+ * Podpis "čerstvosti": co se musí změnit, aby byl uložený brief zastaralý. Počítá ho server při uložení i klient při
+ * zobrazení stejnou funkcí z týchž dat (deterministická fakta + poslední změna karet + přijaté závěry z porad).
+ */
+export function freshnessSignature(
+  facts: ProjectFacts,
+  extra: { maxCardUpdatedAt: string | null; knowledgeItemIds: string[] }
+): string {
+  return JSON.stringify({
+    v: facts.factsVersion,
+    today: facts.today,
+    score: facts.health.score,
+    counts: facts.counts,
+    lists: facts.lists,
+    recent: [facts.recentChanges.created, facts.recentChanges.movedToDone, facts.recentChanges.archived, facts.recentChanges.memberChanges],
+    meeting: facts.meetingDerived,
+    maxCardUpdatedAt: extra.maxCardUpdatedAt,
+    knowledge: [...extra.knowledgeItemIds].sort(),
+  });
+}
+
+export function maxCardUpdatedAt(columns: Column[]): string | null {
+  let max: string | null = null;
+  for (const col of columns)
+    for (const c of col.cards) if (c.updatedAt && (max === null || Date.parse(c.updatedAt) > Date.parse(max))) max = c.updatedAt;
+  return max;
 }

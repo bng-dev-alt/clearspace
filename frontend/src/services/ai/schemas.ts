@@ -492,3 +492,40 @@ export const meetingBriefSchema = {
   },
   required: ['summary', 'decisions', 'action_items', 'follow_ups', 'risks', 'blockers', 'open_questions'],
 };
+
+// --- Project Intelligence 2.0: Project Brief (ARCHITECTURE §7.2). Žádná pole pro vlastníka ani termín. ---
+const briefRefs = { type: 'ARRAY', items: { type: 'STRING' }, description: 'Ref zdrojů přesně jako v datech, např. card:abc, comment:xyz, item:123' };
+const briefClaim = {
+  type: 'OBJECT',
+  properties: {
+    text: { type: 'STRING' },
+    refs: briefRefs,
+    quote: { type: 'STRING', nullable: true, description: 'Doslovná citace z odkazovaného zdroje' },
+  },
+  required: ['text', 'refs'],
+};
+export const projectBriefSchema = {
+  type: 'OBJECT',
+  properties: {
+    summary: { type: 'STRING' },
+    health_narrative: { type: 'STRING' },
+    risks: { type: 'ARRAY', items: { ...briefClaim, properties: { ...briefClaim.properties, severity: { type: 'STRING', enum: ['low', 'medium', 'high'] } } } },
+    blockers: { type: 'ARRAY', items: briefClaim },
+    next_actions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          text: { type: 'STRING' },
+          kind: { type: 'STRING', enum: ['create', 'update', 'unblock', 'assign', 'clarify'] },
+          refs: briefRefs,
+          target_card_id: { type: 'STRING', nullable: true },
+        },
+        required: ['text', 'kind', 'refs'],
+      },
+    },
+    open_questions: { type: 'ARRAY', items: briefClaim },
+    notes_on_data: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['summary', 'health_narrative', 'risks', 'blockers', 'next_actions', 'open_questions'],
+};

@@ -23,3 +23,54 @@ rm -rf "$out"
 echo "allowed=$allowed rate_limited=$limited ledger_rows=$rows (12 parallel requests, limit 5)"
 [ "$allowed" = "5" ] && [ "$limited" = "7" ] && [ "$rows" = "5" ] || { echo "FAIL: concurrency"; exit 1; }
 echo "ok - exactly 5 reservations passed under 12-way concurrency"
+
+# --- Intelligence core: persisting a run and applying an item are exactly-once under parallel calls ---
+echo "== Concurrency: parallel persist_meeting_run / apply_intelligence_item are exactly-once"
+U2=$(psql_admin -d "$db" -At -c "select test.mkuser('par2@example.test')" | tail -1)
+AUTH="select set_config('request.jwt.claims', '{\"sub\":\"$U2\",\"email\":\"par2@example.test\",\"role\":\"authenticated\"}', false); set role authenticated;"
+REV=$(printf 'c%.0s' $(seq 1 64)); DK=$(printf 'd%.0s' $(seq 1 64))
+MID=$(psql_admin -d "$db" -At <<SQL | tail -1
+$AUTH
+insert into public.projects (id, name) values ('par-p', 'Parallel');
+insert into public.columns (id, project_id, name, position) values ('par-c', 'par-p', 'Todo', 0);
+with m as (insert into public.meetings (project_id, title, source_kind) values ('par-p', 'Par', 'text') returning id)
+insert into public.meeting_transcripts (meeting_id, project_id, revision, source, segments, char_count)
+  select id, 'par-p', '$REV', 'paste', '[{"id":"seg-0","text":"Udělat X teď určitě."}]'::jsonb, 20 from m;
+select id from public.meetings where project_id = 'par-p';
+SQL
+)
+RUN="'{\"status\":\"succeeded\",\"transcript_revision\":\"$REV\",\"input_fingerprint\":\"f\",\"contract_version\":\"c\",\"prompt_version\":\"p1\",\"validator_version\":\"v\",\"output\":{\"summary\":\"s\"}}'::jsonb"
+ITEMS="'[{\"kind\":\"action_item\",\"text\":\"Udělat X.\",\"support\":\"linked\",\"evidence\":[{\"ref\":\"segment:seg-0\",\"quote\":\"Udělat X teď\",\"quoteFound\":true}],\"dedupe_key\":\"$DK\"}]'::jsonb"
+out2=$(mktemp -d)
+for i in $(seq 1 8); do
+  ( psql_admin -d "$db" -At -f - <<SQL > "$out2/p$i.txt" 2>&1
+$AUTH
+select public.persist_meeting_run('$MID', $RUN, $ITEMS);
+SQL
+  ) &
+done
+wait
+persisted=$(cat "$out2"/p*.txt | grep -cE '^[0-9a-f]{8}-[0-9a-f]{4}-' || true)
+refused=$(cat "$out2"/p*.txt | grep -c 'už byla analyzována' || true)
+runs=$(psql_admin -d "$db" -At -c "select count(*) from public.intelligence_runs where meeting_id = '$MID'" | tail -1)
+echo "persisted=$persisted refused_as_duplicate=$refused runs=$runs (8 parallel identical requests)"
+[ "$persisted" = "1" ] && [ "$refused" = "7" ] && [ "$runs" = "1" ] || { echo "FAIL: parallel persist is not exactly-once"; exit 1; }
+echo "ok - exactly one run was stored under 8-way concurrency"
+
+ITEM=$(psql_admin -d "$db" -At -c "select id from public.intelligence_items where meeting_id = '$MID'" | tail -1)
+for i in $(seq 1 8); do
+  ( psql_admin -d "$db" -At -f - <<SQL > "$out2/a$i.txt" 2>&1
+$AUTH
+select public.apply_intelligence_item('$ITEM', '{"mode":"create_card","column_id":"par-c","title":"Par card"}'::jsonb);
+SQL
+  ) &
+done
+wait
+created=$(cat "$out2"/a*.txt | grep -c '"already_applied": false' || true)
+repeats=$(cat "$out2"/a*.txt | grep -c '"already_applied": true' || true)
+cards=$(psql_admin -d "$db" -At -c "select count(*) from public.cards where column_id = 'par-c'" | tail -1)
+logs=$(psql_admin -d "$db" -At -c "select count(*) from public.activity_logs where project_id = 'par-p' and action_type = 'card_created'" | tail -1)
+rm -rf "$out2"
+echo "created=$created repeats=$repeats cards=$cards activity_logs=$logs (8 parallel approvals of one item)"
+[ "$created" = "1" ] && [ "$repeats" = "7" ] && [ "$cards" = "1" ] && [ "$logs" = "1" ] || { echo "FAIL: parallel approval is not exactly-once"; exit 1; }
+echo "ok - exactly one card was created under 8-way concurrent approval"

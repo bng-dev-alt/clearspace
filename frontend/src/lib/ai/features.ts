@@ -70,6 +70,7 @@ export const aiFeatures = {
     name: 'chat',
     needsProject: true,
     structured: false,
+    contextPurpose: 'chat',
     maxOutputTokens: 2000,
     parse: (b) => {
       const raw = list(b.messages, 'messages', 40);
@@ -86,8 +87,11 @@ export const aiFeatures = {
       }
       return { messages };
     },
-    run: ({ input, board, project }) =>
-      aiService.executeChat({ messages: input.messages, context: { project: project ?? undefined, columns: board } }),
+    run: ({ input, board, project, context }) =>
+      aiService.executeChat({
+        messages: input.messages,
+        context: { project: project ?? undefined, columns: board, renderedContext: context?.rendered },
+      }),
   }),
 
   improve: feature<{ card: Card }>({

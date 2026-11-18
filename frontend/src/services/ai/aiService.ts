@@ -3,6 +3,7 @@ import { promptBuilder } from './promptBuilder';
 import { AiRequest, AiResponse, AiModelConfig, AiContext, AiMessage } from './types';
 import { Card, Column, TeamMember } from '../../types/kanban';
 import { AiProviderError, AiErrorCode } from '../../lib/ai/errors';
+import { serverModel } from './model';
 import { improveTaskSchema, backlogGenerateSchema, projectGenerateSchema, sprintPlanningSchema, projectRiskAnalysisSchema, aiProjectManagerSchema, aiResourceAnalysisSchema, aiDailyBriefSchema, aiCapacityPlanningSchema, aiVoiceActionSchema } from './schemas';
 
 // Jednoduché lokální logování AI requestů na serveru
@@ -68,7 +69,7 @@ export const aiService = {
   async executeChat(req: AiRequest): Promise<AiResponse> {
     // Model, teplota i strop tokenů určuje server -- `req.config` od klienta se ignoruje.
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.7,
       maxTokens: 2000,
     };
@@ -79,7 +80,7 @@ export const aiService = {
   // 2. AI Task Generation (Tvorba nového úkolu)
   async executeTaskGenerate(topic: string, context?: AiContext): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
     };
     const messages = promptBuilder.buildTaskGeneratePrompt(topic, context);
@@ -89,7 +90,7 @@ export const aiService = {
   // 3. AI Improve Task (Vylepšení zadání)
   async executeTaskImprove(card: Card, context?: AiContext): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       responseSchema: improveTaskSchema,
     };
@@ -100,7 +101,7 @@ export const aiService = {
   // 4. AI Split Task (Rozdělení úkolu)
   async executeTaskSplit(card: Card, context?: AiContext): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.2,
     };
     const messages = promptBuilder.buildTaskSplitPrompt(card, context);
@@ -110,7 +111,7 @@ export const aiService = {
   // 5. AI Sprint Planning (Plánování sprintů)
   async executeSprintPlanning(cards: Card[], context?: AiContext): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.5,
       maxTokens: 4000,
       responseSchema: sprintPlanningSchema,
@@ -124,7 +125,7 @@ export const aiService = {
   // 6. AI Search (Vyhledávání)
   async executeSearch(query: string, cards: Card[]): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.1,
     };
     const messages = promptBuilder.buildSearchPrompt(query, cards);
@@ -134,7 +135,7 @@ export const aiService = {
   // 7. AI Summary (Shrnutí úkolu)
   async executeSummary(card: Card): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
     };
     const messages = promptBuilder.buildSummaryPrompt(card);
@@ -150,7 +151,7 @@ export const aiService = {
     options?: { taskCount?: number; detailLevel?: string; technologies?: string }
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 4000,
       responseSchema: backlogGenerateSchema,
@@ -175,7 +176,7 @@ export const aiService = {
     taskCount?: number
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 4000,
       responseSchema: projectGenerateSchema,
@@ -198,7 +199,7 @@ export const aiService = {
     context?: AiContext
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 4000,
       responseSchema: projectRiskAnalysisSchema,
@@ -213,7 +214,7 @@ export const aiService = {
     context?: AiContext
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 4000,
       responseSchema: aiProjectManagerSchema,
@@ -229,7 +230,7 @@ export const aiService = {
     context?: AiContext
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.2,
       maxTokens: 4000,
       responseSchema: aiResourceAnalysisSchema,
@@ -245,7 +246,7 @@ export const aiService = {
     context?: AiContext
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 3000,
       responseSchema: aiDailyBriefSchema,
@@ -261,7 +262,7 @@ export const aiService = {
     context?: AiContext
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.3,
       maxTokens: 4000,
       responseSchema: aiCapacityPlanningSchema,
@@ -279,7 +280,7 @@ export const aiService = {
     mimeType?: string
   ): Promise<AiResponse> {
     const config: AiModelConfig = {
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: serverModel(),
       temperature: 0.2,
       maxTokens: 2000,
       responseSchema: aiVoiceActionSchema,

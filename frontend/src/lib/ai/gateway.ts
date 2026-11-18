@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { AiResponse } from '../../services/ai/types';
 import { Column } from '../../types/kanban';
-import { mapDbCard, DbCard } from '../../services/boardMapping';
+import { loadBoard } from './board';
+import { buildProjectContext, type ContextPurpose, type ProjectContext } from '../intelligence/context';
 import { AiGatewayError, AiProviderError } from './errors';
 
 /**
@@ -29,6 +30,8 @@ export interface AiRunContext<I> {
   /** Board načtený serverem (prázdný, pokud feature projekt nepotřebuje). */
   board: Column[];
   project: { id: string; name: string } | null;
+  /** Plný kontext z Project Context Engine (jen u featur s `contextPurpose`, jinak null). */
+  context: ProjectContext | null;
 }
 
 export interface AiFeature<I> {
@@ -41,6 +44,8 @@ export interface AiFeature<I> {
   maxOutputTokens: number;
   /** true = odpověď je JSON (parsed), false = čistý text (chat). */
   structured: boolean;
+  /** Je-li nastaveno, server sestaví kontext přes Project Context Engine (fakta, zdroje, rámovaný text). */
+  contextPurpose?: ContextPurpose;
   parse(body: Record<string, unknown>): I;
   run(ctx: AiRunContext<I>): Promise<AiResponse>;
 }
@@ -178,49 +183,17 @@ async function complete(
   if (error) console.error('[ai-gateway] ai_complete failed', error.code);
 }
 
-/** Board projektu načtený pod identitou volajícího (RLS rozhoduje, co uvidí). */
-export async function loadBoard(
-  db: SupabaseClient,
-  projectId: string
-): Promise<{ project: { id: string; name: string }; columns: Column[] }> {
-  const { data: project, error: pErr } = await db
-    .from('projects')
-    .select('id, name')
-    .eq('id', projectId)
-    .maybeSingle();
-  if (pErr || !project) {
-    throw new AiGatewayError('forbidden', 'K tomuto projektu nemáte přístup.');
-  }
-
-  const { data: cols, error: cErr } = await db
-    .from('columns')
-    .select('id, name, position')
-    .eq('project_id', projectId)
-    .order('position', { ascending: true })
-    .limit(50);
-  if (cErr) throw new AiGatewayError('ai_failed', 'Nepodařilo se načíst data projektu.');
-
-  const colIds = (cols ?? []).map((c) => c.id as string);
-  let cards: DbCard[] = [];
-  if (colIds.length > 0) {
-    const { data: cardRows, error: kErr } = await db
-      .from('cards')
-      .select('*, task_checklists(*), task_comments(*), task_activities(*), card_assignees(position, member:workspace_members(*))')
-      .in('column_id', colIds)
-      .order('position', { ascending: true })
-      .limit(1000);
-    if (kErr) throw new AiGatewayError('ai_failed', 'Nepodařilo se načíst data projektu.');
-    cards = (cardRows ?? []) as unknown as DbCard[];
-  }
-
-  return {
-    project: { id: project.id as string, name: project.name as string },
-    columns: (cols ?? []).map((c) => ({
-      id: c.id as string,
-      name: c.name as string,
-      cards: cards.filter((k) => k.column_id === c.id).map(mapDbCard),
-    })),
-  };
+/** Hrubý odhad znaků, které board přidá do promptu (tituly, popisy, komentáře, checklisty + režie na kartu). */
+export function estimateBoardChars(columns: Column[]): number {
+  let n = 0;
+  for (const col of columns)
+    for (const c of col.cards) {
+      if (c.archived) continue;
+      n += 100 + c.title.length + (c.details?.length ?? 0);
+      for (const m of c.comments ?? []) n += m.content.length;
+      for (const i of c.checklist ?? []) n += i.text.length;
+    }
+  return n;
 }
 
 function requireProjectId(body: Record<string, unknown>): string {
@@ -265,21 +238,37 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
     const input = feature.parse(body);
     const projectId = feature.needsProject ? requireProjectId(body) : null;
 
-    // Odhad: ~3 znaky na token vstupu + strop výstupu dané featury.
-    const reserved = Math.min(1_000_000, Math.ceil(JSON.stringify(body).length / 3) + feature.maxOutputTokens);
-    requestId = await reserve(auth.db, feature.name, projectId, reserved);
-
+    // Kontext se načte NEJDŘÍV pod identitou volajícího (RLS): nečlen projekt nevidí -> 403 `forbidden`
+    // dřív, než se cokoli rezervuje nebo volá provider. Teprve pak se rezervuje kvóta podle SKUTEČNÉ
+    // velikosti promptu (tělo + server-načtený kontext), ne jen podle těla požadavku.
     let board: Column[] = [];
     let project: { id: string; name: string } | null = null;
+    let context: ProjectContext | null = null;
+    let contextChars = 0;
     if (projectId) {
-      const loaded = await loadBoard(auth.db, projectId);
-      board = loaded.columns;
-      project = loaded.project;
+      if (feature.contextPurpose) {
+        context = await buildProjectContext(auth.db, projectId, { purpose: feature.contextPurpose });
+        board = context.columns;
+        project = context.project;
+        contextChars = context.rendered.length;
+      } else {
+        const loaded = await loadBoard(auth.db, projectId);
+        board = loaded.columns;
+        project = loaded.project;
+        contextChars = estimateBoardChars(board);
+      }
     }
+
+    // Odhad: ~3 znaky na token vstupu + strop výstupu dané featury.
+    const reserved = Math.min(
+      1_000_000,
+      Math.ceil((JSON.stringify(body).length + contextChars) / 3) + feature.maxOutputTokens
+    );
+    requestId = await reserve(auth.db, feature.name, projectId, reserved);
 
     let response: AiResponse;
     try {
-      response = await feature.run({ input, board, project });
+      response = await feature.run({ input, board, project, context });
     } catch (err) {
       if (err instanceof AiGatewayError) throw err; // např. prázdný board -> 400
       if (err instanceof AiProviderError) {

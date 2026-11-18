@@ -57,6 +57,20 @@ function todayIso(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * `cards.due_date` je v DB TEXT. Vrací kalendářní den (YYYY-MM-DD) jen pro platné datum
+ * (volitelně s časem za ním), jinak null -- neplatná hodnota se nikdy neporovnává jako řetězec.
+ */
+export function dueDateKey(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/.exec(raw.trim());
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
 function isBlocked(card: Card): boolean {
   return card.tag === 'Blokováno';
 }
@@ -72,9 +86,11 @@ function isUnassigned(card: Card): boolean {
  */
 export function computeProjectIntelligence(
   columns: Column[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Dnešní den (YYYY-MM-DD) v časové zóně projektu; default = den v UTC (původní chování). */
+  todayOverride?: string
 ): ProjectIntelligence {
-  const today = todayIso(now);
+  const today = todayOverride ?? todayIso(now);
 
   const doneColIds = new Set(
     columns.filter((c) => nameMatches(c.name, DONE_KEYWORDS)).map((c) => c.id)
@@ -91,9 +107,10 @@ export function computeProjectIntelligence(
 
   const blocked = allCards.filter(({ card }) => isBlocked(card)).length;
 
-  const overdue = activeCards.filter(
-    ({ card }) => card.dueDate && card.dueDate < today
-  ).length;
+  const overdue = activeCards.filter(({ card }) => {
+    const k = dueDateKey(card.dueDate);
+    return k !== null && k < today;
+  }).length;
 
   const reviewCount = reviewCols.reduce(
     (acc, c) => acc + c.cards.filter((card) => !card.archived).length,

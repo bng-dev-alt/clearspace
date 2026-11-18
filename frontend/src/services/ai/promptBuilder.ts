@@ -1,4 +1,5 @@
 import { Card, Column, TeamMember } from '../../types/kanban';
+import { UNTRUSTED_DATA_RULES } from '../../lib/intelligence/frame';
 import { AiMessage, AiContext } from './types';
 
 // Helper pro formátování kontextu jednotlivé karty
@@ -76,6 +77,26 @@ export function formatProjectContext(context?: AiContext): string {
 
 export const promptBuilder = {
   buildChatPrompt(messages: AiMessage[], context?: AiContext): AiMessage[] {
+    // Nová cesta (Project Context Engine): systémová zpráva obsahuje JEN instrukce a bezpečnostní pravidla.
+    // Data projektu (nedůvěryhodný obsah) jdou rámovaná do poslední uživatelské zprávy.
+    if (context?.renderedContext) {
+      const system = `Jste inteligentní AI Asistent pro projektový Kanban board aplikace clearspace.
+Vaším úkolem je pomáhat uživateli s řízením úkolů, plánováním a odpovídáním na dotazy o projektu.
+Komunikujte věcně, profesionálně a česky. Nepoužívejte emoji.
+Při odpovědi vycházejte z dat projektu v poslední zprávě uživatele. Na konkrétní úkoly odkazujte jejich názvem.
+
+${UNTRUSTED_DATA_RULES}`;
+      const rest = [...messages];
+      const last = rest.length - 1;
+      if (last >= 0 && rest[last].role === 'user') {
+        rest[last] = {
+          ...rest[last],
+          content: `Data projektu:\n${context.renderedContext}\n\nDotaz uživatele:\n${rest[last].content}`,
+        };
+      }
+      return [{ role: 'system', content: system }, ...rest];
+    }
+
     const systemContent = `Jste inteligentní AI Asistent pro projektový Kanban board aplikace clearspace.
 Vaším úkolem je pomáhat uživateli s řízením úkolů, plánováním a odpovídáním na dotazy.
 Komunikujte věcně, profesionálně a česky. Nepoužívejte emoji.

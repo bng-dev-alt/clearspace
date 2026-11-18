@@ -28,6 +28,8 @@ export interface AiMessage {
 }
 
 export interface AiContext {
+  /** Hotový, rámovaný kontext z Project Context Engine (fakta + DATA blok). Má přednost před `columns`. */
+  renderedContext?: string;
   card?: Card;
   project?: Project;
   columns?: Column[];

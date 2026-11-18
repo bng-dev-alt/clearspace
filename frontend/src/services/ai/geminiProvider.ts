@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { serverModel } from './model';
 import { AiMessage, AiModelConfig, AiResponse, AiProvider } from './types';
 
 let aiInstance: GoogleGenAI | null = null;
@@ -19,7 +20,7 @@ export const geminiProvider: AiProvider = {
     messages: AiMessage[],
     config: AiModelConfig
   ): Promise<AiResponse> {
-    const model = config.model || process.env.GEMINI_MODEL || 'gemini-3.6-flash'; // ponytail: id verified against Google's model list 2026-11-17 (gemini-3.5-flash does not exist; 3.5-flash-lite, 3.6-flash, 3.8-flash are stable)
+    const model = config.model || serverModel();
     const temperature = config.temperature ?? 0.4; // Nízká teplota pro stabilnější generování JSON
     const maxTokens = config.maxTokens ?? 4000;
 

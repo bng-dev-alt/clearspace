@@ -262,4 +262,38 @@ const P = `p-${run}`;
   ok('the owner can restore: board replaced atomically');
 }
 
+// ---------------------------------------------------------------- account erasure (B3a defect: GoTrue answered 500)
+if (SERVICE) {
+  const D = await signUp(`d-${run}@example.test`);
+  const PD = `del-${run}`;
+  const mk = await call('/rest/v1/projects', { method: 'POST', token: D.token, headers: { Prefer: 'return=minimal' }, body: { id: PD, name: 'Erasure' } });
+  assert.equal(mk.status, 201, JSON.stringify(mk.json));
+  const meet = await call('/rest/v1/meetings?select=id,created_by', { method: 'POST', token: D.token, headers: { Prefer: 'return=representation' }, body: { project_id: PD, title: 'Porada před smazáním účtu', source_kind: 'text' } });
+  assert.equal(meet.status, 201, JSON.stringify(meet.json));
+  const mid = meet.json[0].id;
+  assert.equal(meet.json[0].created_by, D.id);
+  // an ordinary user can neither wipe nor re-assign the author through PostgREST
+  const wipe = await call(`/rest/v1/meetings?id=eq.${mid}`, { method: 'PATCH', token: D.token, body: { created_by: null } });
+  assert.ok(wipe.status >= 400, 'a user must not be able to wipe created_by');
+  ok('a user cannot change meetings.created_by over HTTP (column privilege)');
+  const del = await call(`/auth/v1/admin/users/${D.id}`, { method: 'DELETE', key: SERVICE });
+  assert.equal(del.status, 200, `GoTrue admin delete of a meeting author must succeed: ${JSON.stringify(del.json)}`);
+  const left = await call(`/rest/v1/meetings?id=eq.${mid}&select=id,title,created_by`, { key: SERVICE });
+  assert.equal(left.json.length, 0, 'the project (owned by the deleted user) and its meeting are removed with the account');
+  ok('real GoTrue: deleting a user who created a meeting succeeds (HTTP 200, no 500)');
+  // the author is deleted but the PROJECT stays: a member creates a meeting in A\'s project, then that member is deleted
+  const mem = await signUp(`m-${run}@example.test`);
+  const pm = `delm-${run}`;
+  assert.equal((await call('/rest/v1/projects', { method: 'POST', token: A.token, headers: { Prefer: 'return=minimal' }, body: { id: pm, name: 'Member erasure' } })).status, 201);
+  const wmId = (await call(`/rest/v1/workspace_members?profile_id=eq.${mem.id}&select=id`, { key: SERVICE })).json[0].id;
+  assert.equal((await call('/rest/v1/project_members', { method: 'POST', key: SERVICE, headers: { Prefer: 'return=minimal' }, body: { project_id: pm, member_id: wmId } })).status, 201);
+  const m2 = await call('/rest/v1/meetings?select=id', { method: 'POST', token: mem.token, headers: { Prefer: 'return=representation' }, body: { project_id: pm, title: 'Porada člena', source_kind: 'text' } });
+  assert.equal(m2.status, 201, JSON.stringify(m2.json));
+  const del2 = await call(`/auth/v1/admin/users/${mem.id}`, { method: 'DELETE', key: SERVICE });
+  assert.equal(del2.status, 200, JSON.stringify(del2.json));
+  const kept = await call(`/rest/v1/meetings?id=eq.${m2.json[0].id}&select=title,created_by`, { token: A.token });
+  assert.deepEqual(kept.json, [{ title: 'Porada člena', created_by: null }]);
+  ok('real GoTrue: a deleted member\'s meeting stays in the owner\'s project with created_by = null');
+}
+
 console.log(`HTTP REGRESSION PASSED (${passed} checks)`);

@@ -23,8 +23,40 @@ function segmentsFrom(text) {
 }
 
 
+
+// Scénář "Plánovací porada" (e2e/meeting-flow.spec.ts): odpověď podobná skutečnému modelu. Citace nesou jméno mluvčího jako prefix
+// ("Petr Novák: release posuneme na pátek"), jedno rozhodnutí je ZÁPORNÉ ("Nerozhodli jsme se zrušit ..."), jedno má jméno JINÉHO mluvčího
+// (falešné přisouzení), jeden úkol má vymyšleného vlastníka a jeden vymyšlenou citaci. Validátor musí vše správné nechat a ostatní zahodit/označit.
+function planningBrief(segs) {
+  const by = (re) => segs.find((s) => re.test(s.text));
+  const pre = (s, quote) => `${s.speaker ? s.speaker + ': ' : ''}${quote}`;
+  const dec = by(/release posuneme/i);
+  const act = by(/připraví migraci/i);
+  const neg = by(/Nerozhodli jsme se zrušit/i);
+  const risk = by(/Riziko/i);
+  const ask = by(/Kdo zajistí/i);
+  return {
+    summary: 'Plánovací porada řešila release, migraci databáze a testovací prostředí.',
+    decisions: [
+      ...(dec ? [{ text: 'Release se posouvá na pátek.', evidence: [{ segment_id: dec.id, quote: pre(dec, 'release posuneme na pátek') }] }] : []),
+      ...(neg ? [{ text: 'Testovací prostředí se ruší.', evidence: [{ segment_id: neg.id, quote: pre(neg, 'zrušit testovací prostředí') }] }] : []),
+      ...(dec ? [{ text: 'Release posouvá Honza.', evidence: [{ segment_id: dec.id, quote: 'Honza Novák: release posuneme na pátek' }] }] : []),
+    ],
+    action_items: [
+      ...(act ? [{ text: 'Připravit migraci databáze.', evidence: [{ segment_id: act.id, quote: pre(act, 'připraví migraci databáze') }], owner_text: 'Honza', due_text: '25. listopadu', existing_card_id: null }] : []),
+      ...(act ? [{ text: 'Zkontrolovat certifikát.', evidence: [{ segment_id: act.id, quote: pre(act, 'připraví migraci databáze') }], owner_text: 'Karel Dvořák', due_text: null, existing_card_id: null }] : []),
+      { text: 'Vymyšlený úkol.', evidence: [{ segment_id: 'seg-999', quote: 'nikdo to neřekl' }], owner_text: null, due_text: null, existing_card_id: null },
+    ],
+    follow_ups: [],
+    risks: risk ? [{ text: 'Dodavatel může zpozdit certifikát.', evidence: [{ segment_id: risk.id, quote: pre(risk, 'dodavatel může zpozdit certifikát') }] }] : [],
+    blockers: [],
+    open_questions: ask ? [{ text: 'Kdo zajistí školení týmu?', evidence: [{ segment_id: ask.id, quote: pre(ask, 'Kdo zajistí školení týmu?') }] }] : [],
+  };
+}
+
 function meetingBrief(text) {
   const segs = segmentsFrom(text);
+  if (segs.some((x) => /Plánovací scénář/.test(x.text))) return planningBrief(segs);
   const find = (re) => segs.find((s) => re.test(s.text));
   const decision = find(/Rozhodli/i);
   const action = find(/připraví|pripravi/i);

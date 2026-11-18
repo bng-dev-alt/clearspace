@@ -70,8 +70,9 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
     const body = (() => { try { return JSON.parse(raw.toString('utf8')); } catch { return null; } })();
 
     if (url.pathname === '/__control' && req.method === 'POST') {
+      // `reset` also restores the default transcript, so a spec that scripted its own turns cannot leak them into the next spec
+      if (body?.reset) { state.jobs.clear(); state.files.clear(); state.calls.length = 0; state.audioFetches.length = 0; state.flaky.clear(); state.n = 0; state.turns = DEFAULT_TURNS; }
       for (const k of ['mode', 'pollsUntilDone', 'durationMs', 'turns', 'fetchAudio']) if (body && k in body) state[k] = body[k];
-      if (body?.reset) { state.jobs.clear(); state.files.clear(); state.calls.length = 0; state.audioFetches.length = 0; state.flaky.clear(); state.n = 0; }
       return json(res, 200, { ok: true });
     }
     if (url.pathname === '/__stats') {

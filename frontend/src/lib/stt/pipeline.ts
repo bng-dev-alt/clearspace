@@ -40,6 +40,23 @@ export function sttLimitsFromEnv(env: Record<string, string | undefined> = proce
   };
 }
 
+/**
+ * TESTOVACÍ ŠEV pro skutečný lokální test se Soniox: Soniox si zvuk stahuje z internetu, takže podepsaná URL lokálního (neveřejného)
+ * Storage by byla nedostupná. S `STT_TEST_PUBLIC_STORAGE_ORIGIN=https://<host>` se u podepsané URL vymění JEN původ (cesta a podpis zůstávají);
+ * hostitel musí zrcadlit lokální Storage (viz e2e/support/storage-gate.mjs). V produkci (`NODE_ENV=production`) se proměnná IGNORUJE,
+ * takže produkční podepsané URL nikdy neodejdou jinam než na Storage projektu.
+ */
+export function publicSignedUrl(url: string, env: Record<string, string | undefined> = process.env): string {
+  const origin = env.NODE_ENV !== 'production' ? env.STT_TEST_PUBLIC_STORAGE_ORIGIN?.trim() : undefined;
+  if (!origin || !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(origin)) return url;
+  try {
+    const u = new URL(url);
+    return `${origin}${u.pathname}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
 /** Feature flag: bez `STT_ENABLED=1` všechny STT routy odpovídají 503 `stt_disabled`. */
 export const sttEnabled = (env: Record<string, string | undefined> = process.env) => env.STT_ENABLED === '1';
 
@@ -204,7 +221,8 @@ export async function startTranscription(a: SttCtx): Promise<StartResult> {
     throw new AiGatewayError('stt_unavailable', 'Soubor se nepodařilo zpřístupnit. Zkuste to prosím znovu.');
   }
   // Obsah se ověří PŘED odesláním (a před jakýmkoli poplatkem): přípona a MIME jde falšovat, hlavička souboru ne.
-  const head = await fetchHead(signed.data.signedUrl, a.fetchImpl ?? fetch);
+  const audioUrl = publicSignedUrl(signed.data.signedUrl);
+  const head = await fetchHead(audioUrl, a.fetchImpl ?? fetch);
   if (head === null) {
     await sttFail(a.db, a.secret, a.meetingId, row.attempt, null, 'storage_unavailable', 'none');
     throw new AiGatewayError('stt_unavailable', 'Soubor se nepodařilo zpřístupnit. Zkuste to prosím znovu.');
@@ -219,7 +237,7 @@ export async function startTranscription(a: SttCtx): Promise<StartResult> {
   try {
     // Soukromí: poskytovateli se neposílají jména členů, jména mluvčích ani název projektu (jen obecná doména).
     const job = await a.soniox.createTranscription({
-      audioUrl: signed.data.signedUrl,
+      audioUrl,
       languageHints: m.language_hint === 'en' ? ['en', 'cs'] : ['cs', 'en'],
       context: { general: [{ key: 'domain', value: 'Project meeting' }] },
       clientReferenceId: ref,

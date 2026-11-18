@@ -52,7 +52,7 @@ for c in $CHUNKS; do get "$c" >> "$BUNDLE"; done
 has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
-for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
+for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

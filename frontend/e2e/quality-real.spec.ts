@@ -36,8 +36,14 @@ const FIXTURES = [
       'Petr Prokop: Já se ozvu dodavateli ohledně certifikátu a dám vědět zítra.',
       'Jana Svobodová: Riziko je, že dodavatel certifikát nedodá ani v pátek.',
       'Honza Novák: Nevíme zatím, jestli testovací prostředí unese zátěžový test. To je otevřená otázka.',
+      'Petr Prokop: Nebudeme nasazovat novou verzi v pátek, počkáme na certifikát.',
+      'Honza Novák: Stihneme nasadit zálohování ještě před koncem měsíce?',
+      'Jana Svobodová: Ne, to není možné, zálohování se do konce měsíce nestihne.',
+      'Petr Prokop: Nikdo z nás zatím nedokáže potvrdit termín pro školení.',
       'Jana Svobodová: Dobře, to ještě ověříme. Končíme.',
     ].join('\n'),
+    // NEGATION PROBES (report-only): a decision/action that merely repeats the affirmative of these sentences would be a wrong proposal.
+    negationProbes: ['nasazovat novou verzi v pátek', 'stihneme nasadit zálohování', 'termín pro školení'],
   },
   {
     key: 'en-standup',
@@ -49,8 +55,10 @@ const FIXTURES = [
       'Bob: One risk: the tax code list might change again next month.',
       'Alice: Who will tell finance about the deadline?',
       'Alice: I will email them today.',
+      "Bob: We won't ship the PDF layout this sprint, and we can't promise the Friday date.",
     ].join('\n'),
     language: 'en',
+    negationProbes: ['ship the PDF layout this sprint', 'promise the Friday date'],
   },
   {
     key: 'cs-injection',
@@ -138,8 +146,17 @@ for (const f of FIXTURES) {
     const items = (await rest(request, token, `intelligence_items?select=kind,text,review_state,owner_text,due_text,support,evidence&meeting_id=eq.${meetingId}&order=ordinal`)).json as Array<{ kind: string; text: string; review_state: string; owner_text: string | null; due_text: string | null; support: string; evidence: unknown[] }>;
     const byKind: Record<string, number> = {};
     for (const i of items) byKind[i.kind] = (byKind[i.kind] ?? 0) + 1;
+    // NEGATION HANDLING (report-only quality numbers): items whose evidence flag is 'negation_nearby', and proposals that
+    // restate a negated/questioned sentence in the affirmative while still being marked as a plain linked citation.
+    const probes = ('negationProbes' in f ? (f.negationProbes as readonly string[]) : []).map((p) => p.toLowerCase());
+    const ev = (i: (typeof items)[number]) => (Array.isArray(i.evidence) ? (i.evidence as { flag?: string; quote?: string }[]) : []);
+    const flagged = items.filter((i) => ev(i).some((e) => e.flag === 'negation_nearby'));
+    const suspicious = items.filter((i) => i.support === 'linked' && (i.kind === 'decision' || i.kind === 'action_item')
+      && ev(i).some((e) => probes.some((p) => (e.quote ?? '').toLowerCase().includes(p.slice(0, 18)))));
     (report.meetings as unknown[]).push({
       fixture: f.key, http: res.status(), ms, result: body,
+      negation: { probes: probes.length, flaggedItems: flagged.length, linkedDecisionsOrActionsOnNegatedSentences: suspicious.map((i) => i.text) },
+      supportCounts: items.reduce<Record<string, number>>((a, i) => { a[i.support ?? 'none'] = (a[i.support ?? 'none'] ?? 0) + 1; return a; }, {}),
       itemCount: items.length, byKind,
       withEvidence: items.filter((i) => Array.isArray(i.evidence) && i.evidence.length > 0).length,
       owners: items.filter((i) => i.owner_text).map((i) => ({ text: i.text, owner: i.owner_text, due: i.due_text })),

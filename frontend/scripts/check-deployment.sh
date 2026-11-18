@@ -33,7 +33,14 @@ H=$(get /login -I)
 for h in 'strict-transport-security' 'x-frame-options: DENY' 'x-content-type-options: nosniff' 'content-security-policy'; do
   echo "$H" | tr 'A-Z' 'a-z' | grep -q "$(echo "$h" | tr 'A-Z' 'a-z')" && ok "header $h" || bad "missing header $h"
 done
-code=$(status POST /api/ai/improve -H 'Content-Type: application/json' -d '{}'); [ "$code" = 403 ] && ok "POST /api/ai/improve -> 403 (firewall deny)" || bad "POST /api/ai/improve -> $code (expected 403)"
+# EVERY AI and transcription route (the firewall rule denies the whole /api/ai prefix): refused on GET and POST, never reaches the app
+for r in analyze-resource capacity-planning chat daily-brief generate-backlog generate-project generate-sprint improve project-brief project-manager risk-analysis voice-action \
+         meetings/analyze meetings/purge meetings/sweep meetings/sync meetings/transcribe; do
+  for m in GET POST; do
+    code=$(status $m /api/ai/$r -H 'Content-Type: application/json' -d '{}')
+    [ "$code" = 403 ] && ok "$m /api/ai/$r -> 403 (firewall deny)" || bad "$m /api/ai/$r -> $code (expected 403)"
+  done
+done
 code=$(status POST /api/dev/login -H 'x-clearspace-dev-login: 1'); [ "$code" = 404 ] && ok "POST /api/dev/login -> 404" || bad "POST /api/dev/login -> $code (expected 404)"
 
 echo "== client bundle"
@@ -45,7 +52,7 @@ for c in $CHUNKS; do get "$c" >> "$BUNDLE"; done
 has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
-for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY'; do
+for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

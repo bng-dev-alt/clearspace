@@ -69,6 +69,8 @@ hosted Supabase, `main` or other-app change.
 
 ## B2 — apply migration `20261118000500_intelligence_core.sql` to the hosted Supabase (needs approval)
 
+> **Superseded by `CONTROLLED_RELEASE.md` (2026-11-18):** B2 now covers migrations 0500, 0600 and 0700 with a verified backup, a restore proof, a rehearsal on the restored copy and `supabase/verify_hosted_intelligence.sql`; B3 is split into B3a (staged, no promote) and B3b (promote). Use the approval texts there.
+
 **What changes:** one additive, idempotent migration on project `twjlnsxjtuntujarwner`: 4 tables, 5 RPCs, helper, triggers; no existing object
 altered. Pattern = A3 (backup → restore proof → one transaction as `postgres` → verification). The migration's own preflight refuses
 without the security-foundation marker and changes nothing; it records marker `20261118000500_intelligence_core` in `clearspace_migrations`.

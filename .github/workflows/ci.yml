@@ -67,6 +67,10 @@ jobs:
   database:
     runs-on: ubuntu-latest
     steps:
+      # Celá historie: scénář G (upgrade ze stavu před stabilizací) čte migrace z commitu 383cf20. S mělkým klonem by se
+      # přeskočil (a zapsal by se jako PŘESKOČEN, ne jako splněn).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Databázové testy
         run: frontend/supabase/tests/run.sh

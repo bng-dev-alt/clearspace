@@ -29,11 +29,12 @@ Every step below that touches hosted Supabase, Vercel, a firewall, a provider ac
 | 4 | `20261117000400_task_resources_storage` | applied | private `task-resources` bucket |
 | 5 | `20261118000500_intelligence_core` | **pending** | 4 tables, 5 RPCs, state-machine trigger |
 | 6 | `20261118000600_intelligence_quality` | **pending** | `columns.role` (+ one-time backfill from names), transcript lineage, quotas, `project_intelligence_stamp` |
+| 8 | `20261118000800_stt_stabilization_repair` | **pending, optional on a fresh database** | GENERATED (`supabase/tools/build_0800.sh`): verbatim re-assertion of 0500/0600/0700 + data repair. **Required only for an installation that already applied an EARLIER version of 0500-0700** (its tooling will not re-run them); idempotent and harmless otherwise |
 | 7 | `20261118000700_meeting_audio` | **pending** | consent + audio + STT columns on `meetings`, private `meeting-audio` bucket + 3 policies, `server_trust` + server-secret-gated trusted STT RPCs, `stt_jobs` (per-attempt provider job + cleanup state), orphan-audio queue, `ai_requests` audio/cost/`billing_state` columns |
 
 Rules for the hosted apply (same pattern as A3): fresh backup **and a restore proof into a throwaway container** first; apply each file as role `postgres`
 in **one transaction** (`psql -v ON_ERROR_STOP=1 --single-transaction`); verify; stop on the first error. Each migration refuses (changes nothing) when its
-predecessor's marker row in `clearspace_migrations` is missing. 5 → 6 → 7 can be applied in one maintenance window, one file at a time.
+predecessor's marker row in `clearspace_migrations` is missing. 5 → 6 → 7 can be applied in one maintenance window, one file at a time. **Hosted is at 0400, so it takes 5 → 6 → 7 and does not need 8.** Any other database that ever ran an earlier 0500-0700 (a local/dev database, a previous pilot) takes **only 8**: it drops the obsolete secret-less `stt_*` overloads that `CREATE OR REPLACE` leaves callable by any member, re-asserts every definition and repairs legacy rows. Scenario G of `supabase/tests/run.sh` proves old-state + 8 == fresh install (identical catalog snapshot) and that the old state really was exploitable.
 
 Verification after each file (all must hold): marker row present; new tables have RLS on; `anon` has no grants on them; definer functions have a pinned
 `search_path` and `anon` cannot execute them; row counts of the old tables unchanged; for 7 additionally `storage.buckets` row `meeting-audio` is private with
@@ -45,8 +46,8 @@ from the RPC and never rely on the HTTP status.
 
 ### Rollback (tested only on throwaway databases)
 
-`supabase/rollback/20261118000700_meeting_audio.down.sql` then `…000600_intelligence_quality.down.sql` (not part of `supabase/migrations`, never auto-applied).
-Both **refuse while data would be lost** (consent/audio rows, a non-empty `meeting-audio` bucket, explicit column roles, transcript edits) unless
+`supabase/rollback/` holds `…000800_stt_stabilization_repair.down.sql` (removes only its marker; the repair adds no objects of its own and its data corrections are deliberately not reverted), then `…000700_meeting_audio.down.sql`, `…000600_intelligence_quality.down.sql`, `…000500_intelligence_core.down.sql`, in that order (not part of `supabase/migrations`, never auto-applied; each refuses while a later one is applied).
+They **refuse while data would be lost** (consent/audio rows, `stt_jobs` provider job ids, queued orphan audio, STT ledger history, a registered `server_trust` hash, a non-empty `meeting-audio` bucket, explicit column roles, transcript edits) unless
 `SET clearspace.force_rollback = 'on'`. Scenario F of `supabase/tests/run.sh` proves: refusal with data, clean removal without, no leftover object,
 the 0500 suite still passes, and the migrations apply again. The bucket and its objects are removed through the **Storage API** on a real project.
 A frontend rollback never needs a database rollback: old builds ignore the new tables and columns (verified by design; the old app never selects them).
@@ -59,8 +60,9 @@ A frontend rollback never needs a database rollback: old builds ignore the new t
 | `GEMINI_API_KEY` | server, **Sensitive** | any AI feature | already set (dedicated V1 key); **paid tier must be confirmed before real meeting text is analysed** |
 | `GEMINI_MODEL` | server | AI | `gemini-3.6-flash` |
 | `AI_RATE_PER_USER_PER_MINUTE`, `AI_RATE_GLOBAL_PER_MINUTE`, `AI_DAILY_TOKEN_BUDGET_PER_USER` | server | AI limits | 10 / 60 / 200 000. A budget alert at Google is **not** a spending cap |
-| `STT_ENABLED` | server | audio | unset = off (routes answer 503 `stt_disabled`) |
+| `STT_ENABLED` | server | audio **transcription** | unset = off (`transcribe` and `sync` answer 503 `stt_disabled`). It does **not** switch off deleting audio: the browser deletes through Supabase directly and the `purge`/`sweep` routes work without it |
 | `NEXT_PUBLIC_ENABLE_MEETING_AUDIO` | **build-time** | audio UI | unset = off; changing it needs a new deployment |
+| `STT_SERVER_SECRET` | server, **Sensitive**, never `NEXT_PUBLIC_` | audio | none; >= 32 characters (generate with `openssl rand -hex 32`). **Owner step:** register only its SHA-256 in `server_trust` (compute it locally, see `HARDENING_RELEASE_CANDIDATE.md` §1); without it every trusted STT RPC refuses (fail closed) |
 | `SONIOX_API_KEY` | server, **Sensitive**, never `NEXT_PUBLIC_` | audio | none; the bundle check fails the build if the name appears client-side |
 | `SONIOX_MODEL` | server | audio | `stt-async-v6` (`v5` is deprecated, removed 2026-12-15) |
 | `SONIOX_REGION` | server | audio | `us`; `eu`/`jp`/`in` need Console approval, their own project and key |
@@ -157,7 +159,7 @@ Not verifiable locally (stay open): real Gemini prompt quality (B1), Soniox read
 | Bad frontend | `vercel promote dpl_2tSV5NWAHaEweTibxzszh6SMZJ55` (previous production build). Safe: the old build ignores the new tables; AI stays shut by the firewall |
 | Bad migration | restore from the pre-migration dump into a scratch DB first; for 5–7 use the down scripts (data-guarded) or fix forward (all migrations are idempotent) |
 | AI misbehaves / cost | firewall deny stays/returns; lower `AI_DAILY_TOKEN_BUDGET_PER_USER`; revoke the key at Google |
-| Soniox misbehaves / cost | remove `SONIOX_API_KEY`, `STT_SERVER_SECRET` or `STT_ENABLED`; stop at Soniox Console; per-user/global daily audio caps already bound spend; leftover provider data auto-deletes after 30 days or via Console |
+| Soniox misbehaves / cost | remove `SONIOX_API_KEY`, `STT_SERVER_SECRET` or `STT_ENABLED` (transcription stops; users can still delete audio; provider-side cleanup resumes when the configuration is back); stop at Soniox Console; per-user/global daily audio caps already bound spend; leftover provider data auto-deletes after 30 days or via Console |
 | Orphan audio | the app deletes audio on "Smazat zvuk", when a project member opens the meetings pages after the deadline (`audio_delete_after`, set at upload, also for failed/cancelled meetings; **no scheduler**) and before a meeting is deleted; orphaned Storage objects are queued and swept; `stt_jobs.cleanup_state = 'pending'` marks provider data still to delete; manual purge route exists |
 | Stuck / uncertain transcription | page shows "check again / cancel"; an uncertain POST outcome (`unknown`) is **never re-sent**: it is reconciled by listing the provider's jobs by `client_reference_id` (`<meeting>:<attempt>`) and the estimate stays in the budget; if nothing is found after 10 min with a complete listing it is released, otherwise the user explicitly ends it (cost stays booked). Attempts are cumulative per meeting (max 3) |
 

@@ -16,9 +16,18 @@ real provider; no real Gemini or Soniox call was made; all runs used synthetic d
 | Is a deletion promised on a schedule? | **No.** There is no scheduler on the target hosting. Deletion happens when a project member opens the meetings pages (sweep) or manually. |
 | Is audio on by default? | No: `STT_ENABLED` (server) and `NEXT_PUBLIC_ENABLE_MEETING_AUDIO` (build time) are both off; the production firewall also still blocks `/api/ai`. |
 
-**Owner step (not done, needs approval):** generate a secret (`openssl rand -hex 32`), put it into the server environment as `STT_SERVER_SECRET`, and register only
-its hash once: `INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('stt', encode(sha256(convert_to('<secret>', 'UTF8')), 'hex')) ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256;`
-(SQL editor, as the project owner). Rotating = new secret + the same statement.
+**Owner step (not done, needs approval).** Generate a secret, put it into the server environment as `STT_SERVER_SECRET`, and register only its hash. Compute the hash
+**locally**, so the plaintext never reaches the SQL editor or its history:
+
+```bash
+S="$(openssl rand -hex 32)"            # keep it for the server environment (Vercel, Sensitive); do not paste it anywhere else
+printf %s "$S" | shasum -a 256 | cut -d' ' -f1   # prints the 64-hex hash
+```
+```sql
+INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('stt', '<the 64-hex hash>')
+ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256;   -- SQL editor, as the project owner
+```
+Rotating = a new secret + the same statement. The secret is only length-checked (>= 32 chars); `openssl rand -hex 32` gives 256 bits. Until the hash is registered every trusted STT function refuses.
 
 ## 2. P1 register: disposition of each finding
 
@@ -75,22 +84,46 @@ file names and order are unchanged. Hosted apply is still gated by the release p
 5. **Hosted behaviour** of the new policies, definer functions and Storage bucket; **Vercel env wiring** (`STT_SERVER_SECRET`, flags); function duration limits.
 6. **Gemini on a paid tier** and real-model prompt quality (gate B1).
 
-## 6. Verification (this run, all local)
+## 6. Verification (all local; numbers are from the FINAL stabilization run unless marked)
 
 | Check | Command | Result |
 |---|---|---|
 | Types | `npx tsc --noEmit -p .` (in `frontend/`) | 0 errors |
 | Lint | `npx eslint .` | 0 errors; 2 warnings in untouched `supabase/tests/http_regression.mjs` and `realtime_check.mjs` (pre-existing) |
-| Unit/integration | `npx vitest run` (sandbox off: tests bind local ports) | 58 files, **819 passed** |
-| Database | `PG_IMAGE=public.ecr.aws/supabase/postgres:17.6.1.167 supabase/tests/run.sh` | **1241 SQL assertions passed**: scenarios A (fresh), B (legacy upgrade), C (preflight), D (drift/ownership), E (hosted non-superuser role), F (rollback + order independence), concurrency |
-| Real Supabase stack (throwaway, ports 55521+) | `real_stack.sh`, `storage_real_stack.sh`, `meeting_audio_real_stack.sh` | all passed; the latter includes the secret-less/forged-secret probes and the cancel/retry ledger checks over real PostgREST |
-| Playwright, real stack + fake Gemini + fake Soniox | `meetings`, `project-intelligence`, `r6-quality`, `meeting-audio` specs | **34 passed** |
-| Playwright, demo mode | `npx playwright test` | 27 passed, 62 real-stack specs skipped without env |
+| Unit/integration | `npx vitest run` (sandbox off: tests bind local ports) | 61 files, **976 passed** |
+| Database | `PG_IMAGE=public.ecr.aws/supabase/postgres:17.6.1.167 supabase/tests/run.sh` | **1533 SQL assertions passed**: scenarios A (fresh), B (legacy upgrade), C (preflight), D (drift/ownership), E (hosted non-superuser role), F (rollback + order independence), **G (upgrade from the pre-stabilization state, 0800 repair)**, concurrency; includes the check that `0800` is in sync with 0500/0600/0700 |
+| Real Supabase stack (throwaway, ports 55521+) | `real_stack.sh`, `storage_real_stack.sh`, `meeting_audio_real_stack.sh` | all passed (audio script: 69 checks, incl. the secret-less / forged-secret / old-signature probes and the cancel/unknown/abandon window checks over real PostgREST) |
+| Playwright, real stack + fake Gemini + fake Soniox | `meetings`, `project-intelligence`, `r6-quality`, `meeting-audio` specs | **40 passed** (audio spec: 18) |
+| Playwright, keyless runtime | `supabase-runtime.spec.ts` | 5 passed |
+| Playwright, demo mode | `npx playwright test` | 27 passed, 68 real-stack specs skipped without env |
 | Build + bundle | `NEXT_PUBLIC_ENABLE_MEETING_AUDIO=1 npm run build`, `scripts/check-production-bundle.sh` | passes; also scans for `STT_SERVER_SECRET`/`p_server_secret` |
 | Secret scan | grep of the branch diff and untracked files for key patterns | 0 findings |
 
-Not re-run in this pass: `supabase-runtime.spec.ts` (keyless instance) and `hosted_fidelity.sh`. A pre-existing flake in the real-stack scripts was fixed on the way:
-the "tampered signed URL" check changed the last base64 character, which can carry unused padding bits and survive; it now changes a character in the middle.
+Original failure probes re-run against the final code (before -> after): F2 (200 + unreadable body) `stt_fail(none)` + retry allowed -> `stt_mark_unknown`, one POST; F3 (cancel while submitting, retry) attempt 2 started and its job id lost -> state `unknown`, retry `unknown_outcome`, abandon `too_early`, late id attaches to its own attempt; F1 old secret-less `stt_reserve` with member budgets `started` -> function does not exist (404); G1 forged `source='soniox'` with a self-set session flag allowed -> refused (42501); A1-A3 "není", "nejde", question/answer, ellipsis over "ale ne" accepted unflagged -> flagged or unsupported (control quote stays clean).
+
+Not run in this pass: `hosted_fidelity.sh` standalone (its scenarios D/E run inside `run.sh`).
+A pre-existing flake in the real-stack scripts was fixed earlier: the "tampered signed URL" check changed the last base64 character, which can carry unused padding bits; it now changes a middle character.
+
+## 6b. Final stabilization (review of `3c25e9c`)
+
+The independent review of `3c25e9c` reproduced further release findings. They are fixed in the commits after `3c25e9c`; the migrations 0500-0700 were edited in place
+(still unapplied on hosted) and the forward-only repair **`20261118000800_stt_stabilization_repair`** was added for installations that already ran an earlier version.
+
+| Finding | Disposition | What changed | Regression evidence |
+|---|---|---|---|
+| **F1** obsolete secret-less `stt_*` overloads survive an upgrade | **FIXED** | 0700 drops the five pre-hardening signatures and the previous hardened ones explicitly; 0800 re-asserts everything on an old install; test: every `public.stt_*` function takes `p_server_secret` first | Scenario G (old state really exploitable -> after 0800 the catalog equals a fresh install; second path "old state + re-applied 0500-0700" converges too); `84_stt_stabilization`; real-stack probes (old signatures answer 404); Playwright AUDIT PROBES |
+| **F2** a 2xx answer with an unreadable body was booked "not billed" | **FIXED** | `definitelyNotCreated` is true only for a genuine 4xx rejection; 2xx/5xx/no status = uncertain -> `unknown`, estimate stays booked | `pipeline.test.ts` (unit + the mock-provider mode `create_200_bad_body`), Playwright (job exists, exactly one paid POST, adopted by reconciliation) |
+| **F3** cancel during `submitting` + retry = two paid jobs and a lost job id | **FIXED** | cancel of a submitting attempt moves it to `unknown` (also enforced inside `stt_fail`); `stt_reserve` refuses while unknown; abandoning is refused inside the submission window (`too_early`); every job id is bound to its ORIGINAL attempt (`stt_attach_job`/`stt_fail`/`stt_mark_unknown` take `p_attempt`; reconciliation reads the attempt from `client_reference_id`); a late id for an older attempt is kept for deletion and never touches the live attempt | SQL `82` + `84` (late attach, stale calls, window), `pipeline.test.ts`, Playwright "cancelling while the POST is in flight" |
+| **A1-A3** porous negation guard | **FIXED (best effort, lexical)** | Czech/English negation lexicon with explicit exclusions, clause-aware windows before/after every occurrence, questions flagged, ellipsis gaps bounded and scanned | `evidence.negation.test.ts` (>60 positive, >20 negative lexicon cases, Q/A across segments, ellipsis); the label stays "Citace nalezena": **lexical matching is not semantic entailment** |
+| **B1** approved knowledge could drop out of the 200-item pool | **FIXED** | approved (accepted/applied) items have their own query and limit; proposals are a separate bounded pool | `knowledgePool.test.ts` (250 newer proposals + older accepted decisions) |
+| **C1** deleting audio depended on STT flags / the `/api/ai` firewall | **FIXED** | deletion runs in the browser directly against Supabase (Storage + `mark_audio_deleted`); `purge`/`sweep` routes no longer need `STT_ENABLED`, the secret or the provider key; provider-side cleanup is a separate, retryable job state | `audioCleanup.test.ts`, `routes.test.ts`, Playwright (deletes with `/api/ai` answering 403; failed meeting past its deadline is deleted on open) |
+| **C2** project deletion left audio and provider data unreachable | **FIXED for audio; provider data honestly limited** | `deleteProject` first removes every audio object of the project (and aborts the deletion if that fails); provider jobs that could not be deleted before the project went away are removed by Soniox itself within 30 days (stated in the delete warning) | Playwright (Storage failure keeps the project; success removes audio first), `audioService.test.ts` |
+| G1 `app.stt_persist` was client-settable | **FIXED** | provenance is a token row for the current transaction id in `machine_persist_tokens` (no member grants) written only by `stt_complete` | `84` (forged `source='soniox'` insert refused even with the old flag set), real-stack probe |
+| Unattached uploads had no deadline | **FIXED** | `list_project_audio` + sweep remove never-attached uploads after a 24 h grace period; deadline for audio is set at upload | `84`, `audioCleanup.test.ts` |
+| Docs/wording | **FIXED** | consent label is the member's statement, retention text names the deadline and the absence of a scheduler, `0700.down` really enforces the `server_trust` guard and the order guard for 0800, secret registration steps, `earlier-run` badge test | `audioUi.test.tsx`, `meetingsUi.test.tsx`, rollback scenario F |
+
+What is still **not** guaranteed: Soniox has no idempotency key, so provider billing is not exactly-once (an uncertain POST is reconciled, never repeated, and its estimate stays booked);
+provider data of a deleted project depends on Soniox's own 30-day deletion; there is no scheduler, so retention happens when a project member opens the meetings pages.
 
 ## 7. Recovery notes
 

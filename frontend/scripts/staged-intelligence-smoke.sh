@@ -13,6 +13,8 @@ BASE=${STAGED_URL:?set STAGED_URL (a staged deployment of this project, or http:
 V=${VERCEL_BIN:-/Users/beng/.npm/_npx/67eb4586ca667318/node_modules/.bin/vercel}; SCOPE=${VERCEL_SCOPE:-bng-dev-alt-webadvisor}; PROJ=prj_yFGiOmACsu4iILF6nb6Q0aDgG8gg
 case "$BASE" in
   http://127.0.0.1:*|http://localhost:*) BYPASS=none;;
+  # the promoted PRODUCTION domain (public, no bypass): only with PRODUCTION_SMOKE_OK=1 (post-promote smoke, B3b)
+  https://clearspace-ai.vercel.app) [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] || { echo "refusing the production domain without PRODUCTION_SMOKE_OK=1"; exit 2; }; BYPASS=none;;
   https://clearspace-[a-z0-9]*-bng-dev-alt-webadvisor.vercel.app)
     BYPASS=$("$V" api "/v9/projects/$PROJ" --scope "$SCOPE" 2>/dev/null | python3 -c "import json,sys; print(next(iter(json.load(sys.stdin)['protectionBypass'])))") || BYPASS=""
     [ -n "$BYPASS" ] || { echo "no protection-bypass secret available for the staged URL"; exit 2;};;

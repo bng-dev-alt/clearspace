@@ -227,6 +227,16 @@ harmless to it).
 
 > **Approval text B3b:** „Schvaluji B3b: `vercel promote` staged deploymentu `<URL>` na `clearspace-ai.vercel.app`, post-promote smoke (`hosted-verify.sh` s `PRODUCTION_SMOKE_OK=1`) a v případě selhání rollback na `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`. Firewall a Cloudflare se nemění.“
 
+* **B3b RESULT — PASS (2026-11-18): `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi` (commit `25ffce6`) is live on `clearspace-ai.vercel.app`.**
+  Before: staged deployment verified READY, target production, `releaseCommit=25ffce6`, Vercel Authentication on (unauthenticated `/login` 302), production env unchanged (7 variables, no STT/Soniox/audio), live domain still `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`, `origin/main` `fe3b2e9`, rollback target READY.
+  `vercel promote … --yes` → "Success" in 2 s; the live domain then serves `dpl_Ff8CV7…`. Post-promote on the production domain:
+  `check-deployment.sh` 60 ok / 0 FAIL (all 34 AI/STT GET+POST checks 403, `/api/dev/login` 404, live chunks: new Supabase ref only, no provider strings, JWT role anon only);
+  `staged-intelligence-smoke.sh` (production domain, `PRODUCTION_SMOKE_OK=1`) 18/18, accounts deleted with HTTP 200 (incl. the meeting author), no leftovers;
+  `hosted-verify.sh` run **3 times in a row on production, all clean** (Realtime member/non-member/anon, 16 UI tests incl. Storage, no leftovers). The two transient H2 failures (one Realtime event, one Storage UI timeout) did NOT recur in 3 production runs.
+  Unchanged: firewall rule "Block legacy AI API" (active, deny), Cloudflare origin `POST /api/ai/chat` 302, Git `main` `fe3b2e9`, Vercel env, keys, DB. Rollback NOT needed (compatibility argument stays: the DB change is additive; 0900 only relaxes one guard for erasure).
+  `staged-intelligence-smoke.sh` now also accepts the production domain (with `PRODUCTION_SMOKE_OK=1`, no bypass header needed).
+  Not done: B4, real Soniox (S1), audio/AI activation.
+
 ## B4 — fast-forward `main` (needs approval; after B3b PASS)
 
 ```bash

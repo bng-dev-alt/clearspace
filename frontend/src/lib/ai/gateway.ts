@@ -307,6 +307,10 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
 
     const pre = feature.precompute?.({ input, board, project, context }) ?? null;
     if (pre) {
+      // Deterministický výsledek nestojí tokeny, ale NENÍ zadarmo bez omezení: bere se z per-minutového limitu a zapíše se do
+      // ledgeru (model 'deterministic', 0 tokenů), aby se opakovanými voláními nedala donekonečna zatěžovat DB.
+      const shortcutId = await reserve(auth.db, feature.name, projectId, 0);
+      await complete(auth.db, shortcutId, 'succeeded', { model: 'deterministic', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, startedAt });
       return NextResponse.json(
         { content: JSON.stringify(pre), model: 'deterministic', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, parsed: pre, deterministic: true },
         { headers: { 'Cache-Control': 'no-store' } }

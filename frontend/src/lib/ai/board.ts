@@ -17,12 +17,12 @@ export async function loadBoard(
     throw new AiGatewayError('forbidden', 'K tomuto projektu nemáte přístup.');
   }
 
-  const { data: cols, error: cErr } = await db
-    .from('columns')
-    .select('id, name, position, role')
-    .eq('project_id', projectId)
-    .order('position', { ascending: true })
-    .limit(50);
+  const readColumns = (fields: string) =>
+    db.from('columns').select(fields).eq('project_id', projectId).order('position', { ascending: true }).limit(50);
+  let colRes = await readColumns('id, name, position, role');
+  // Databáze bez migrace 0600 nemá sloupec `role` (42703): kontext se sestaví bez rolí, AI featury dál fungují.
+  if (colRes.error && (colRes.error.code === '42703' || /role/i.test(colRes.error.message ?? ''))) colRes = await readColumns('id, name, position');
+  const { data: cols, error: cErr } = colRes as unknown as { data: { id: string; name: string; position: number; role?: string | null }[] | null; error: unknown };
   if (cErr) throw new AiGatewayError('ai_failed', 'Nepodařilo se načíst data projektu.');
 
   const colIds = (cols ?? []).map((c) => c.id as string);

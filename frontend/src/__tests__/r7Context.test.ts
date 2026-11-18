@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   rpc: [] as Array<{ name: string; args: Record<string, unknown> }>,
   tables: {} as Record<string, unknown[]>,
   visible: ['pA'] as string[],
+  reserveAllowed: true,
 }));
 
 vi.mock('@google/genai', () => ({
@@ -47,7 +48,7 @@ vi.mock('@supabase/supabase-js', () => ({
       auth: { getUser: async () => ({ data: { user: { id: 'u1' } }, error: null }) },
       rpc: async (name: string, args: Record<string, unknown>) => {
         h.rpc.push({ name, args });
-        if (name === 'ai_reserve') return { data: [{ allowed: true, request_id: 'req-1', reason: null }], error: null };
+        if (name === 'ai_reserve') return { data: [h.reserveAllowed ? { allowed: true, request_id: 'req-1', reason: null } : { allowed: false, request_id: null, reason: 'rate_limited' }], error: null };
         return { data: null, error: null };
       },
       from: builder,
@@ -77,6 +78,7 @@ describe('R7: features on the shared context engine', () => {
     h.gemini.length = 0;
     h.rpc.length = 0;
     h.visible = ['pA'];
+    h.reserveAllowed = true;
     h.tables = { columns: [{ id: 'col-1', name: 'K řešení', position: 0, role: null }], cards: [CARD()], activity_logs: [], intelligence_items: [] };
     process.env = { ...env, NEXT_PUBLIC_SUPABASE_URL: 'http://sb.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon', GEMINI_API_KEY: 'k', GEMINI_MODEL: 'm' };
     delete process.env.NEXT_PUBLIC_FORCE_DEMO;
@@ -143,7 +145,7 @@ describe('R7: features on the shared context engine', () => {
     });
   });
 
-  describe('deterministic shortcuts: no model call, no ledger row, same response shape', () => {
+  describe('deterministic shortcuts: no model call, but RATE-LIMITED and booked at 0 tokens, same response shape', () => {
     test('project manager with no active cards', async () => {
       h.tables.cards = [];
       const r = await post(aiFeatures.projectManager, {});
@@ -154,7 +156,16 @@ describe('R7: features on the shared context engine', () => {
       expect(j.parsed).toMatchObject({ risks: [], blockers: [], suggestedChanges: [], confidenceScore: 100 });
       expect(typeof j.parsed.healthScore).toBe('number');
       expect(h.gemini).toHaveLength(0);
-      expect(h.rpc.find((c) => c.name === 'ai_reserve')).toBeUndefined();
+      // not free of limits: the precomputed route takes the per-minute slot and leaves a 0-token ledger row (no DB-hammering loop)
+      expect(h.rpc.find((c) => c.name === 'ai_reserve')?.args).toMatchObject({ p_reserved_tokens: 0 });
+      expect(h.rpc.find((c) => c.name === 'ai_complete')?.args).toMatchObject({ p_status: 'succeeded', p_model: 'deterministic', p_prompt_tokens: 0, p_completion_tokens: 0 });
+    });
+    test('a shortcut that exceeds the per-minute limit is refused like any model call (429), still without a model call', async () => {
+      h.tables.cards = [];
+      h.reserveAllowed = false;
+      const r = await post(aiFeatures.projectManager, {});
+      expect(r.status).toBe(429);
+      expect(h.gemini).toHaveLength(0);
     });
     test('daily brief of an empty project', async () => {
       h.tables.cards = [];

@@ -111,7 +111,10 @@ test('R7 shortcuts: daily brief of an EMPTY project and capacity without members
   const cap = await ai(request, 'capacity-planning', { members: [] });
   expect((await cap.json()).deterministic).toBe(true);
   expect(await calls(request)).toBe(before); // no model call
-  expect((await rest(request, owner.token, 'ai_requests?select=id')).json.length).toBe(ledgerBefore); // and nothing booked
+  // not free of limits: each precomputed answer takes the per-minute slot and leaves a 0-token, model 'deterministic' ledger row
+  const rows = (await rest(request, owner.token, 'ai_requests?select=model,total_tokens,status&order=created_at.desc')).json as { model: string | null; total_tokens: number; status: string }[];
+  expect(rows.length).toBe(ledgerBefore + 3);
+  expect(rows.slice(0, 3)).toEqual([1, 2, 3].map(() => ({ model: 'deterministic', total_tokens: 0, status: 'succeeded' })));
 });
 
 test('R6 brief freshness: a COMMENT-only change makes a brief stale (the database stamp sees it)', async ({ page, request }) => {

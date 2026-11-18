@@ -145,6 +145,17 @@ creating a meeting from pasted text works, "Analyzovat" shows the clear "AI vypn
 
 > **Approval text B3a:** „Schvaluji B3a: staged production deployment (`vercel deploy --prod --skip-domain`) z čistého exportu commitu `<HEAD>` s `--meta releaseCommit`, kontroly stagingu (`check-deployment.sh`, `vercel inspect`, prohlížeč přihlášený k Vercelu). Bez promote, bez push, bez merge, bez změny firewallu.“
 
+* **B3a RESULT — PARTIAL (2026-11-18): staged deployment is fine, but the smoke found a database defect that blocks B3b.**
+  Staged deployment `dpl_GQL6xxm4SMAJHv1Q5XQ5PUNnKywb` (`clearspace-7yz64bf51-bng-dev-alt-webadvisor.vercel.app`, target production, READY, **no alias**, Vercel Authentication on, `releaseCommit=d0cef6a`); the live domain still serves `dpl_2tSV5NWAHaEweTibxzszh6SMZJ55`.
+  Passed: local gates (tsc, eslint 0 errors, 991 tests, build, bundle check, secret scan); `check-deployment.sh` (59 ok, 0 FAIL: headers, all 17 AI/STT routes x GET and POST = 403, `/api/dev/login` 404, bundle = new ref only, no forbidden strings, JWT roles = anon); `hosted-verify.sh` against the staged URL (Realtime 3/3, Playwright 16/16);
+  Intelligence smoke on the staged URL (login, board, Porady page, creating a meeting from pasted text, "Analyzovat" and the project brief both show "AI funkce jsou v této instalaci zatím vypnuté" after a firewall 403, audio panel absent, no AI run or ledger row, RLS: stranger sees no meetings, no direct INSERT into `intelligence_items`, `stt_*` RPCs not callable, anon refused).
+  (The first `check-deployment.sh` run had 2 transient FAILs — one 302 and one 401 through the `vercel curl` bypass — both answered correctly on repeats and the full re-run was clean.)
+  **DEFECT (migration 0500, applied to hosted):** `meetings.created_by` is `REFERENCES profiles(id) ON DELETE SET NULL`, but the `guard_meeting_identity` trigger raises 42501 on ANY change of `created_by`. Deleting a user who ever created a meeting therefore fails
+  (GoTrue admin delete -> HTTP 500 "Database error deleting user"; reproduced in a rolled-back SQL transaction). Consequence: account erasure is impossible for anyone with a meeting. Other new tables (`meeting_transcripts`, `intelligence_runs`) have no such guard.
+  Why the tests missed it: no SQL/E2E scenario deleted a user who owned a meeting. The same guard text is re-asserted in 0800.
+  Test data of this run was removed (the test meeting by exact id, then the user): hosted is back to users=1, projects=1, meetings=0.
+  **Proposed fix (NOT applied, needs its own approval):** a new migration that lets the guard accept `NEW.created_by IS NULL` when `OLD.created_by IS NOT NULL` (the FK action only), plus a SQL scenario "delete a user who created a meeting" and the same in the upgrade test; then rehearse on the restored backup copy before touching hosted.
+
 ## B3b — promote and post-promote smoke (separate approval; after B3a PASS)
 
 `$V promote <staged-url> --scope bng-dev-alt-webadvisor --yes`, then `BASE_URL=https://clearspace-ai.vercel.app PRODUCTION_SMOKE_OK=1 PW_CHROMIUM_PATH=<chromium> frontend/scripts/hosted-verify.sh`

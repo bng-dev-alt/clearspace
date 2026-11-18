@@ -129,12 +129,20 @@ curl -4 -s -o /dev/null -w 'after restore: %{http_code}\n' -X POST https://clear
 **Not verified by this test:** that other IPs are denied while the exception is active (the rule is a negated-IP condition; to prove it, open the AI page from a different network while the rule is relaxed, or look at `vercel firewall traffic`). The window is minutes long.
 **Undo:** step 6.3 *is* the undo; the rule's original definition is recorded above.
 
+### Pre-flight facts for A6 / A6b (re-verified 2026-11-18, read-only)
+
+- Prerequisites met: A5 promoted and verified; V1 Gemini key + `GEMINI_MODEL=gemini-3.6-flash` set (A4b); `ai_requests = 0` so far.
+- Firewall live: one custom rule `Block legacy AI API` (`rule_block_legacy_ai_api_18MMCs`), condition `path starts with /api/ai`, action Deny, enabled; **no pending draft**. Managed rules unchanged (Bot Protection Off, AI Bots Allow, BotID Basic).
+- CLI syntax confirmed from `vercel firewall rules update --help`: repeated `--condition` JSON replaces the conditions (conditions inside one group are ANDed; `neg` is supported). **Not verified:** the exact type name `ip_address` — staging the draft would be a firewall change, so it is checked at A6 step 6.1 from the `firewall diff` output **before** anything is published; if the diff does not show "path starts with /api/ai AND IP is not <your IP>", nothing is published.
+- The exception is for one IPv4 (the script calls with `curl -4`); if your provider routes you over IPv6 or a shared (CGNAT) address, say so and A6 is re-planned. During the window a request from your IP still needs a valid Supabase JWT, project membership and passes the per-user rate limit (3/min).
+- A6b: `main` = `ff615c3` is an ancestor of HEAD (fast-forward OK, remote has only `main`). Secret-pattern scan of the whole pushed diff (Google keys, `sb_secret_`/`sbp_` tokens, JWTs, private keys): **0 hits**; no `.env*` file is tracked. CI (`.github/workflows/ci.yml`) on push/PR: lint, tsc, vitest, build, Playwright, DB tests — **uses no repository secrets and has no deploy step**.
+
 > **Approval text A6:** „Schvaluji A6: dočasně upravit firewall pravidlo „Block legacy AI API“ tak, aby `/api/ai` blokovalo pro všechny IPv4 kromě mé (`<IP>`), spustit `ai-bounded-test.sh` s nejvýše 3 reálnými voláními Gemini, a ihned obnovit plný deny (publish s digestem). Žádná jiná změna firewallu.“
 
 ### A6b — final firewall state (D5) and merge to `main`
 
 - **Firewall (D5):** recommended **keep the full deny** (AI off for the public) until you want public AI; turning AI on later = replace the deny by "allow, app enforces JWT + membership + quota" plus an IP rate-limit rule (plan availability NOT VERIFIED). Cloudflare Access stays.
-- **Merge:** `git push origin consolidation/security-foundation:main` — a **fast-forward** of 26 commits, no merge commit. Effects: the `frontend/vercel.json` guard lands on `main`, so **no deployment is created** (A1 proved it on a branch; the first push to `main` is the final proof — check `vercel ls` and the commit status afterwards); GitHub Actions CI runs (lint/test/build, no deploy). Your canonical clone `../V1` (own uncommitted changes, untouched) will need `git pull` later.
+- **Merge:** `git push origin consolidation/security-foundation:main` — a **fast-forward** of 33 commits (`ff615c3` → HEAD, 116 files), no merge commit. Effects: the `frontend/vercel.json` guard lands on `main`, so **no deployment is created** (A1 proved it on a branch; the first push to `main` is the final proof — check `vercel ls` and the commit status afterwards); GitHub Actions CI runs (lint/test/build, no deploy). Your canonical clone `../V1` (own uncommitted changes, untouched) will need `git pull` later.
 - **Verify after:** newest Vercel deployment unchanged (the promoted one), `clearspace-ai.vercel.app` still serves it, no Vercel status on the new `main` head.
 - **Undo:** a fast-forward cannot be reverted without rewriting `main`; the safe undo is a `git revert` of the changes (a new commit) — a force-push of `main` would need its own explicit approval.
 

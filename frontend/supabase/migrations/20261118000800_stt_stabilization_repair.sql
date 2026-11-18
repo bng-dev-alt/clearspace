@@ -2082,3 +2082,30 @@ UPDATE public.ai_requests SET billing_state = 'actual'
 
 INSERT INTO public.clearspace_migrations (version) VALUES ('20261118000800_stt_stabilization_repair')
 ON CONFLICT (version) DO NOTHING;
+-- ################################################################
+-- ## supersession: guard_meeting_identity() exactly as in 20261118000900_meeting_creator_erasure.sql
+-- ################################################################
+CREATE OR REPLACE FUNCTION public.guard_meeting_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    IF NEW.project_id IS DISTINCT FROM OLD.project_id OR NEW.source_kind IS DISTINCT FROM OLD.source_kind THEN
+        RAISE EXCEPTION 'Projekt, autora ani typ zdroje porady nelze měnit.' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.created_by IS DISTINCT FROM OLD.created_by THEN
+        -- the only legitimate change: ON DELETE SET NULL after the author's profile has been deleted (account erasure)
+        IF NOT (OLD.created_by IS NOT NULL AND NEW.created_by IS NULL
+                AND NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = OLD.created_by)) THEN
+            RAISE EXCEPTION 'Projekt, autora ani typ zdroje porady nelze měnit.' USING ERRCODE = '42501';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.guard_meeting_identity() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS meetings_guard_identity ON public.meetings;
+CREATE TRIGGER meetings_guard_identity BEFORE UPDATE ON public.meetings
+    FOR EACH ROW EXECUTE FUNCTION public.guard_meeting_identity();

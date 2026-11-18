@@ -59,12 +59,12 @@ SQL
 echo "ok - the OLD state is exploitable (a member reserves with their own budgets without any secret)"
 
 # (2)+(3) apply ONLY the repair
-apply cs_g "$MIGG"/20261118000800_stt_stabilization_repair.sql
+apply cs_g "$MIGG"/20261118000800_stt_stabilization_repair.sql "$MIGG"/20261118000900_meeting_creator_erasure.sql   # the repair + the later forward-only fix
 SG=$(snapg cs_g)
 [ "$SG" = "$SF" ] || { echo "FAIL: the upgraded catalog differs from a fresh install ($SG vs $SF)"; exit 1; }
 echo "ok - old state + 0800 repair == fresh install (catalog snapshot $SG)"
 # applying the repair again changes nothing
-apply cs_g "$MIGG"/20261118000800_stt_stabilization_repair.sql
+apply cs_g "$MIGG"/20261118000800_stt_stabilization_repair.sql "$MIGG"/20261118000900_meeting_creator_erasure.sql
 [ "$(snapg cs_g)" = "$SF" ] || { echo "FAIL: re-applying the repair changed the catalog"; exit 1; }
 echo "ok - the repair is idempotent"
 
@@ -84,7 +84,7 @@ for t in 82_meeting_audio 83_intelligence_hardening 84_stt_stabilization; do run
 
 # (5) second path: re-applying the EDITED 0500-0700 on the old state converges to the same catalog
 mk_old cs_g2
-apply cs_g2 "$MIGG"/20261118000500_intelligence_core.sql "$MIGG"/20261118000600_intelligence_quality.sql "$MIGG"/20261118000700_meeting_audio.sql
+apply cs_g2 "$MIGG"/20261118000500_intelligence_core.sql "$MIGG"/20261118000600_intelligence_quality.sql "$MIGG"/20261118000700_meeting_audio.sql "$MIGG"/20261118000900_meeting_creator_erasure.sql
 [ "$(snapg cs_g2)" = "$(psql_admin -d cs_g_fresh -At -c "select 1" >/dev/null; snapg cs_g_fresh)" ] || { echo "FAIL: old state + edited 0500-0700 differs from a fresh install"; exit 1; }
 echo "ok - old state + re-applied 0500-0700 == fresh install as well"
 rm -rf "$OLDDIR"

@@ -86,6 +86,7 @@ source "$HERE/legacy_upgrade.sh"
 source "$HERE/concurrency.sh"
 source "$HERE/rollback.sh"
 source "$HERE/upgrade.sh"
+source "$HERE/hotfix.sh"
 fi
 source "$HERE/hosted_fidelity.sh"
 echo "ALL DATABASE TESTS PASSED ($TOTAL SQL assertions: suites run as superuser in scenario A and as the hosted non-superuser role in scenario E; plus legacy-upgrade, drift/ownership preflight and concurrency checks)"

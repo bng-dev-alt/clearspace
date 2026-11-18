@@ -15,6 +15,12 @@ select 'GATE markers 0100-0400 + 0500-0700 present, no 0800 needed on a fresh hi
             '20261118000700_meeting_audio')) = 7 then 'PASS' else 'FAIL' end;
 select 'INFO markers: ' || string_agg(version, ', ' order by version) from public.clearspace_migrations;
 
+select 'GATE hotfix 0900 (account erasure): marker present, guard_meeting_identity is SECURITY DEFINER with a pinned search_path and carries the erasure exemption: ' ||
+       case when exists (select 1 from public.clearspace_migrations where version = '20261118000900_meeting_creator_erasure')
+             and exists (select 1 from pg_proc p where p.oid = 'public.guard_meeting_identity()'::regprocedure and p.prosecdef
+                         and coalesce(p.proconfig::text, '') like '%search_path%' and pg_get_functiondef(p.oid) like '%public.profiles%')
+            then 'PASS' else 'FAIL' end;
+
 select 'GATE new tables exist and have RLS on (8 expected): ' ||
        case when count(*) = 8 and bool_and(c.relrowsecurity) then 'PASS' else 'FAIL (' || count(*) || ' found)' end
   from pg_class c join pg_namespace n on n.oid = c.relnamespace

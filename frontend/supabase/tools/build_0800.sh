@@ -71,6 +71,10 @@ UPDATE public.ai_requests SET billing_state = 'actual'
 INSERT INTO public.clearspace_migrations (version) VALUES ('20261118000800_stt_stabilization_repair')
 ON CONFLICT (version) DO NOTHING;
 REPAIR
+# the verbatim copy of 0500 above re-asserts the DEFECTIVE guard_meeting_identity(); finish with the guard as fixed by 0900 (single source:
+# the same lines are cut out of that file), so applying this repair at any point never reintroduces the account-erasure defect.
+printf -- '-- ################################################################\n-- ## supersession: guard_meeting_identity() exactly as in 20261118000900_meeting_creator_erasure.sql\n-- ################################################################\n'
+sed -n '/^CREATE OR REPLACE FUNCTION public.guard_meeting_identity()/,/^    FOR EACH ROW EXECUTE FUNCTION public.guard_meeting_identity();/p' "$MIG/20261118000900_meeting_creator_erasure.sql"
 } > "$tmp"
 if [ "${1:-}" = "--check" ]; then
   if ! cmp -s "$tmp" "$OUT"; then echo "FAIL: $OUT is out of date -- run supabase/tools/build_0800.sh and commit"; rm -f "$tmp"; exit 1; fi

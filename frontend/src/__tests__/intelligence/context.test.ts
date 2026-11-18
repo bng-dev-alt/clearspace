@@ -127,6 +127,29 @@ describe('budget and truncation order', () => {
   });
 });
 
+describe('older databases without the intelligence tables', () => {
+  test('a failing intelligence_items query leaves the context intact (chat/AI keep working before the migration is applied)', async () => {
+    const db = {
+      from(table: string) {
+        const b: Record<string, unknown> = {};
+        b.select = () => b; b.eq = () => b; b.in = () => b; b.order = () => b;
+        const res = () => {
+          if (table === 'intelligence_items') return { data: null, error: { code: 'PGRST205', message: 'relation does not exist' } };
+          if (table === 'columns') return { data: [{ id: 'c1', name: 'Todo', position: 0 }], error: null };
+          return { data: [], error: null };
+        };
+        b.limit = () => Promise.resolve(res());
+        b.maybeSingle = () => Promise.resolve(table === 'projects' ? { data: { id: 'p1', name: 'Alfa' }, error: null } : res());
+        return b;
+      },
+    };
+    const c = await buildProjectContext(db as never, 'p1', { purpose: 'chat', now: NOW });
+    expect(c.project.id).toBe('p1');
+    expect(c.facts.meetingDerived.pendingProposals).toBe(0);
+    expect(c.knowledgeItemIds).toEqual([]);
+  });
+});
+
 describe('mapActivityRows', () => {
   test('maps valid rows and skips incomplete ones', () => {
     const rows = [

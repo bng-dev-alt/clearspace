@@ -102,4 +102,5 @@ expect "file survives a non-member delete attempt" 200 "$(get -H "apikey: $ANON_
 expect "member can delete" 200 "$(curl -s -X DELETE "$API_URL/storage/v1/object/task-resources/tasks/$K/res-1.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" -o /dev/null -w '%{http_code}')"
 expect "file is gone" "400|404" "$(get -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TA" "$API_URL/storage/v1/object/authenticated/task-resources/tasks/$K/res-1.png")"
 
+
 [ $fail = 0 ] && echo "ALL STORAGE CHECKS PASSED" || { echo "STORAGE CHECKS FAILED"; exit 1; }

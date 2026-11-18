@@ -75,8 +75,8 @@ describe('clients map the same server answers to the same codes', () => {
     await expect(meetingService.analyze('p', 'm')).rejects.toMatchObject({ code: 'network' });
     await expect(intelligenceService.generateBrief('p')).rejects.toMatchObject({ code: 'network' });
   });
-  test('the meeting quota (SQLSTATE 53400) is a readable "quota" error carrying the database message', async () => {
-    h.insertError = { code: '53400', message: 'Projekt dosáhl maximálního počtu porad.' };
+  test('the meeting quota (SQLSTATE PT429) is a readable "quota" error carrying the database message', async () => {
+    h.insertError = { code: 'PT429', message: 'Projekt dosáhl maximálního počtu porad.' };
     await expect(meetingService.createWithTranscript({ projectId: 'p', title: 'X', text: 'Petr: ahoj světe', source: 'paste' } as never)).rejects.toMatchObject({ code: 'quota', message: 'Projekt dosáhl maximálního počtu porad.' });
   });
 });

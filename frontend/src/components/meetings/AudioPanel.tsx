@@ -121,9 +121,11 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
     <section className="mi-card" aria-label="Zvuk porady" data-testid="audio-panel">
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <h2>Zvuk</h2>
-        <Badge variant={a.sttState === 'failed' ? 'danger' : a.sttState === 'completed' ? 'success' : 'default'} data-testid="stt-state">
-          {a.deletedAt && a.sttState === 'none' ? 'Zvuk smazán' : STT_STATE_LABEL[a.sttState]}
-        </Badge>
+        <span data-testid="stt-state">
+          <Badge variant={a.sttState === 'failed' ? 'danger' : a.sttState === 'completed' ? 'success' : 'default'}>
+            {a.deletedAt && a.sttState === 'none' ? 'Zvuk smazán' : STT_STATE_LABEL[a.sttState]}
+          </Badge>
+        </span>
       </div>
       <p className="mi-muted" data-testid="audio-info">
         {a.consentAt ? `Souhlas účastníků zaznamenán ${new Date(a.consentAt).toLocaleString('cs-CZ')}.` : 'Souhlas účastníků nebyl zaznamenán.'}

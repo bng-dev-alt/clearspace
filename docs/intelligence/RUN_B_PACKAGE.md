@@ -114,7 +114,7 @@ merge of `consolidation/security-foundation` first). After the push: CI (quality
 
 > **Approval text B4:** „Schvaluji B4: fast-forward `main` na `<HEAD>` (bez force), ověřit CI a že nevznikl nový Vercel deployment.“
 
-## B5 — R6 + R7 implementation (autonomous, local, no approval needed)
+## B5 — R6 + R7 implementation — **DONE locally 2026-11-18** (see `IMPLEMENTATION_REPORT.md` RUN B addendum)
 
 Branch `feature/intelligence-v2` (or `feature/intelligence-v2-r6`), same boundaries as R1–R4 (mocks, synthetic data, no hosted changes,
 no push). Scope, in order, each with tests and one commit:
@@ -130,7 +130,7 @@ no push). Scope, in order, each with tests and one commit:
 Quality gates identical to R1–R4 (eslint, tsc, vitest, isolated DB suite incl. upgrade paths, real local stack, Playwright new + existing, build +
 bundle check, secret scan). Final report in the same 11-item format.
 
-## B6 — R5 Soniox audio (two steps)
+## B6 — R5 Soniox audio (two steps) — **B6a DONE locally 2026-11-18** (docs verified, pipeline + fake server + tests); B6b still needs approval
 
 - **B6a (no approval; read-only web research + docs):** verify the *current* Soniox async API (endpoints, model id, supported formats and max
   length, price per audio hour, retention/deletion, regional processing, diarization output shape, webhook/polling), then update

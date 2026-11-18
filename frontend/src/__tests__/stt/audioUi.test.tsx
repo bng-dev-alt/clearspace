@@ -59,6 +59,12 @@ describe('AudioPanel', () => {
     expect(await screen.findByTestId('audio-error')).toHaveTextContent('denní limit');
     expect(screen.getByTestId('stt-start')).toBeEnabled();
   });
+  test('the state badge is addressable and states what is happening', () => {
+    const { rerender } = render(<AudioPanel meeting={meeting({ sttState: 'transcribing' })} projectId="p1" onChanged={vi.fn()} pollMs={{ first: 100000, max: 100000 }} />);
+    expect(screen.getByTestId('stt-state')).toHaveTextContent('Přepisuji');
+    rerender(<AudioPanel meeting={meeting({ sttState: 'completed' })} projectId="p1" onChanged={vi.fn()} />);
+    expect(screen.getByTestId('stt-state')).toHaveTextContent('Přepis hotov');
+  });
   test('a failed job shows the reason by TYPE and the attempt counter; "try again" is offered up to 3 attempts', () => {
     const { rerender } = render(<AudioPanel meeting={meeting({ sttState: 'failed', errorType: 'empty_transcript', attempts: 1 })} projectId="p1" onChanged={vi.fn()} />);
     expect(screen.getByTestId('stt-error')).toHaveTextContent('nebyla rozpoznána žádná řeč');

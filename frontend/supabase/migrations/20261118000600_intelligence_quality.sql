@@ -108,7 +108,7 @@ BEGIN
         RAISE EXCEPTION 'Revize nemůže být svým vlastním předchůdcem.' USING ERRCODE = '22023';
     END IF;
     IF (SELECT count(*) FROM public.meeting_transcripts WHERE meeting_id = NEW.meeting_id) >= v_max THEN
-        RAISE EXCEPTION 'Porada má maximální počet revizí přepisu (%).', v_max USING ERRCODE = '53400';
+        RAISE EXCEPTION 'Porada má maximální počet revizí přepisu (%).', v_max USING ERRCODE = 'PT429';
     END IF;
     RETURN NEW;
 END;
@@ -133,12 +133,12 @@ BEGIN
     -- Serialise concurrent creates of the same project so the count cannot be raced past the limit.
     PERFORM pg_advisory_xact_lock(hashtextextended('meeting_quota:' || NEW.project_id, 0));
     IF (SELECT count(*) FROM public.meetings WHERE project_id = NEW.project_id) >= (v_lim ->> 'max_meetings_per_project')::integer THEN
-        RAISE EXCEPTION 'Projekt dosáhl maximálního počtu porad.' USING ERRCODE = '53400';
+        RAISE EXCEPTION 'Projekt dosáhl maximálního počtu porad.' USING ERRCODE = 'PT429';
     END IF;
     IF NEW.created_by IS NOT NULL AND
        (SELECT count(*) FROM public.meetings WHERE created_by = NEW.created_by AND created_at > now() - interval '1 day')
          >= (v_lim ->> 'max_meetings_per_user_per_day')::integer THEN
-        RAISE EXCEPTION 'Dosáhli jste denního limitu vytvořených porad.' USING ERRCODE = '53400';
+        RAISE EXCEPTION 'Dosáhli jste denního limitu vytvořených porad.' USING ERRCODE = 'PT429';
     END IF;
     RETURN NEW;
 END;

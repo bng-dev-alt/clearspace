@@ -54,7 +54,7 @@ BEGIN
     INSERT INTO public.meeting_transcripts (meeting_id, project_id, revision, source, speakers, segments, char_count, parent_revision)
       VALUES (m1, 'pQ', md5('q' || i) || md5('Q' || i), 'edit', '[]', segs, 11, rev2);
   END LOOP;
-  PERFORM test.throws(format($q$insert into public.meeting_transcripts (meeting_id, project_id, revision, source, speakers, segments, char_count, parent_revision) values (%L, 'pQ', %L, 'edit', '[]', %L, 11, %L)$q$, m1, md5('over') || md5('Over'), segs, rev2), '53400', 'the 26th revision of one meeting is refused (quota)');
+  PERFORM test.throws(format($q$insert into public.meeting_transcripts (meeting_id, project_id, revision, source, speakers, segments, char_count, parent_revision) values (%L, 'pQ', %L, 'edit', '[]', %L, 11, %L)$q$, m1, md5('over') || md5('Over'), segs, rev2), 'PT429', 'the 26th revision of one meeting is refused (quota)');
   PERFORM test.act_as(c, 'q-c@example.test');
   PERFORM test.ok((select count(*) from public.meeting_transcripts) = 0, 'a stranger sees no revisions');
 
@@ -64,13 +64,13 @@ BEGIN
   FOR i IN 1..38 LOOP
     INSERT INTO public.meetings (project_id, title, source_kind) VALUES ('pQ2', 'M' || i, 'text');
   END LOOP;
-  PERFORM test.throws($q$insert into public.meetings (project_id, title, source_kind) values ('pQ2', 'over', 'text')$q$, '53400', 'the daily per-user meeting quota (40) is enforced');
+  PERFORM test.throws($q$insert into public.meetings (project_id, title, source_kind) values ('pQ2', 'over', 'text')$q$, 'PT429', 'the daily per-user meeting quota (40) is enforced');
   -- per project: fill the project to 500 as a system actor (no created_by, so the per-user rule does not apply)
   PERFORM test.reset();
   INSERT INTO public.meetings (project_id, title, source_kind)
     SELECT 'pQ2', 'bulk ' || g, 'text' FROM generate_series(1, 500 - (select count(*) from public.meetings where project_id = 'pQ2')::int) g;
   PERFORM test.ok((select count(*) from public.meetings where project_id = 'pQ2') = 500, 'project filled to the 500-meeting limit');
-  PERFORM test.throws($q$insert into public.meetings (project_id, title, source_kind) values ('pQ2', 'one too many', 'text')$q$, '53400', 'the per-project meeting quota (500) is enforced');
+  PERFORM test.throws($q$insert into public.meetings (project_id, title, source_kind) values ('pQ2', 'one too many', 'text')$q$, 'PT429', 'the per-project meeting quota (500) is enforced');
   PERFORM test.ok((public.intelligence_limits() ->> 'max_meetings_per_project')::int = 500, 'limits are exposed by one function');
 
   -- ================= freshness stamp =================

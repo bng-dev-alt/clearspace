@@ -92,3 +92,41 @@ E2E_SUPABASE_URL=http://127.0.0.1:55521 E2E_SUPABASE_ANON_KEY=<anon> E2E_SUPABAS
 3. **R5 Soniox async audio**, starting with verification of the current async API, model id, price and retention; first real call only with a separate approval.
 4. **R6 + R7:** `columns.role`, transcript edit → new revision, usage view from `ai_requests`, per-feature model/timeout env and `maxDuration`, hide the LLM health score, daily brief with activity history.
 5. **Public AI enablement plan** (firewall rule replacement, rate limit, SMTP, Google spend cap) as its own decision.
+
+
+---
+
+# RUN B addendum (2026-11-18): R5 + R6 + R7 implemented locally
+
+Branch `feature/intelligence-v2`; start `7cf7c3b`. Release path, settings, rollback and gates: **`RELEASE_PLAN_R1_R7.md`**. Soniox facts: **`SONIOX_API_VERIFICATION.md`**.
+Nothing was deployed, pushed, applied to a hosted database or sent to a real provider; no real Gemini or Soniox call was made.
+
+| Phase | Result | Where |
+|---|---|---|
+| R6 quality | column roles (explicit, name heuristic only as fallback), transcript revision history + edit UI + stale-analysis banner, evidence validator v2, Czech date and name normalisation (prefill only), DB freshness stamp (sees comments, checklists, assignees, revisions), per-project / per-user meeting quotas and per-meeting revision quota, deterministic PM health, ledger-backed usage view (no prompt content in the browser), one client error mapping | migration `…0600`, `src/lib/intelligence/{dates,names,evidence}.ts`, `src/lib/ai/clientErrors.ts`, `AiProjectManagerModal`, `aiAnalyticsService` |
+| R7 context engine | daily brief, AI PM, risk analysis, capacity, improve, chat on one engine; data in one framed block in the user message; deterministic shortcuts without a model call (empty project, no members); reservation includes prompt overhead; PM `healthScore` replaced by the formula score | `src/lib/ai/{gateway,features}.ts`, `promptBuilder.ts`, `context.ts` |
+| R5 Soniox | consent, private bucket, direct upload, signed-URL transcription, content sniffing before any cost, async state machine in the database (no queue/worker), normaliser, retention + cleanup, usage/cost in the ledger, feature flags | migration `…0700`, `src/lib/stt/*`, routes `/api/ai/meetings/{transcribe,sync,purge}`, `AudioPanel`, `fake-soniox.mjs` |
+
+## New test counts
+Vitest 767 (was 474); DB 986 SQL assertions (was 522) incl. exactly-once concurrency for start/complete and the rollback scenario; E2E on the real local stack: audio 9, R6/R7 7 (plus the earlier meetings 8, intelligence 7, runtime 5, all still green); demo suite 27.
+
+## Findings from the real stack (fixed)
+* PostgREST hides the message of most SQLSTATEs (HTTP 500 "Something went wrong"). Quota errors now use **`PT429`**; the server routes branch on `error.code`.
+* Soniox's `status` naming conflicts inside its own docs (`error` vs `failed`): anything that is not queued/processing/completed is treated as a failure.
+* The transcript text editor could not round-trip the generated label "Mluvčí 1" (a digit in a speaker label): the paste parser now accepts digits after the first word of a label.
+* `mark_audio_deleted` must refuse while the Storage object exists (real Storage blocks SQL deletes): verified on the real stack.
+
+## Known limitations (new)
+1. Prompts and the validator are still unvalidated against the **real** Gemini; Soniox is unvalidated against the **real** API (only the documented contract and a local fake).
+2. Whether Soniox can fetch a Supabase signed URL is untested; the fallback (`SonioxClient.uploadFile` + `deleteFile`) exists but is not wired into the pipeline.
+3. No background completion: a transcription finishes only while a meeting page is open (or when someone opens it later). Intended (no worker), but a closed tab delays the result.
+4. Sync polling has no server-side throttle beyond the global ledger; a client could poll Soniox status in a tight loop (read-only, cheap, bounded by Vercel/Supabase limits).
+5. Board restore (AI History) does not carry `columns.role`; restored columns fall back to name-based roles.
+6. Soniox cost is an estimate (flat US$0.10/h); the real invoice may differ (context tokens unquantified).
+7. Free Supabase plan: 50 MB per audio file (~100 min at 64 kbps), 1 GB storage, no backups.
+8. Evidence validator v2 rejects one-word quotes; this may drop some real items (to be tuned with real-model data).
+9. The edit of a machine transcript is text-level: timestamps are not preserved in the new revision.
+
+## Security findings (new)
+* Fixed by design: nothing is uploaded without consent (Storage policy); a machine transcript cannot be forged by a member; audio is validated by content, not by name; STT routes answer 404 identically for foreign and non-existent meetings; the provider key is server-only (bundle scan, route test and E2E check) and appears in no response or log (tested on every error path); provider error text is never stored or shown (type only); the paid POST is never retried automatically; the base-URL test seams are ignored in production.
+* Residual, low: a member can spend their own daily audio budget (bounded 120 min/day/user, 600 min/day global); orphan provider job after a crash between create and record (≤1 file, 30-day auto-deletion); `NEXT_PUBLIC_ENABLE_MEETING_AUDIO` is build-time, so the UI flag and the server flag can disagree (the server flag decides).

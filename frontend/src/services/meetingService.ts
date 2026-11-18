@@ -129,12 +129,12 @@ const SQLSTATE_MESSAGES: Record<string, [string, string]> = {
   '22008': ['invalid', 'Neplatné datum.'],
   '23514': ['invalid', 'Neplatná hodnota. Zkontrolujte vyplněné údaje.'],
   // R6: kvóty (počet porad / revizí). Text vyhazuje databáze česky a je bezpečný k zobrazení.
-  '53400': ['quota', 'Dosáhli jste limitu (počet porad nebo revizí přepisu).'],
+  'PT429': ['quota', 'Dosáhli jste limitu (počet porad nebo revizí přepisu).'],
 };
 
 function fail(err: { code?: string; message?: string }): never {
   const known = err.code ? SQLSTATE_MESSAGES[err.code] : undefined;
-  if (known && err.code === '53400' && err.message) throw new MeetingServiceError('quota', err.message);
+  if (known && err.code === 'PT429' && err.message) throw new MeetingServiceError('quota', err.message);
   if (known) throw new MeetingServiceError(known[0], known[1]);
   throw new MeetingServiceError('unknown', 'Operace se nezdařila. Zkuste to prosím znovu.');
 }

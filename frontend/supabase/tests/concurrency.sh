@@ -74,3 +74,56 @@ rm -rf "$out2"
 echo "created=$created repeats=$repeats cards=$cards activity_logs=$logs (8 parallel approvals of one item)"
 [ "$created" = "1" ] && [ "$repeats" = "7" ] && [ "$cards" = "1" ] && [ "$logs" = "1" ] || { echo "FAIL: parallel approval is not exactly-once"; exit 1; }
 echo "ok - exactly one card was created under 8-way concurrent approval"
+
+# --- Meeting audio: starting and completing a transcription are exactly-once under parallel calls ---
+echo "== Concurrency: parallel stt_reserve / stt_complete are exactly-once (no double submission, no double billing)"
+AM=$(psql_admin -d "$db" -At <<SQL | tail -1
+$AUTH
+insert into public.meetings (project_id, title, source_kind) values ('par-p', 'Audio par', 'audio');
+select public.record_audio_consent(id) from public.meetings where title = 'Audio par';
+select id from public.meetings where title = 'Audio par';
+SQL
+)
+APATH="par-p/$AM/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.mp3"
+psql_admin -d "$db" -At >/dev/null <<SQL
+$AUTH
+insert into storage.objects (bucket_id, name, owner, metadata) values ('meeting-audio', '$APATH', '$U2', '{"size":1000}');
+select public.attach_meeting_audio('$AM', '$APATH', 1000, 'audio/mpeg', 60000);
+SQL
+out3=$(mktemp -d)
+for i in $(seq 1 8); do
+  ( psql_admin -d "$db" -At -f - <<SQL > "$out3/s$i.txt" 2>&1
+$AUTH
+select outcome from public.stt_reserve('$AM', 60000, 7200000, 36000000);
+SQL
+  ) &
+done
+wait
+started=$(cat "$out3"/s*.txt | grep -c '^started$' || true)
+inprog=$(cat "$out3"/s*.txt | grep -c '^in_progress$' || true)
+ledger=$(psql_admin -d "$db" -At -c "select count(*) from public.ai_requests where feature = 'meeting-transcribe' and user_id = '$U2'" | tail -1)
+echo "started=$started in_progress=$inprog ledger_rows=$ledger (8 parallel start requests)"
+[ "$started" = "1" ] && [ "$inprog" = "7" ] && [ "$ledger" = "1" ] || { echo "FAIL: parallel start is not exactly-once"; exit 1; }
+echo "ok - exactly one transcription was started under 8-way concurrency"
+
+psql_admin -d "$db" -At >/dev/null <<SQL
+$AUTH
+select public.stt_attach_job('$AM', 'job-par', 'stt-async-v6');
+SQL
+TREV=$(printf 'e%.0s' $(seq 1 64))
+TR="'{\"revision\":\"$TREV\",\"char_count\":20,\"speakers\":[],\"segments\":[{\"id\":\"seg-0-0\",\"startMs\":0,\"endMs\":1000,\"speakerId\":null,\"text\":\"Ahoj světe tady.\"}],\"coverage\":{}}'::jsonb"
+for i in $(seq 1 8); do
+  ( psql_admin -d "$db" -At -f - <<SQL > "$out3/c$i.txt" 2>&1
+$AUTH
+select public.stt_complete('$AM', 'job-par', 'stt-async-v6', 60000, $TR);
+SQL
+  ) &
+done
+wait
+same=$(cat "$out3"/c*.txt | grep -c "^$TREV\$" || true)
+trs=$(psql_admin -d "$db" -At -c "select count(*) from public.meeting_transcripts where meeting_id = '$AM'" | tail -1)
+billed=$(psql_admin -d "$db" -At -c "select coalesce(sum(audio_ms),0) from public.ai_requests where feature = 'meeting-transcribe' and status = 'succeeded' and user_id = '$U2'" | tail -1)
+rm -rf "$out3"
+echo "same_revision_answers=$same transcripts=$trs billed_ms=$billed (8 parallel completions of one job)"
+[ "$same" = "8" ] && [ "$trs" = "1" ] && [ "$billed" = "60000" ] || { echo "FAIL: parallel completion is not exactly-once"; exit 1; }
+echo "ok - the transcript was stored and billed once under 8-way concurrent completion"

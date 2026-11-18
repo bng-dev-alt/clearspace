@@ -5,6 +5,7 @@ import http from 'node:http';
 
 const port = Number(process.argv[2] || 55590);
 let calls = 0;
+let last = { system: '', text: '' };
 
 function reply(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -15,7 +16,7 @@ function segmentsFrom(text) {
   // řádky tvaru "[seg-3] 1:05 Petr: text"
   const out = [];
   for (const line of text.split('\n')) {
-    const m = /^\[(seg-\d+)\](?: \d+:\d{2}(?::\d{2})?)?(?: ([^:\n]{1,60}):)? (.+)$/.exec(line.trim());
+    const m = /^\[(seg-[\w-]+)\](?: \d+:\d{2}(?::\d{2})?)?(?: ([^:\n]{1,60}):)? (.+)$/.exec(line.trim());
     if (m) out.push({ id: m[1], speaker: m[2] ?? null, text: m[3] });
   }
   return out;
@@ -79,6 +80,7 @@ function chat(text) {
 http
   .createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/__stats') return reply(res, 200, { calls });
+    if (req.method === 'GET' && req.url === '/__last') return reply(res, 200, last);
     if (req.method !== 'POST' || !/:generateContent/.test(req.url ?? '')) return reply(res, 404, { error: { message: 'not found' } });
     let raw = '';
     req.on('data', (c) => (raw += c));
@@ -88,8 +90,13 @@ http
       try { payload = JSON.parse(raw); } catch { return reply(res, 400, { error: { message: 'bad json' } }); }
       const text = (payload.contents ?? []).flatMap((c) => c.parts ?? []).map((p) => p.text ?? '').join('\n');
       const system = (payload.systemInstruction?.parts ?? []).map((p) => p.text ?? '').join('\n');
+      last = { system, text };
       let out;
       if (/analytik porad/.test(system)) out = meetingBrief(text);
+      // R7: existující featury; PM záměrně vrací vlastní (halucinované) healthScore, které server musí přepsat vzorcem
+      else if (/AI Project Manager/.test(system)) out = { summary: 'PM shrnutí', healthScore: 3, confidenceScore: 80, risks: [], blockers: [], suggestedChanges: [] };
+      else if (/Daily Executive Briefing/.test(system)) out = { greeting: 'Dobré ráno', executiveSummary: 'ok', completedYesterday: [], topPrioritiesToday: [], capacityAlerts: [], recommendedActions: [] };
+      else if (/optimalizaci a vylepšování zadání/.test(system)) out = { details: 'Lepší popis', acceptanceCriteria: '1.', risks: '', missingInfo: '', checklist: [] };
       else if (/Project Brief/.test(system)) out = projectBrief(text);
       else out = null; // chat = prostý text
       const answer = out === null ? chat(text) : JSON.stringify(out);

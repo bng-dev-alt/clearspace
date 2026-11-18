@@ -60,10 +60,10 @@ describe('meetingService.addRevision', () => {
     await expect(meetingService.addRevision({ ...base, text: '   ', parentRevision: 'x'.repeat(64) })).rejects.toMatchObject({ code: 'empty' });
     expect(h.inserts).toHaveLength(0);
   });
-  test('an existing revision (unique violation) is "unchanged"; the revision quota (53400) is a readable quota error', async () => {
+  test('an existing revision (unique violation) is "unchanged"; the revision quota (PT429) is a readable quota error', async () => {
     h.insertError = { code: '23505', message: 'dup' };
     await expect(meetingService.addRevision({ ...base, text: 'Petr: Nový text zde.', parentRevision: 'x'.repeat(64) })).rejects.toMatchObject({ code: 'unchanged' });
-    h.insertError = { code: '53400', message: 'Porada má maximální počet revizí přepisu (25).' };
+    h.insertError = { code: 'PT429', message: 'Porada má maximální počet revizí přepisu (25).' };
     await expect(meetingService.addRevision({ ...base, text: 'Petr: Jiný text zde.', parentRevision: 'x'.repeat(64) })).rejects.toMatchObject({ code: 'quota', message: 'Porada má maximální počet revizí přepisu (25).' });
   });
   test('a long note is clipped to the database limit', async () => {

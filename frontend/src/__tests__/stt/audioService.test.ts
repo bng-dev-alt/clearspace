@@ -95,7 +95,7 @@ describe('createAudioMeeting', () => {
     expect(h.removed).toEqual(['pA/mm/old-file.mp3']);
   });
   test('a quota error on meeting creation is readable', async () => {
-    h.insertError = { code: '53400' };
+    h.insertError = { code: 'PT429' };
     await expect(meetingService.createAudioMeeting(input())).rejects.toMatchObject({ code: 'quota' });
   });
 });

@@ -211,8 +211,11 @@ Local gates on the exact commit first: tsc, eslint, vitest, `supabase/tests/run.
 * **Command (owner terminal; the key is typed into the hidden prompt, never pasted into chat):**
 ```bash
 cd /Volumes/WORKSPACE/Dev/Apps/ClearSpace/V1-intelligence
-# throwaway local stack must be up (docs/intelligence/IMPLEMENTATION_REPORT.md recipe) and these set: E2E_SUPABASE_URL E2E_SUPABASE_ANON_KEY E2E_SUPABASE_SERVICE_KEY PW_CHROMIUM_PATH
-CONFIRM_REAL_SONIOX_JOBS=1 SONIOX_REGION=us frontend/scripts/soniox-real-test.sh      # SONIOX_REGION must match the region of the key's project (us|eu|jp|in)
+export S1_STACK_DIR=/var/folders/p2/m_143hxx5b76yxwqjnwmr5500000gn/T/cs-intel-sb   # the throwaway stack project (recipe: IMPLEMENTATION_REPORT.md)
+frontend/scripts/s1-local-stack.sh up && eval "$(frontend/scripts/s1-local-stack.sh env)"      # local stack + schema; exports the LOCAL demo keys (not secrets)
+DRY_RUN=1 frontend/scripts/soniox-real-test.sh                                                  # optional: proves the harness with the fake provider, free
+CONFIRM_REAL_SONIOX_JOBS=1 SONIOX_REGION=us frontend/scripts/soniox-real-test.sh                # ONE REAL job; the key is typed into the hidden prompt. SONIOX_REGION = region of the key's project (us|eu|jp|in)
+frontend/scripts/s1-local-stack.sh down                                                         # stop the stack (it binds to 0.0.0.0 while up)
 ```
   Cost: about 0.10 USD per audio hour, i.e. well under 0.01 USD for 20 s. The script refuses without `CONFIRM_REAL_SONIOX_JOBS=1`, a local stack URL and `cloudflared`.
 
@@ -250,6 +253,12 @@ $V ls --scope bng-dev-alt-webadvisor | head -3                                  
 **Stop:** `main` moved or the check is not a fast-forward. **Not done:** deleting or pushing any other branch.
 
 > **Approval text B4:** „Schvaluji B4: fast-forward `main` na `<HEAD>` (`git push origin feature/intelligence-v2:main`, bez force), ověřit CI a že nevznikl nový Vercel deployment.“
+
+* **B4 RESULT — PARTIAL (2026-11-19): `main` fast-forwarded `fe3b2e9..cdad740` (35 commits, no force, no merge commit); CI `quality` green, CI `database` RED because of a test-harness bug, not a product defect.**
+  Pre-push: HEAD clean, `origin/main` = `fe3b2e9` and an ancestor, `frontend/vercel.json` `git.deploymentEnabled=false` on both sides, no secret patterns or `.env*` files in the diff (only the commented `.env.example`), production still `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi`.
+  After the push: no new Vercel deployment (newest is still the promoted one), production unchanged, live `POST /api/ai/chat` 403.
+  CI `database` failed in scenario H: `hotfix.sh: line 22: TMPDIR: unbound variable` (`set -u`; `TMPDIR` is unset on the GitHub runner, set on macOS). All SQL suites before it were green.
+  Fix (local commit `6ef5f8b`, NOT pushed): `${TMPDIR:-/tmp}`. Verified by running the full `supabase/tests/run.sh` with `env -u TMPDIR`: ALL DATABASE TESTS PASSED (1960 assertions). Pushing the fix is a separate approval.
 
 ## Restrictions that stay in force
 

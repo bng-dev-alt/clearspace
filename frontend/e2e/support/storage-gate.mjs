@@ -9,9 +9,11 @@ const target = new URL(process.argv[3] || 'http://127.0.0.1:55521');
 if (!/^(127\.0\.0\.1|localhost)$/.test(target.hostname)) { console.error('refusing: target must be a local Supabase'); process.exit(2); }
 const ALLOWED = /^\/storage\/v1\/object\/sign\/meeting-audio\/[A-Za-z0-9._\/-]+\?token=[A-Za-z0-9._-]+$/;
 let served = 0;
+// no empty / "." / ".." path segment: the allow-list regex alone would let /meeting-audio/../../auth/... through to a normalizing upstream
+export const allowed = (method, url) => ['GET', 'HEAD'].includes(method ?? '') && ALLOWED.test(url ?? '') && !(url ?? '').split('?')[0].split('/').slice(1).some((seg) => seg === '' || seg === '.' || seg === '..');
 
 export const gate = http.createServer((req, res) => {
-  if (!['GET', 'HEAD'].includes(req.method ?? '') || !ALLOWED.test(req.url ?? '')) { res.writeHead(404); res.end(); return; }
+  if (!allowed(req.method, req.url)) { res.writeHead(404); res.end(); return; }
   const up = http.request({ host: target.hostname, port: target.port, path: req.url, method: req.method, headers: { range: req.headers.range ?? '' , host: target.host } }, (r) => {
     res.writeHead(r.statusCode ?? 502, { 'content-type': r.headers['content-type'] ?? 'application/octet-stream', ...(r.headers['content-length'] ? { 'content-length': r.headers['content-length'] } : {}), ...(r.headers['content-range'] ? { 'content-range': r.headers['content-range'] } : {}) });
     r.pipe(res);

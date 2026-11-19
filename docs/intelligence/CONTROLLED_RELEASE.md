@@ -218,6 +218,8 @@ CONFIRM_REAL_SONIOX_JOBS=1 SONIOX_REGION=us frontend/scripts/soniox-real-test.sh
 frontend/scripts/s1-local-stack.sh down                                                         # stop the stack (it binds to 0.0.0.0 while up)
 ```
   Cost: about 0.10 USD per audio hour, i.e. well under 0.01 USD for 20 s. The script refuses without `CONFIRM_REAL_SONIOX_JOBS=1`, a local stack URL and `cloudflared`.
+* **S1 exposure review (2026-11-19):** (1) The only internet-facing path is `cloudflared quick tunnel → 127.0.0.1:55592 (storage-gate)`; the gate and the app listen on loopback only. Probed through a REAL tunnel: `/rest/v1/`, `/auth/v1/settings`, POST, object listing, dot-segment traversal → 404; a bad token → 400 from Storage. Hardening found and fixed: the allow-list regex let `/meeting-audio/../../auth/...` through to the upstream (Kong answered 404, but that relied on the upstream); the gate now refuses empty/`.`/`..` segments (`storageGate.test.ts`, 18 cases) and `soniox-real-test.sh` probes a traversal path through the tunnel before the key is used.
+  (2) **Why the stack listens on `0.0.0.0`:** the Supabase CLI publishes Kong (55521) and Postgres (55522) through Docker with no host-IP option (no config key or flag; the only lever is Docker Desktop's global default bind address, which would change every other project's containers and is NOT touched). With the macOS firewall off the ports answer on the LAN IP. Postgres (55522, demo password) is not needed by the harness (it uses `docker exec`) but cannot be dropped from the CLI stack. Mitigation: synthetic data, public demo keys, nothing real in the DB, `s1-local-stack.sh up → test → down` (the stack is stopped now; `status` shows listeners). Owner option: Docker Desktop → Settings → Docker Engine → `"ip": "127.0.0.1"` makes ALL published ports loopback-only by default (affects other projects).
 
 > **Approval text S1:** „Schvaluji S1: jeden skutečný přepis jedné syntetické české nahrávky (≤ 60 s) přes Soniox, lokální aplikace + lokální Supabase, krátkodobý účtově nezávislý `cloudflared` quick tunnel jen na podepsané URL bucketu `meeting-audio`, klíč zadám sám do skrytého promptu. Bez Gemini, bez produkce, bez změny Vercelu, Cloudflare účtu a firewallu.“
 
@@ -258,7 +260,7 @@ $V ls --scope bng-dev-alt-webadvisor | head -3                                  
   Pre-push: HEAD clean, `origin/main` = `fe3b2e9` and an ancestor, `frontend/vercel.json` `git.deploymentEnabled=false` on both sides, no secret patterns or `.env*` files in the diff (only the commented `.env.example`), production still `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi`.
   After the push: no new Vercel deployment (newest is still the promoted one), production unchanged, live `POST /api/ai/chat` 403.
   CI `database` failed in scenario H: `hotfix.sh: line 22: TMPDIR: unbound variable` (`set -u`; `TMPDIR` is unset on the GitHub runner, set on macOS). All SQL suites before it were green.
-  Fix (local commit `6ef5f8b`, NOT pushed): `${TMPDIR:-/tmp}`. Verified by running the full `supabase/tests/run.sh` with `env -u TMPDIR`: ALL DATABASE TESTS PASSED (1960 assertions). Pushing the fix is a separate approval.
+  **Follow-up (2026-11-19, approved): `6ef5f8b` + `5c80dcf` pushed as a plain fast-forward `cdad740..5c80dcf` (diff: 2-line `hotfix.sh` fix, runbook, S1 helper; no production paths, no secrets). CI run 44470081691: `database` ✓ and `quality` ✓ → CI PASS.** No new Vercel deployment, production still `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi`, live `POST /api/ai/chat` 403.
 
 ## Restrictions that stay in force
 

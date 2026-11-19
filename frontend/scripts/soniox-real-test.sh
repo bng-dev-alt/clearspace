@@ -45,6 +45,8 @@ else
   [ -n "$SEAM_ORIGIN" ] || { echo "the tunnel did not start (see $WORK/tunnel.log)"; exit 1; }
   for i in $(seq 1 45); do [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "$SEAM_ORIGIN/probe")" = 404 ] && break; sleep 2; done   # the gate answers 404 to anything that is not a signed object URL
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "$SEAM_ORIGIN/probe")" = 404 ] || { echo "the tunnel does not reach the gate"; exit 1; }
+  # path tricks must not get past the gate either (dot segments are refused before anything is forwarded)
+  [ "$(curl -s --path-as-is -o /dev/null -w '%{http_code}' --max-time 4 "$SEAM_ORIGIN/storage/v1/object/sign/meeting-audio/../../../../auth/v1/settings?token=a")" = 404 ] || { echo "the gate let a dot-segment path through"; exit 1; }
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "$SEAM_ORIGIN/rest/v1/")" = 404 ] && echo "tunnel up; the gate refuses everything except signed meeting-audio object URLs"
 fi
 curl -s -o /dev/null --max-time 2 "$APP/login" && { echo "refusing: something already listens on $PORT"; exit 2; }

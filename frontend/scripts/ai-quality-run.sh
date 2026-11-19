@@ -30,7 +30,8 @@ fi
 curl -s -o /dev/null --max-time 2 "$BASE/login" && { echo "refusing: something already listens on $PORT"; [ -n "$FAKE_PID" ] && kill "$FAKE_PID"; exit 2; }
 set -m
 ( export GEMINI_API_KEY="$KEY" GEMINI_MODEL="$MODEL" AI_RATE_PER_USER_PER_MINUTE=$N AI_RATE_GLOBAL_PER_MINUTE=60 \
-         NEXT_PUBLIC_SUPABASE_URL="$E2E_SUPABASE_URL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$E2E_SUPABASE_ANON_KEY"
+         NEXT_PUBLIC_SUPABASE_URL="$E2E_SUPABASE_URL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$E2E_SUPABASE_ANON_KEY" \
+         AI_ALLOW_ALL_AUTHENTICATED=1   # local throwaway stack only: the owner allowlist (AI_OWNER_USER_IDS) is not set here, ignored on Vercel production
   if [ -n "$GBASE" ]; then export GEMINI_BASE_URL="$GBASE"; else unset GEMINI_BASE_URL; fi
   unset KEY
   exec ./node_modules/.bin/next dev -p "$PORT" -H 127.0.0.1 >"${TMPDIR:-/tmp}/ai-quality-next.log" 2>&1 ) &

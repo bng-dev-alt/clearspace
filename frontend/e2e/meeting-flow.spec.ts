@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { ensureFixedOwner } from './support/owner';
 
 /**
  * THE WHOLE MEETING-INTELLIGENCE FLOW in the real UI on a throwaway local Supabase stack, with a local FAKE Soniox and a local FAKE
@@ -22,7 +23,9 @@ test.describe.configure({ mode: 'serial' });
 const run = Date.now().toString(36);
 const PASSWORD = 'Test-Password-123';
 const PROJECT = `fl-p-${run}`;
-const ownerEmail = `fl-owner-${run}@example.test`;
+// Owner-only mode (E2E_OWNER_USER_ID = AI_OWNER_USER_IDS of the app under test): the whole flow runs as THE owner account.
+const OWNER_ID = process.env.E2E_OWNER_USER_ID;
+const ownerEmail = OWNER_ID ? 'owner-fixed@example.test' : `fl-owner-${run}@example.test`;
 const strangerEmail = `fl-stranger-${run}@example.test`;
 const MP3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(125)]);
 const TURNS = [
@@ -78,7 +81,7 @@ let meetingId = '';
 let boardBefore = '';
 
 test.beforeAll(async ({ request }) => {
-  owner = await signUp(request, ownerEmail);
+  owner = OWNER_ID ? await ensureFixedOwner(request, { sb: SB!, anon: ANON, service: SERVICE, id: OWNER_ID, email: ownerEmail, password: PASSWORD }) : await signUp(request, ownerEmail);
   stranger = await signUp(request, strangerEmail);
   expect((await sb(request, '/rest/v1/projects', { method: 'POST', token: owner.token, headers: { Prefer: 'return=minimal' }, data: { id: PROJECT, name: 'Plánování Q4' } })).status).toBe(201);
   await sb(request, '/rest/v1/columns', { method: 'POST', token: owner.token, data: [{ id: `${PROJECT}-c1`, project_id: PROJECT, name: 'K řešení', position: 0 }] });

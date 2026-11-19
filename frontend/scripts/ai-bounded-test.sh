@@ -2,7 +2,7 @@
 # BOUNDED AI validation (release step R11). At most N (default 3, hard cap 4) requests can reach the AI provider.
 #
 #   local dry run (no Gemini key, nothing leaves the machine):
-#     AI_RATE_PER_USER_PER_MINUTE=3 npm run dev -- -p 3410 -H 127.0.0.1      # in another terminal, GEMINI_API_KEY empty
+#     AI_RATE_PER_USER_PER_MINUTE=3 AI_ALLOW_ALL_AUTHENTICATED=1 npm run dev -- -p 3410 -H 127.0.0.1      # in another terminal, GEMINI_API_KEY empty
 #     EXPECT_STATUSES=503,503,503,429 scripts/ai-bounded-test.sh
 #   production (ONLY after the owner relaxed the firewall for their own IP; makes REAL Gemini calls):
 #     BASE_URL=https://clearspace-ai.vercel.app CONFIRM_REAL_GEMINI_CALLS=3 scripts/ai-bounded-test.sh

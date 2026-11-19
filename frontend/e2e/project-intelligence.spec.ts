@@ -75,7 +75,7 @@ test.beforeAll(async ({ request }) => {
   ];
   const rev = 'e'.repeat(64);
   expect((await sb(request, '/rest/v1/meeting_transcripts', { method: 'POST', token: owner.token, data: { meeting_id: meetingId, project_id: PROJECT, revision: rev, source: 'paste', speakers: [{ id: 'S1', label: 'Petr Novák', displayName: null }, { id: 'S2', label: 'Honza', displayName: null }], segments, char_count: 90 } })).status).toBe(201);
-  const analyze = await request.post('/api/ai/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId } });
+  const analyze = await request.post('/api/intelligence/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId } });
   expect(analyze.status(), await analyze.text()).toBe(200);
   const items = (await rest(request, owner.token, 'intelligence_items?select=id,kind,review_state')).json;
   const decision = items.find((i: { kind: string }) => i.kind === 'decision');
@@ -205,7 +205,7 @@ test('knowledge tab shows the human-approved conclusion with a link to its meeti
 test('authorization: a stranger cannot read briefs/knowledge, generate a brief, or store one', async ({ page, request }) => {
   expect((await rest(request, stranger.token, 'intelligence_runs?select=id')).json).toEqual([]);
   expect((await rest(request, stranger.token, 'intelligence_items?select=id')).json).toEqual([]);
-  const gen = await request.post('/api/ai/project-brief', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stranger.token}` }, data: { projectId: PROJECT } });
+  const gen = await request.post('/api/intelligence/project-brief', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stranger.token}` }, data: { projectId: PROJECT } });
   expect(gen.status()).toBe(403);
   const before = await fakeCalls(request);
   const forged = await sb(request, '/rest/v1/rpc/persist_project_brief', { method: 'POST', token: stranger.token, data: { p_project_id: PROJECT, p_run: { status: 'succeeded', input_fingerprint: 'x', contract_version: 'c', prompt_version: 'p', validator_version: 'v', output: { brief: { summary: 'FORGED' } } } } });

@@ -8,7 +8,7 @@ vi.mock('../../services/meetingService', () => {
     code: string;
     constructor(code: string, message: string) { super(message); this.code = code; }
   }
-  for (const n of ['startTranscription', 'syncTranscription', 'purgeAudio', 'deleteAudioFiles', 'providerCleanupBestEffort', 'createAudioMeeting', 'createWithTranscript']) h.svc[n] = vi.fn();
+  for (const n of ['startTranscription', 'syncTranscription', 'purgeAudio', 'deleteAudioFiles', 'providerCleanupBestEffort', 'createAudioMeeting', 'createWithTranscript', 'aiAccess']) h.svc[n] = vi.fn();
   return { MeetingServiceError, meetingService: h.svc };
 });
 
@@ -166,7 +166,7 @@ describe('AudioPanel', () => {
 });
 
 describe('NewMeetingForm (audio mode)', () => {
-  beforeEach(() => { vi.stubGlobal('Audio', undefined); }); // no media element in jsdom: the duration read must degrade to null instantly
+  beforeEach(() => { vi.stubGlobal('Audio', undefined); svc().aiAccess.mockResolvedValue({ aiOwner: true, stt: true }); }); // no media element in jsdom: the duration read must degrade to null instantly
   const load = async (flag: string | undefined) => {
     vi.resetModules();
     if (flag === undefined) vi.unstubAllEnvs(); else vi.stubEnv('NEXT_PUBLIC_ENABLE_MEETING_AUDIO', flag);
@@ -179,10 +179,19 @@ describe('NewMeetingForm (audio mode)', () => {
     render(<Form projectId="p1" onCreated={vi.fn()} />);
     expect(screen.queryByTestId('mode-audio')).toBeNull();
   });
+  test('flag on but the server says this account is not the owner (or STT is off): no audio option, nothing is called', async () => {
+    const Form = await load('1');
+    svc().aiAccess.mockResolvedValue({ aiOwner: false, stt: false });
+    render(<Form projectId="p1" onCreated={vi.fn()} />);
+    await waitFor(() => expect(svc().aiAccess).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('mode-audio')).toBeNull();
+    expect(screen.getByLabelText('Přepis')).toBeInTheDocument();
+  });
   test('flag on: the audio form states the consent text and the retention; the text form is unchanged', async () => {
     const Form = await load('1');
     render(<Form projectId="p1" onCreated={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('mode-audio'));
+    fireEvent.click(await screen.findByTestId('mode-audio'));
     expect(screen.getByTestId('audio-form')).toHaveTextContent('Soniox');
     expect(screen.getByTestId('audio-form')).toHaveTextContent('Google');
     expect(screen.getByTestId('audio-form')).toHaveTextContent('smaže');
@@ -195,7 +204,7 @@ describe('NewMeetingForm (audio mode)', () => {
     const onCreated = vi.fn();
     svc().createAudioMeeting.mockRejectedValueOnce(new MeetingServiceError('consent_required', 'Bez souhlasu účastníků se zvuk nezpracovává.'));
     render(<Form projectId="p1" onCreated={onCreated} />);
-    fireEvent.click(screen.getByTestId('mode-audio'));
+    fireEvent.click(await screen.findByTestId('mode-audio'));
     fireEvent.change(screen.getByLabelText('Název porady'), { target: { value: 'Porada' } });
     fireEvent.change(screen.getByTestId('audio-file'), { target: { files: [mp3()] } });
     fireEvent.click(screen.getByTestId('meeting-create'));
@@ -211,7 +220,7 @@ describe('NewMeetingForm (audio mode)', () => {
   test('no file selected is a clear error and nothing is called', async () => {
     const Form = await load('1');
     render(<Form projectId="p1" onCreated={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('mode-audio'));
+    fireEvent.click(await screen.findByTestId('mode-audio'));
     fireEvent.change(screen.getByLabelText('Název porady'), { target: { value: 'Porada' } });
     fireEvent.click(screen.getByTestId('meeting-create'));
     expect(await screen.findByTestId('meeting-error')).toHaveTextContent('Vyberte zvukový soubor');

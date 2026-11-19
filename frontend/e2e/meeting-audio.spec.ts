@@ -155,7 +155,7 @@ test('transcription: start -> provider fetches the signed URL -> sync stores the
 });
 
 test('duplicate / repeated requests cost nothing; a stranger gets 404 on every route', async ({ request }) => {
-  const call = (route: string, token: string, body: Record<string, unknown> = {}) => request.post(`/api/ai/meetings/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT, meetingId, ...body } });
+  const call = (route: string, token: string, body: Record<string, unknown> = {}) => request.post(`/api/intelligence/meetings/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT, meetingId, ...body } });
   const before = (await stats(request)).calls.length;
   const again = await call('transcribe', owner.token);
   expect(again.status()).toBe(200);
@@ -165,7 +165,7 @@ test('duplicate / repeated requests cost nothing; a stranger gets 404 on every r
   expect((await stats(request)).calls.length).toBe(before); // idempotent: not a single provider call
   expect((await rest(request, owner.token, 'ai_requests?feature=eq.meeting-transcribe&select=id')).json).toHaveLength(1);
   for (const route of ['transcribe', 'sync', 'purge']) expect((await call(route, stranger.token)).status(), route).toBe(404);
-  expect((await request.post('/api/ai/meetings/transcribe', { headers: { 'Content-Type': 'application/json' }, data: { projectId: PROJECT, meetingId } })).status()).toBe(401);
+  expect((await request.post('/api/intelligence/meetings/transcribe', { headers: { 'Content-Type': 'application/json' }, data: { projectId: PROJECT, meetingId } })).status()).toBe(401);
 });
 
 test('the machine transcript flows into Meeting Intelligence: analysis (fake Gemini) cites segments of the Soniox transcript; nothing reaches the board', async ({ page, request }) => {
@@ -306,7 +306,7 @@ test('F3: cancelling while the paid POST is in flight does NOT allow an immediat
   await createAudioMeeting(page, 'Zrušení za letu');
   await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT}/meetings/[0-9a-f-]{36}$`), { timeout: 30_000 });
   const id = page.url().split('/').pop()!;
-  const call = (route: string, body: Record<string, unknown> = {}) => request.post(`/api/ai/meetings/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId: id, ...body } });
+  const call = (route: string, body: Record<string, unknown> = {}) => request.post(`/api/intelligence/meetings/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId: id, ...body } });
   const first = call('transcribe'); // the provider hangs: this request is "in flight"
   await expect.poll(async () => (await rest(request, owner.token, `meetings?id=eq.${id}&select=stt_state`)).json[0].stt_state, { timeout: 10_000 }).toBe('submitting');
   const cancel = await (await call('sync', { cancel: true })).json();

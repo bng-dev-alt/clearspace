@@ -121,7 +121,7 @@ export default function ProjectIntelligenceDrawer({
   // Deterministický "mozek" -- vše se počítá jen z dat boardu.
   const intel = useMemo(() => computeProjectIntelligence(columns), [columns]);
 
-  // "Zeptej se AI" -- reálný chat s kontextem projektu (endpoint /api/ai/chat).
+  // "Zeptej se AI" -- reálný chat s kontextem projektu (endpoint /api/intelligence/chat).
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -147,7 +147,7 @@ export default function ProjectIntelligenceDrawer({
     setChatError(null);
 
     try {
-      const data = await aiClient.fetchAi('/api/ai/chat', 'Project Intelligence Chat', {
+      const data = await aiClient.fetchAi('/api/intelligence/chat', 'Project Intelligence Chat', {
         messages: nextMessages,
       });
       const answer =

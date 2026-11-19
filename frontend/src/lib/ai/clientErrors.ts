@@ -14,6 +14,7 @@ export const AI_ERROR_MESSAGES: Record<string, string> = {
   conflict: 'Výsledek už existuje.',
   unauthenticated: 'Přihlášení vypršelo nebo je neplatné. Přihlaste se prosím znovu.',
   forbidden: 'K tomuto projektu nemáte přístup.',
+  ai_owner_only: 'AI funkce jsou zatím dostupné jen vlastníkovi instalace.',
   payload_too_large: 'Požadavek je příliš velký.',
   unsupported_media_type: 'Nepodporovaný typ požadavku.',
   rate_limited: 'Příliš mnoho AI požadavků. Zkuste to prosím za minutu.',

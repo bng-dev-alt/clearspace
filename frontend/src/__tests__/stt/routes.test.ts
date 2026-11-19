@@ -34,10 +34,10 @@ vi.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-import { POST as transcribe } from '../../app/api/ai/meetings/transcribe/route';
-import { POST as sync } from '../../app/api/ai/meetings/sync/route';
-import { POST as purge } from '../../app/api/ai/meetings/purge/route';
-import { POST as sweep } from '../../app/api/ai/meetings/sweep/route';
+import { POST as transcribe } from '../../app/api/intelligence/meetings/transcribe/route';
+import { POST as sync } from '../../app/api/intelligence/meetings/sync/route';
+import { POST as purge } from '../../app/api/intelligence/meetings/purge/route';
+import { POST as sweep } from '../../app/api/intelligence/meetings/sweep/route';
 
 let fake: FakeSoniox;
 const MID = '22222222-2222-4222-8222-222222222222';
@@ -45,7 +45,7 @@ const GOOD = 'g'.repeat(40);
 const SECRET = 'sk-soniox-SECRET-123456';
 const SERVER_SECRET = 'srv-trust-SECRET-0123456789-abcdefghij';
 const post = (route: (r: NextRequest) => Promise<Response>, body: unknown, opts: { token?: string | null; ct?: string } = {}) =>
-  route(new NextRequest('http://localhost/api/ai/meetings/x', { method: 'POST', headers: { 'content-type': opts.ct ?? 'application/json', ...(opts.token === null ? {} : { authorization: `Bearer ${opts.token ?? GOOD}` }) }, body: JSON.stringify(body) }));
+  route(new NextRequest('http://localhost/api/intelligence/meetings/x', { method: 'POST', headers: { 'content-type': opts.ct ?? 'application/json', ...(opts.token === null ? {} : { authorization: `Bearer ${opts.token ?? GOOD}` }) }, body: JSON.stringify(body) }));
 const meeting = () => ({ id: MID, project_id: 'pA', title: 'P', source_kind: 'audio', language_hint: null, audio_path: 'pA/m/x.mp3', audio_bytes: 1000, audio_client_ms: 5000, audio_deleted_at: null, audio_delete_after: null, stt_state: 'none', stt_job_id: null, stt_cleanup_pending: false, stt_submitted_at: null, stt_attempts: 0, stt_error_type: null, speaker_names: {} });
 
 describe('STT routes', () => {

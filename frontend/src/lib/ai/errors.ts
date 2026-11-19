@@ -8,6 +8,7 @@ export type AiErrorCode =
   | 'conflict'
   | 'unauthenticated'
   | 'forbidden'
+  | 'ai_owner_only'
   | 'payload_too_large'
   | 'unsupported_media_type'
   | 'rate_limited'
@@ -33,6 +34,7 @@ const STATUS: Record<AiErrorCode, number> = {
   conflict: 409,
   unauthenticated: 401,
   forbidden: 403,
+  ai_owner_only: 403,
   payload_too_large: 413,
   unsupported_media_type: 415,
   rate_limited: 429,

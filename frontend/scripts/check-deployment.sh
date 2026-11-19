@@ -41,6 +41,12 @@ for r in analyze-resource capacity-planning chat daily-brief generate-backlog ge
     [ "$code" = 403 ] && ok "$m /api/ai/$r -> 403 (firewall deny)" || bad "$m /api/ai/$r -> $code (expected 403)"
   done
 done
+# The owner routes live OUTSIDE /api/ai (so the firewall does not hide them): reachable, but an anonymous caller must get 401 and a wrong method 405;
+# the owner allowlist (AI_OWNER_USER_IDS) is enforced inside the app after the login is verified (covered by the e2e owner-access spec).
+for r in meetings/analyze meetings/purge meetings/sweep meetings/sync meetings/transcribe project-brief chat access; do
+  code=$(status POST /api/intelligence/$r -H 'Content-Type: application/json' -d '{}'); [ "$code" = 401 ] && ok "anonymous POST /api/intelligence/$r -> 401" || bad "anonymous POST /api/intelligence/$r -> $code (expected 401)"
+  code=$(status GET /api/intelligence/$r); [ "$code" = 405 ] && ok "GET /api/intelligence/$r -> 405" || bad "GET /api/intelligence/$r -> $code (expected 405)"
+done
 code=$(status POST /api/dev/login -H 'x-clearspace-dev-login: 1'); [ "$code" = 404 ] && ok "POST /api/dev/login -> 404" || bad "POST /api/dev/login -> $code (expected 404)"
 
 echo "== client bundle"
@@ -52,7 +58,7 @@ for c in $CHUNKS; do get "$c" >> "$BUNDLE"; done
 has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
-for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
+for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

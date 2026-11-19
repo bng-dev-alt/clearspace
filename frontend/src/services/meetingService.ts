@@ -13,7 +13,7 @@ import type { MeetingItemKind } from '../lib/intelligence/evidence';
 
 /**
  * Klientská vrstva Meeting Intelligence. Čtení a vytvoření porady/přepisu jde přímo přes Supabase (RLS),
- * schvalování přes RPC (transakční, idempotentní), AI analýza přes /api/ai/meetings/analyze (gateway).
+ * schvalování přes RPC (transakční, idempotentní), AI analýza přes /api/intelligence/meetings/analyze (gateway).
  * Služba sama NIKDY nemění projekt: karty vznikají jen voláním apply() po lidském potvrzení.
  */
 
@@ -205,6 +205,8 @@ export interface NewMeetingInput {
   source: TranscriptSource;
   languageHint?: 'cs' | 'en' | null;
 }
+
+const accessCache = new Map<string, Promise<{ aiOwner: boolean; stt: boolean }>>();
 
 export const meetingService = {
   async list(projectId: string): Promise<Meeting[]> {
@@ -495,7 +497,7 @@ export const meetingService = {
     if (!token) throw new MeetingServiceError('unauthenticated', 'Pro přepis se musíte přihlásit.');
     let res: Response;
     try {
-      res = await fetch(`/api/ai/meetings/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+      res = await fetch(`/api/intelligence/meetings/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
     } catch {
       throw new MeetingServiceError(AI_NETWORK_ERROR.code, AI_NETWORK_ERROR.message);
     }
@@ -504,6 +506,35 @@ export const meetingService = {
       throw new MeetingServiceError(e.code, e.message);
     }
     return (await res.json()) as Record<string, unknown>;
+  },
+
+  /**
+   * "Mám přístup k AI a přepisu?" -- jen UX (co zobrazit). Rozhoduje server (seznam vlastníků), tohle nic neoprávňuje. Výsledek se drží
+   * podle uživatele; jakákoli chyba = bez přístupu (volby zvuku se nezobrazí, nic se neodešle).
+   */
+  async aiAccess(): Promise<{ aiOwner: boolean; stt: boolean }> {
+    const none = { aiOwner: false, stt: false };
+    if (!hasSupabaseConfig) return none;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const uid = sessionData.session?.user?.id;
+    if (!token || !uid) return none;
+    let p = accessCache.get(uid);
+    if (!p) {
+      p = (async () => {
+        try {
+          const res = await fetch('/api/intelligence/access', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' });
+          if (!res.ok) return none;
+          const j = (await res.json()) as { aiOwner?: unknown; stt?: unknown };
+          return { aiOwner: j.aiOwner === true, stt: j.stt === true };
+        } catch {
+          return none;
+        }
+      })();
+      accessCache.set(uid, p);
+      void p.then((r) => { if (!r.aiOwner) setTimeout(() => accessCache.delete(uid), 60_000); }); // zamítnutí se po minutě ověří znovu (po změně seznamu)
+    }
+    return p;
   },
 
   async startTranscription(projectId: string, meetingId: string): Promise<{ started: boolean; state: SttState }> {
@@ -604,7 +635,7 @@ export const meetingService = {
     if (!token) throw new MeetingServiceError('unauthenticated', 'Pro analýzu se musíte přihlásit.');
     let res: Response;
     try {
-      res = await fetch('/api/ai/meetings/analyze', {
+      res = await fetch('/api/intelligence/meetings/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ projectId, meetingId, force }),

@@ -7,7 +7,7 @@ import { sttEnabled, sttLimitsFromEnv, sttServerSecret, toGatewayError, type Stt
 
 /**
  * Společný obal STT rout (R5): feature flag -> JSON tělo -> autentizace (JWT, RLS klient) -> projekt -> handler.
- * Leží pod /api/ai, takže ho produkční firewall pravidlo "deny /api/ai" drží zavřený, dokud ho vlastník neotevře.
+ * Routy leží pod /api/intelligence (mimo firewallem zavřené /api/ai); authenticate() pustí jen vlastníky z AI_OWNER_USER_IDS.
  * Klíč Soniox se čte jen tady na serveru a do odpovědi ani do logu se nikdy nedostane.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

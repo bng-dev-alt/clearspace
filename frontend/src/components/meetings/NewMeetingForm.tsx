@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui';
 import { meetingService, MeetingServiceError } from '../../services/meetingService';
 import { sourceFromFilename, type TranscriptSource } from '../../lib/intelligence/transcript';
@@ -55,6 +55,14 @@ export default function NewMeetingForm({ projectId, onCreated }: Props) {
   const [mode, setMode] = useState<'text' | 'audio'>('text');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
+  // Volby zvuku jen pro účet, který na to má právo podle serveru (UX; oprávnění hlídá server u každé cesty).
+  const [sttAllowed, setSttAllowed] = useState(false);
+  useEffect(() => {
+    if (!AUDIO_ENABLED) return;
+    let alive = true;
+    void meetingService.aiAccess().then((a) => { if (alive) setSttAllowed(a.stt); });
+    return () => { alive = false; };
+  }, []);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -116,7 +124,7 @@ export default function NewMeetingForm({ projectId, onCreated }: Props) {
         <label htmlFor="mi-title">Název porady</label>
         <input id="mi-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required />
       </div>
-      {AUDIO_ENABLED && (
+      {AUDIO_ENABLED && sttAllowed && (
         <div className="mi-row" role="group" aria-label="Zdroj porady">
           <Button type="button" size="sm" variant={mode === 'text' ? 'primary' : 'ghost'} onClick={() => setMode('text')} data-testid="mode-text">Text</Button>
           <Button type="button" size="sm" variant={mode === 'audio' ? 'primary' : 'ghost'} onClick={() => setMode('audio')} data-testid="mode-audio">Zvuk</Button>

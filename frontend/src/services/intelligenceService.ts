@@ -8,7 +8,7 @@ import type { BriefAction, BriefItem, MeetingItemKind } from '../lib/intelligenc
 
 /**
  * Klientská vrstva Project Intelligence 2.0: uložený Project Brief, závěry z porad a podpis čerstvosti.
- * Brief generuje výhradně server (/api/ai/project-brief); tady se jen čte a zobrazuje.
+ * Brief generuje výhradně server (/api/intelligence/project-brief); tady se jen čte a zobrazuje.
  */
 
 export interface BriefSourceLabel {
@@ -150,7 +150,7 @@ export const intelligenceService = {
     if (!token) throw new IntelligenceServiceError('unauthenticated', 'Pro vytvoření briefu se musíte přihlásit.');
     let res: Response;
     try {
-      res = await fetch('/api/ai/project-brief', {
+      res = await fetch('/api/intelligence/project-brief', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ projectId, force }),

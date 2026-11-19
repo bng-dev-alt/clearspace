@@ -96,7 +96,8 @@ fi
 curl -s -o /dev/null --max-time 2 "$APP/login" && { echo "refusing: something already listens on $PORT"; exit 2; }
 set -m
 ( export NEXT_PUBLIC_SUPABASE_URL="$E2E_SUPABASE_URL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$E2E_SUPABASE_ANON_KEY" STT_ENABLED=1 NEXT_PUBLIC_ENABLE_MEETING_AUDIO=1 \
-         SONIOX_API_KEY="$KEY" SONIOX_REGION="$REGION" STT_SERVER_SECRET="$SECRET"
+         SONIOX_API_KEY="$KEY" SONIOX_REGION="$REGION" STT_SERVER_SECRET="$SECRET" \
+         AI_ALLOW_ALL_AUTHENTICATED=1   # local throwaway stack only (the owner allowlist is a production concern; ignored on Vercel production)
   unset GEMINI_API_KEY GEMINI_BASE_URL GEMINI_MODEL   # NO Gemini at all: the AI routes answer 503, so nothing else can bill
   if [ "${DRY_RUN:-}" = 1 ]; then export SONIOX_BASE_URL="$SBASE"; else unset SONIOX_BASE_URL; export STT_TEST_PUBLIC_STORAGE_ORIGIN="$SEAM_ORIGIN"; fi
   unset KEY
@@ -110,7 +111,7 @@ E2E_REAL_SONIOX=1 E2E_STT_SERVER_SECRET="$SECRET" E2E_SYNTH_DIR="$WORK/audio" E2
   PLAYWRIGHT_TEST_BASE_URL="$APP" npx playwright test e2e/soniox-real.spec.ts --workers=1 --retries=0 --reporter=line
 RC=$?
 [ -f "$REPORT" ] && echo "report: $REPORT (synthetic data only; contains no secret)" && python3 -c "
-import json,sys; r=json.load(open('$REPORT')); print(json.dumps({k:r.get(k) for k in ['mode','finalState','providerSeconds','segments','speakers','diarizationSeparatedTwoVoices','werWithDiacritics','werWithoutDiacritics','timestampsMonotonic','lastEndMs','costUsd','ledger','jobs','providerAnswerForDeletedJob']}, ensure_ascii=False, indent=1))"
+import json,sys; r=json.load(open('$REPORT')); print(json.dumps({k:r.get(k) for k in ['mode','finalState','wallClockSeconds','segments','speakers','diarizationSeparatedTwoVoices','werWithDiacritics','werWithoutDiacritics','werPerTurn','timestampsMonotonic','lastEndMs','costUsd','ledger','jobs','providerAnswerForDeletedJob']}, ensure_ascii=False, indent=1))"
 # key hygiene: the key (read through a file descriptor, never argv) must be in none of the logs of the app, the gate and the tunnel (the fake provider's own banner is not checked)
 HITS=0; for f in "$WORK/next.log" "$WORK/gate.log" "$WORK/tunnel.log"; do n=$(grep -c -F -f <(printf '%s' "$KEY") "$f" 2>/dev/null || true); HITS=$((HITS + ${n:-0})); done
 echo "key hygiene: $HITS occurrence(s) of the key in the local logs"

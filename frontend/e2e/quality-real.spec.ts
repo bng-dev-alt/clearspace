@@ -138,7 +138,7 @@ for (const f of FIXTURES) {
 
     budget();
     const t0 = Date.now();
-    const res = await request.post('/api/ai/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT, meetingId } });
+    const res = await request.post('/api/intelligence/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT, meetingId } });
     const ms = Date.now() - t0;
     const body = await res.json().catch(() => null);
     expect(res.status(), JSON.stringify(body)).toBeLessThan(500);
@@ -173,7 +173,7 @@ for (const f of FIXTURES) {
 test('project brief + final ledger/safety checks', async ({ request }) => {
   budget();
   const t0 = Date.now();
-  const res = await request.post('/api/ai/project-brief', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT } });
+  const res = await request.post('/api/intelligence/project-brief', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, data: { projectId: PROJECT } });
   const ms = Date.now() - t0;
   const body = await res.json().catch(() => null);
   expect(res.status(), JSON.stringify(body)).toBeLessThan(500);

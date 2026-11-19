@@ -103,7 +103,8 @@ test('ONE real transcription job: consent -> private upload -> signed-URL fetch 
     if (await check.count()) await check.click();
     await page.waitForTimeout(4500);
   }
-  report.providerSeconds = Math.round((Date.now() - t0) / 100) / 10;
+  // Wall clock of the whole round trip (start click -> final state, incl. upload fetch, provider queue, polling steps of <= 4.5 s). NOT the audio length and NOT the provider's billed seconds (those are audio_ms in the ledger).
+  report.wallClockSeconds = Math.round((Date.now() - t0) / 100) / 10;
   report.finalState = state;
   const meeting = (await rest(request, owner.token, `meetings?id=eq.${meetingId}&select=status,stt_state,stt_job_id,stt_audio_ms,stt_cost_usd,stt_model,stt_error_type,stt_attempts,stt_cleanup_pending`)).json[0];
   report.meeting = meeting;
@@ -140,6 +141,8 @@ test('ONE real transcription job: consent -> private upload -> signed-URL fetch 
     const hypWords = norm(segs.map((s) => s.text).join(' '));
     report.werWithDiacritics = Math.round(wer(refWords, hypWords) * 1000) / 1000;
     report.werWithoutDiacritics = Math.round(wer(strip(refWords), strip(hypWords)) * 1000) / 1000;
+    // Per reference turn (a turn is matched with the segment at the same position when the counts agree): an aggregate hides WHERE the errors are.
+    if (segs.length === reference.turns.length) report.werPerTurn = reference.turns.map((t, i) => ({ speaker: t.speaker, hypSpeaker: segs[i].speakerId, wer: Math.round(wer(norm(t.text), norm(segs[i].text)) * 1000) / 1000 }));
     expect(report.werWithoutDiacritics as number, 'catastrophic recognition quality').toBeLessThan(0.6);
 
     // --- 5. usage and cost ledger

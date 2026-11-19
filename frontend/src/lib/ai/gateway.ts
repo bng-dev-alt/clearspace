@@ -5,6 +5,7 @@ import { Column } from '../../types/kanban';
 import { loadBoard } from './board';
 import { buildProjectContext, type ContextPurpose, type ProjectContext } from '../intelligence/context';
 import { AiGatewayError, AiProviderError } from './errors';
+import { aiAccessAllowed } from './owner';
 
 /**
  * AI gateway -- jediná cesta k Gemini.
@@ -135,7 +136,11 @@ export interface Authenticated {
   db: SupabaseClient;
 }
 
-export async function authenticate(req: NextRequest): Promise<Authenticated> {
+/**
+ * `gate: false` jen pro dotaz "mám přístup?" (/api/intelligence/access); všechny ostatní cesty ověřují seznam vlastníků ZDE, na serveru,
+ * po ověření JWT. Žádný klientský příznak o oprávnění nerozhoduje.
+ */
+export async function authenticate(req: NextRequest, opts: { gate?: boolean } = {}): Promise<Authenticated> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (process.env.NEXT_PUBLIC_FORCE_DEMO === '1' || !url || !anon) {
@@ -159,6 +164,9 @@ export async function authenticate(req: NextRequest): Promise<Authenticated> {
   const { data, error } = await db.auth.getUser(token);
   if (error || !data.user) {
     throw new AiGatewayError('unauthenticated', 'Přihlášení vypršelo nebo je neplatné. Přihlaste se prosím znovu.');
+  }
+  if (opts.gate !== false && !aiAccessAllowed(data.user.id)) {
+    throw new AiGatewayError('ai_owner_only', 'AI funkce jsou zatím dostupné jen vlastníkovi instalace.');
   }
   return { user: data.user, db };
 }

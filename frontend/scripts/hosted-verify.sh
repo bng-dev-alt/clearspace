@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Real-application verification against the HOSTED "ClearSpace V1" project (see e2e/supabase-hosted.spec.ts).
 #
-#  * needs a dev server on loopback WITHOUT a Gemini key:  npm run dev -- -p 3410 -H 127.0.0.1
+#  * needs a dev server on loopback WITHOUT a Gemini key:  AI_ALLOW_ALL_AUTHENTICATED=1 npm run dev -- -p 3410 -H 127.0.0.1
 #    (or BASE_URL=https://clearspace-ai.vercel.app PRODUCTION_SMOKE_OK=1 for the post-promote smoke: AI routes are then
 #     expected to answer 403 from the firewall and are never called with a real request)
 #  * creates 3 DISPOSABLE accounts (A, B confirmed; D unconfirmed) through the GoTrue admin API. The service-role

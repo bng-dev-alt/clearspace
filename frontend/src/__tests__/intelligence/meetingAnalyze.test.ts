@@ -85,7 +85,7 @@ const MID = '11111111-2222-3333-4444-555555555555';
 const TOKEN = 't'.repeat(40);
 const post = (body: unknown) =>
   runAi(
-    new NextRequest('http://localhost/api/ai/meetings/analyze', {
+    new NextRequest('http://localhost/api/intelligence/meetings/analyze', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
       body: JSON.stringify(body),

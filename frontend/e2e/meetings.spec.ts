@@ -140,7 +140,7 @@ test('analysing the same transcript again is refused (idempotency, no second AI 
   await page.goto(meetingUrl);
   const calls = async () => (await request.get(`${FAKE}/__stats`).then((r) => r.json())).calls as number;
   const before = await calls();
-  const r = await request.post('/api/ai/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId } });
+  const r = await request.post('/api/intelligence/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, meetingId } });
   expect(r.status()).toBe(409);
   expect(await calls()).toBe(before); // refused BEFORE the model was called
   expect((await rest(request, owner.token, 'ai_requests?select=id')).json).toHaveLength(1);
@@ -227,7 +227,7 @@ test('authorization: a stranger sees nothing, cannot analyse, review, apply or d
   expect((await rest(request, stranger.token, 'intelligence_items?select=id')).json).toEqual([]);
   expect((await rest(request, stranger.token, 'meeting_transcripts?select=revision')).json).toEqual([]);
 
-  const analyze = await request.post('/api/ai/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stranger.token}` }, data: { projectId: PROJECT, meetingId } });
+  const analyze = await request.post('/api/intelligence/meetings/analyze', { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${stranger.token}` }, data: { projectId: PROJECT, meetingId } });
   expect(analyze.status()).toBe(403);
   const itemId = (await rest(request, owner.token, 'intelligence_items?select=id&review_state=eq.proposed')).json[0].id;
   expect((await rpc(request, stranger.token, 'review_intelligence_item', { p_item: itemId, p_decision: 'accept' })).status).toBeGreaterThanOrEqual(400);

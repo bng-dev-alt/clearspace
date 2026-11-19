@@ -9,6 +9,8 @@ import { useTheme, ThemeChoice } from '../../contexts/ThemeContext';
 import { deriveInitials } from '../../services/workspaceService';
 import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, LayoutDashboard, Search } from 'lucide-react';
 import AiModelSelector from '../ai/AiModelSelector';
+import { MONOGRAPH_ENABLED, type DesignStyle } from '../../lib/designStyle';
+import { MonographRail, MonographBottomNav, MonographSubNav, type NavEntry, type SubNavItem } from './MonographNav';
 
 // ThemeToggle component...
 
@@ -18,9 +20,37 @@ const THEME_OPTIONS: { value: ThemeChoice; Icon: typeof Sun; label: string }[] =
   { value: 'dark', Icon: Moon, label: 'Tmavý režim' },
 ];
 
+const STYLE_OPTIONS: { value: DesignStyle; label: string }[] = [
+  { value: 'existing', label: 'Stávající' },
+  { value: 'monograph', label: 'Monograph' },
+];
+
+/** Výběr designového stylu. Existuje jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=1; Monograph pak následuje přepínač motivu (světlý/tmavý). */
+function StyleToggle() {
+  const { designStyle, setDesignStyle } = useTheme();
+  return (
+    <div className="theme-toggle style-toggle" role="group" aria-label="Vzhled aplikace">
+      {STYLE_OPTIONS.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          className={`theme-toggle-btn ${designStyle === value ? 'active' : ''}`}
+          onClick={() => setDesignStyle(value)}
+          aria-pressed={designStyle === value}
+          data-testid={`style-${value}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   return (
+    <>
+    {MONOGRAPH_ENABLED && <StyleToggle />}
     <div className="theme-toggle" role="group" aria-label="Přepínač motivu">
       {THEME_OPTIONS.map(({ value, Icon, label }) => (
         <button
@@ -37,6 +67,7 @@ function ThemeToggle() {
         </button>
       ))}
     </div>
+    </>
   );
 }
 
@@ -60,6 +91,8 @@ interface NavbarProps {
 export default function Navbar({ boardActions }: NavbarProps) {
   const pathname = usePathname() || '';
   const router = useRouter();
+  const { designStyle } = useTheme();
+  const isMonograph = MONOGRAPH_ENABLED && designStyle === 'monograph';
   const { profile, logout } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -168,7 +201,37 @@ export default function Navbar({ boardActions }: NavbarProps) {
     fn();
   };
 
+  // Monograph: podnabídka pro trasy, kde stránka přepínač zobrazení sama nemá (na boardu ho nese stránka a CSS ho přečísluje).
+  const projectMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const projectId = projectMatch?.[1];
+  const setStoredView = (mode: string) => () => localStorage.setItem('board_view_mode', mode);
+  let subNav: { n: string; label: string; items: SubNavItem[] } | null = null;
+  if (isMonograph && projectId && !boardActions && pathname.includes('/meetings')) {
+    const base = `/projects/${projectId}`;
+    subNav = {
+      n: '02',
+      label: 'Zobrazení projektu',
+      items: [
+        { label: 'Board', href: base, active: false, onClick: setStoredView('board'), testId: 'subnav-board' },
+        { label: 'Kalendář', href: base, active: false, onClick: setStoredView('calendar'), testId: 'subnav-calendar' },
+        { label: 'Dashboard', href: base, active: false, onClick: setStoredView('dashboard'), testId: 'subnav-dashboard' },
+        { label: 'Porady', href: `${base}/meetings`, active: true, testId: 'subnav-meetings' },
+      ],
+    };
+  } else if (isMonograph && (pathname === '/ai-control-center' || pathname === '/ai-history')) {
+    subNav = {
+      n: '04',
+      label: 'AI',
+      items: [
+        { label: 'AI Studio', href: '/ai-control-center', active: pathname === '/ai-control-center' },
+        { label: 'AI History', href: '/ai-history', active: pathname === '/ai-history' },
+      ],
+    };
+  }
+
   return (
+    <>
+    {isMonograph && <MonographRail items={navItems as NavEntry[]} onOpenIntelligence={boardActions?.onOpenIntelligence} />}
     <header className="app-navbar">
       <div className="navbar-left">
         <Link href="/" className="navbar-logo" style={{ textDecoration: 'none', cursor: 'pointer' }}>
@@ -176,6 +239,7 @@ export default function Navbar({ boardActions }: NavbarProps) {
         </Link>
       </div>
 
+      {!isMonograph && (
       <nav className="navbar-center">
         {navItems.map((item) => (
           <Link
@@ -190,6 +254,7 @@ export default function Navbar({ boardActions }: NavbarProps) {
           </Link>
         ))}
       </nav>
+      )}
 
       {/* Layout v CSS (ne inline), aby na něj dosáhly breakpointy -- na mobilu se skrývá do menu. */}
       <div className="navbar-right" ref={dropdownRef}>
@@ -445,5 +510,13 @@ export default function Navbar({ boardActions }: NavbarProps) {
         </div>
       )}
     </header>
+    {isMonograph && (
+      <>
+        <MonographBottomNav items={navItems as NavEntry[]} onOpenIntelligence={boardActions?.onOpenIntelligence} />
+        {subNav && <MonographSubNav n={subNav.n} label={subNav.label} items={subNav.items} />}
+        <span id="mg-content" tabIndex={-1} className="mg-anchor" />
+      </>
+    )}
+    </>
   );
 }

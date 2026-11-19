@@ -26,9 +26,9 @@ if psql_admin -d cs_h -q -c "
     insert into public.meetings (project_id, title, source_kind) values ('pH', 'M', 'text') returning id into m;
     perform test.reset();
     delete from auth.users where id = u;
-  end \$\$" >/dev/null 2>"$TMPDIR/h_err.txt"; then
+  end \$\$" >/dev/null 2>"${TMPDIR:-/tmp}/h_err.txt"; then
   echo "FAIL: the hosted state could delete a meeting author (the defect is not reproduced)"; exit 1; fi
-grep -q "nelze měnit" "$TMPDIR/h_err.txt" || { echo "FAIL: deleting the author failed for another reason: $(head -3 "$TMPDIR/h_err.txt")"; exit 1; }
+grep -q "nelze měnit" "${TMPDIR:-/tmp}/h_err.txt" || { echo "FAIL: deleting the author failed for another reason: $(head -3 "${TMPDIR:-/tmp}/h_err.txt")"; exit 1; }
 echo "ok - REPRODUCED on the hosted state: deleting a user who created a meeting fails (guard_meeting_identity)"
 psql_admin -d cs_h -q -c "delete from public.projects where id='pH'; delete from auth.users where email='h-a@example.test'" >/dev/null 2>&1 || true
 # a gap here would mean the guard itself would be wrong for a legacy row: a meeting whose author is already NULL keeps working

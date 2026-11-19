@@ -31,19 +31,32 @@ const BOARD = '/projects/project-default';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const clickIf = async (page, sel) => { const l = page.locator(sel).first(); if (await l.count()) { await l.click(); return true; } return false; };
 
+// Project Intelligence: toolbar button on desktop/tablet, numbered bottom-bar cell on phones (the toolbar button is hidden <= 767px).
+async function openIntelligence(p) {
+  for (const sel of ['[data-testid="project-intelligence-btn"]', '[data-testid="bottom-intelligence"]', '[data-testid="rail-intelligence"]']) {
+    const l = p.locator(sel).first();
+    if (await l.isVisible().catch(() => false)) { await l.click(); break; }
+  }
+  await p.getByTestId('project-intelligence-drawer').waitFor({ timeout: 8000 }).catch(() => {});
+  await wait(700);
+}
+
 // ---- cases: { name, auth, path, run?(page, ctx) } -------------------------------------------------------------------
 const cases = [
   { name: 'login', auth: false, path: '/login' },
   { name: 'register', auth: false, path: '/register' },
   { name: 'projects', path: '/' },
-  { name: 'board', path: BOARD, clock: true, run: async (p) => { await p.getByTestId('view-switch-board').waitFor(); } },
+  { name: 'board', path: BOARD, clock: true, run: async (p) => { await p.locator('.app-container').waitFor(); } },
   { name: 'board-card-drawer', path: BOARD, clock: true, run: async (p) => { await p.locator('[data-testid^="card-"]').first().click(); await wait(500); } },
   { name: 'board-new-task', path: BOARD, clock: true, run: async (p) => { await p.getByTestId('new-task-btn').first().click({ force: true }).catch(async () => { await p.locator('[data-testid^="add-card-btn-"]').first().click(); }); await wait(500); } },
   { name: 'calendar', path: BOARD, clock: true, run: async (p) => { await p.getByTestId('view-switch-calendar').click(); await wait(500); } },
   { name: 'dashboard', path: BOARD, clock: true, run: async (p) => { await p.getByTestId('view-switch-dashboard').click(); await wait(800); } },
-  { name: 'intelligence', path: BOARD, clock: true, run: async (p) => { await p.getByTestId('project-intelligence-btn').first().click({ force: true }).catch(() => {}); await wait(900); } },
+  { name: 'intelligence', path: BOARD, clock: true, run: openIntelligence },
   { name: 'search', path: BOARD, clock: true, run: async (p) => { await p.keyboard.press('Control+k'); await wait(400); } },
+  { name: 'projects-new', path: '/', run: async (p) => { await p.getByTestId('classic-new-project-cta').click(); await wait(500); } },
+  { name: 'projects-generate', path: '/', run: async (p) => { await p.getByTestId('ai-generate-project-cta').click(); await wait(600); } },
   { name: 'team', path: '/team' },
+  { name: 'team-add-member', path: '/team', run: async (p) => { await p.getByTestId('team-add-member').click(); await wait(500); } },
   { name: 'ai-studio', path: '/ai-control-center' },
   { name: 'ai-history', path: '/ai-history' },
   { name: 'mobile-menu', path: BOARD, clock: true, only: [375], run: async (p) => { await p.getByTestId('navbar-burger').click(); await wait(400); } },
@@ -60,8 +73,11 @@ if (MODE === 'stack') {
       { name: 'meetings-new-audio', stack: true, path: `${P}/meetings`, run: async (p) => { await p.getByTestId('meeting-new').click(); if (await clickIf(p, '[data-testid="mode-audio"]')) await wait(300); } },
       { name: 'meeting-detail', stack: true, path: `${P}/meetings/${ctx.meetingId}` },
       { name: 'meeting-analysis', stack: true, path: `${P}/meetings/${ctx.meetingId}`, run: async (p) => { const i = p.locator('[data-testid^="item-"][data-kind]').first(); if (await i.count()) await i.scrollIntoViewIfNeeded(); await wait(300); } },
+      { name: 'meetings-empty', stack: true, path: '/projects/mg-p-empty/meetings' },
       { name: 'board-stack', stack: true, path: P },
-      { name: 'intelligence-stack', stack: true, path: P, run: async (p) => { await p.getByTestId('project-intelligence-btn').first().click({ force: true }).catch(() => {}); await wait(900); } },
+      { name: 'intelligence-stack', stack: true, path: P, run: openIntelligence },
+      { name: 'intelligence-brief', stack: true, path: P, run: async (p) => { await openIntelligence(p); await p.getByTestId('pi-tab-brief').click(); await wait(700); } },
+      { name: 'intelligence-knowledge', stack: true, path: P, run: async (p) => { await openIntelligence(p); await p.getByTestId('pi-tab-knowledge').click(); await wait(700); } },
     );
     globalThis.__ctx = ctx;
   }
@@ -88,10 +104,12 @@ for (const styleKey of STYLES) {
       const context = await browser.newContext({ viewport: { width, height: HEIGHT[width] || 900 }, reducedMotion: 'reduce' });
       const page = await context.newPage();
       const errors = [];
+      let navigating = true; // fetches aborted by our own navigation (login -> goto) log "Failed to fetch"; only that is ignored, and only while navigating
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-      page.on('console', (m) => { if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
+      page.on('console', (m) => { if (m.type() === 'error' && !(navigating && /Failed to fetch/.test(m.text())) && !/favicon|Failed to load resource|\/realtime\/v1\/websocket/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
       await page.addInitScript(([s, t]) => { localStorage.setItem('clearspace-theme', t); if (s === 'monograph') localStorage.setItem('clearspace-style', 'monograph'); else localStorage.removeItem('clearspace-style'); }, [style, theme]);
       if (c.clock) await page.clock.setFixedTime(SEED_NOW);
+      await page.addInitScript(() => { const s = document.createElement('style'); s.textContent = 'nextjs-portal,[data-nextjs-toast],[data-next-badge-root]{display:none !important}'; document.addEventListener('DOMContentLoaded', () => document.head.appendChild(s)); });
       let ok = true, note = '';
       try {
         if (c.stack) await login(page, globalThis.__ctx);
@@ -99,6 +117,7 @@ for (const styleKey of STYLES) {
         await page.goto(`${BASE}${c.path}`, { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle').catch(() => {});
         await wait(700);
+        navigating = false;
         if (c.run) await c.run(page);
         await wait(300);
         const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, style: document.documentElement.dataset.style || '', theme: document.documentElement.dataset.theme }));
@@ -106,7 +125,7 @@ for (const styleKey of STYLES) {
         if (style === 'monograph' && m.style !== 'monograph') { ok = false; note += 'data-style missing; '; }
         if (style === 'existing' && m.style) { ok = false; note += 'data-style present; '; }
         const f = `${styleKey}-${c.name}-${width}.png`;
-        await page.screenshot({ path: path.join(OUT, f), fullPage: !['search', 'board-card-drawer', 'board-new-task', 'intelligence', 'intelligence-stack', 'mobile-menu'].includes(c.name) });
+        await page.screenshot({ path: path.join(OUT, f), fullPage: !['search', 'board-card-drawer', 'board-new-task', 'intelligence', 'intelligence-stack', 'intelligence-brief', 'intelligence-knowledge', 'projects-new', 'projects-generate', 'team-add-member', 'mobile-menu'].includes(c.name) });
       } catch (e) { ok = false; note += `exception: ${String(e.message).split('\n')[0]}; `; }
       if (errors.length) { ok = false; note += errors.slice(0, 3).join(' | '); }
       results.push({ style: styleKey, width, name: c.name, ok, note });

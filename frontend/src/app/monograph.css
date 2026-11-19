@@ -1,0 +1,296 @@
+/* Self-hosted fonts (SIL OFL 1.1, see public/fonts/monograph/LICENSE-*.txt). @font-face is lazy: files are fetched only when a rule uses the family, i.e. only in Monograph. latin + latin-ext (Czech). */
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/barlow-condensed-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/barlow-condensed-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/monograph/barlow-condensed-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/monograph/barlow-condensed-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/monograph/barlow-condensed-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 700; src: url('/fonts/monograph/barlow-condensed-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/monograph/ibm-plex-sans-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/monograph/ibm-plex-sans-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/ibm-plex-sans-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/ibm-plex-sans-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/monograph/ibm-plex-sans-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-display: swap; font-weight: 600; src: url('/fonts/monograph/ibm-plex-sans-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/monograph/ibm-plex-mono-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-display: swap; font-weight: 400; src: url('/fonts/monograph/ibm-plex-mono-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/ibm-plex-mono-latin-ext-500-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-display: swap; font-weight: 500; src: url('/fonts/monograph/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+/* ============================================================
+   MONOGRAPH -- opt-in designový styl (editorial-execution aa676ab).
+   Vše je pod html[data-style="monograph"]; bez tohoto atributu je soubor inertní (kromě @font-face, který se
+   stahuje až při použití rodiny, tedy jen v Monograph). Test src/__tests__/monographScope.test.ts hlídá, že žádné
+   pravidlo není bez tohoto prefixu.
+   Přístup: tokeny first -- přepisují se existující proměnné (--accent, --surface, --text, --border ...), takže
+   komponenty se převlečou samy; pak několik průřezových pravidel a chirurgické tvary pro shell a navigaci.
+   Fonty: Barlow Condensed (display, střídmě), IBM Plex Sans (text), IBM Plex Mono (štítky). Všechny OFL.
+   ============================================================ */
+
+/* ── Tokeny: společné ─────────────────────────────── */
+html[data-style="monograph"] {
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: var(--font-display);
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --mg-rail-w: 64px;
+
+  /* tvary: 0 / 2 / 4 px, bez kapslí */
+  --radius-sm: 2px; --radius: 2px; --radius-md: 2px; --radius-button: 2px;
+  --radius-lg: 0; --radius-card: 0; --radius-xl: 4px; --radius-dialog: 4px; --radius-2xl: 4px; --radius-hero: 0;
+  --radius-full: 2px; --radius-pill: 2px;
+
+  /* ploché plochy; stín jen na překryvech */
+  --shadow-sm: none; --shadow-md: none; --shadow-glow: none;
+  --shadow-lg: 0 24px 48px -28px rgba(23, 23, 21, 0.45);
+  --shadow-xl: var(--shadow-lg);
+
+  /* žádné sklo ani přechody */
+  --glass-blur: none; --glass-border: transparent;
+
+  /* typografická škála: 11px mono štítky, 14px text */
+  --text-xs: 0.6875rem; --text-sm: 0.75rem; --text-base: 0.875rem; --text-md: 0.875rem;
+  --text-lg: 1.25rem; --text-xl: 1.5rem; --text-2xl: 2.25rem; --text-display: 3.25rem;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --spring-transition: all 120ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-base: all 120ms cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms; --dur-base: 200ms;
+}
+
+/* ── Tokeny: světlý -- teplý papír, uhlový inkoust, oliva ── */
+html[data-style="monograph"][data-theme="light"] {
+  --bg-page: #f3f0e8; --surface: #f9f7f1; --surface-1: #f9f7f1; --surface-2: #eeeadf; --surface-3: #e9e5d8;
+  --surface-glass: #f9f7f1; --glass-bg: #f9f7f1; --glass-bg-2: #eeeadf; --hero-veil: #f3f0e8; --hero-card-glass: #f9f7f1;
+  --overlay: rgba(23, 23, 21, 0.45);
+  --border: #d5d0c4; --border-strong: #8a8576;
+  --text: #171715; --text-secondary: #45453d; --text-muted: #66665b;
+  --accent: #41472d; --accent-hover: #171715; --accent-soft: #e4e3d0; --accent-ring: rgba(65, 71, 45, 0.35);
+  --accent-yellow: #7a540f; --text-on-accent: #f3f0e8;
+  --success: #41472d; --success-soft: #e4e3d0;
+  --warning: #7a540f; --warning-soft: #efe4c6;
+  --danger: #9c3b26; --danger-soft: #efdcd3;
+  --accent-rgb: 65, 71, 45; --accent-yellow-rgb: 122, 84, 15; --text-rgb: 23, 23, 21; --cream-rgb: 243, 240, 232;
+  --mg-rule: #171715; --mg-olive: #737650; --mg-sunken: #e9e5d8; --mg-input: #8a8576;
+  color-scheme: light;
+}
+
+/* ── Tokeny: tmavý -- laděný zvlášť, ne invertovaný ── */
+html[data-style="monograph"][data-theme="dark"] {
+  --bg-page: #151512; --surface: #1c1c18; --surface-1: #1c1c18; --surface-2: #22221d; --surface-3: #262620;
+  --surface-glass: #1c1c18; --glass-bg: #1c1c18; --glass-bg-2: #22221d; --hero-veil: #151512; --hero-card-glass: #1c1c18;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --border: #34342b; --border-strong: #74735f;
+  --text: #ece8dc; --text-secondary: #bdb9ab; --text-muted: #8f8c7f;
+  --accent: #a9ae78; --accent-hover: #ece8dc; --accent-soft: #272a1b; --accent-ring: rgba(169, 174, 120, 0.4);
+  --accent-yellow: #d6a84e; --text-on-accent: #151512;
+  --success: #a9ae78; --success-soft: #272a1b;
+  --warning: #d6a84e; --warning-soft: #352a12;
+  --danger: #e0876a; --danger-soft: #3a2119;
+  --accent-rgb: 169, 174, 120; --accent-yellow-rgb: 214, 168, 78; --text-rgb: 236, 232, 220; --cream-rgb: 236, 232, 220;
+  --shadow-lg: 0 24px 48px -20px rgba(0, 0, 0, 0.7);
+  --mg-rule: #ece8dc; --mg-olive: #7c8056; --mg-sunken: #10100e; --mg-input: #74735f;
+  color-scheme: dark;
+}
+
+/* ── Základ ───────────────────────────────────────── */
+html[data-style="monograph"] body { font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.5; background: var(--bg-page); color: var(--text); }
+html[data-style="monograph"] ::selection { background: var(--mg-olive); color: var(--bg-page); }
+html[data-style="monograph"] :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 0; }
+html[data-style="monograph"] :is(h1, h2, h3, .hero-title, .info-card-huge, .cs-empty-title, .cs-modal-title, .modal-title) {
+  font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.01em; font-weight: 600;
+}
+html[data-style="monograph"] .hero-title { font-weight: 700; font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 0.9; letter-spacing: -0.005em; }
+html[data-style="monograph"] .info-card-huge { font-weight: 700; font-size: 3rem; line-height: 0.85; letter-spacing: -0.01em; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-style="monograph"] *, html[data-style="monograph"] *::before, html[data-style="monograph"] *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* Mono uppercase štítky (reference .lbl): všechny existující uppercase štítky aplikace. */
+html[data-style="monograph"] :is(.hero-team-label, .info-card-label, .stat-label, .panel-subtitle, .card-meta-tag, .card-meta-priority, .form-label, .pi-sec-label, .pi-tag,
+  .drawer-meta-label, .drawer-section-title, .ai-badge, .calendar-subtitle, .calendar-weekday, .members-table-head, .member-cell[data-label]::before,
+  .mobile-menu-label, .cs-label, .cs-badge, .cs-metric-label, .cs-table th) {
+  font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+}
+html[data-style="monograph"] :is(.stat-label, .cs-metric-label, .panel-subtitle, .info-card-label, .hero-team-label, .form-label, .cs-label, .drawer-meta-label, .calendar-weekday, .mobile-menu-label) { color: var(--text-muted); }
+
+/* ── Shell: 64px indexovaný rejstřík (>= 901px), horní lišta, podnabídka ── */
+html[data-style="monograph"] .mg-skip { position: fixed; left: 8px; top: -64px; z-index: 400; background: var(--text); color: var(--bg-page); padding: 10px 14px; font: 500 0.75rem/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
+html[data-style="monograph"] .mg-skip:focus { top: 8px; }
+html[data-style="monograph"] .mg-anchor { display: block; height: 0; outline: none; }
+html[data-style="monograph"] .mg-rail { position: fixed; z-index: 85; top: 0; left: 0; bottom: 0; width: var(--mg-rail-w); background: var(--mg-sunken); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; }
+html[data-style="monograph"] .mg-brand { height: 56px; flex: none; display: grid; place-items: center; background: var(--text); color: var(--bg-page); font: 700 22px/1 var(--font-display); letter-spacing: 0.02em; }
+html[data-style="monograph"] .mg-tab { position: relative; flex: 0 0 auto; width: calc(var(--mg-rail-w) + 1px); margin-right: -1px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0 16px; border-bottom: 1px solid var(--border); color: var(--text-muted); text-decoration: none; transition: background 120ms, color 120ms; }
+html[data-style="monograph"] .mg-tab .n { font: 500 12px var(--font-mono); letter-spacing: 0.04em; }
+html[data-style="monograph"] .mg-tab .t { writing-mode: vertical-rl; transform: rotate(180deg); font: 500 12px var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; }
+html[data-style="monograph"] .mg-tab:hover { background: var(--surface); color: var(--text); }
+html[data-style="monograph"] .mg-tab[aria-current='page'] { background: var(--bg-page); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+html[data-style="monograph"] .mg-tab:focus-visible { outline-offset: -3px; }
+html[data-style="monograph"] .mg-rail-foot { margin-top: auto; border-top: 1px solid var(--border); display: grid; }
+html[data-style="monograph"] .mg-rail-foot button { display: grid; place-items: center; height: 52px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+html[data-style="monograph"] .mg-rail-foot button:hover { background: var(--surface); color: var(--text); }
+html[data-style="monograph"] .mg-rail-foot button:focus-visible { outline-offset: -3px; }
+html[data-style="monograph"] .mg-bottomnav { display: none; }
+@media (min-width: 901px) {
+  html[data-style="monograph"] body:has(.mg-rail) { padding-left: var(--mg-rail-w); }
+}
+@media (max-width: 900px) {
+  html[data-style="monograph"] .mg-rail { display: none; }
+  html[data-style="monograph"] .mg-bottomnav { display: flex; position: fixed; inset: auto 0 0 0; z-index: 85; background: var(--mg-sunken); border-top: 1px solid var(--text); padding-bottom: env(safe-area-inset-bottom); }
+  html[data-style="monograph"] .mg-bottomnav > * { flex: 1 1 0; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-muted); border: 0; border-right: 1px solid var(--border); background: transparent; text-decoration: none; cursor: pointer; font: inherit; }
+  html[data-style="monograph"] .mg-bottomnav > *:last-child { border-right: 0; }
+  html[data-style="monograph"] .mg-bottomnav .n { font: 500 11px var(--font-mono); }
+  html[data-style="monograph"] .mg-bottomnav .t { font: 500 10px var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; }
+  html[data-style="monograph"] .mg-bottomnav [aria-current='page'] { background: var(--bg-page); color: var(--text); box-shadow: inset 0 3px 0 var(--accent); }
+  html[data-style="monograph"] .mg-bottomnav > *:focus-visible { outline-offset: -3px; }
+  html[data-style="monograph"] body:has(.mg-bottomnav) { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+}
+
+/* horní lišta = wordmark + akce; navigaci nese rejstřík */
+html[data-style="monograph"] .app-navbar { height: 56px; background: var(--bg-page); border-bottom: 1px solid var(--border); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-style="monograph"] .navbar-logo { font: 700 20px/1 var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text); }
+html[data-style="monograph"] .logo-dot { color: var(--accent); }
+html[data-style="monograph"] .navbar-center { display: none; }
+html[data-style="monograph"] .navbar-right { gap: 0.75rem; }
+html[data-style="monograph"] .navbar-avatar { border-radius: 0; background: var(--surface); color: var(--text); border: 1px solid var(--text) !important; font: 500 11px var(--font-mono); width: 28px; height: 28px; }
+html[data-style="monograph"] .navbar-search-btn { border-radius: 2px !important; border-color: var(--border-strong) !important; background: transparent !important; }
+html[data-style="monograph"] .navbar-search-hint { border-radius: 2px !important; font-family: var(--font-mono); }
+html[data-style="monograph"] .theme-toggle { border-radius: 2px; background: transparent; border: 1px solid var(--text); padding: 0; gap: 0; }
+html[data-style="monograph"] .theme-toggle-btn { border-radius: 0; width: 32px; height: 28px; color: var(--text-secondary); border-right: 1px solid var(--text); }
+html[data-style="monograph"] .theme-toggle-btn:last-child { border-right: 0; }
+html[data-style="monograph"] .theme-toggle-btn.active { background: var(--text); color: var(--bg-page); box-shadow: none; }
+html[data-style="monograph"] .style-toggle .theme-toggle-btn { width: auto; padding: 0 10px; font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+html[data-style="monograph"] .navbar-burger { border-radius: 2px; border-color: var(--text); background: transparent; }
+
+/* podnabídka 02.x / 04.x: stránka s vlastním přepínačem (.view-switch) ji dostane přečíslováním, ostatní trasy z MonographSubNav */
+html[data-style="monograph"] .mg-subnav, html[data-style="monograph"] .board-view-switch-row { display: flex; gap: 0; padding: 0 var(--page-pad); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; background: var(--bg-page); margin: 0; width: 100%; max-width: none; }
+html[data-style="monograph"] .mg-subnav::-webkit-scrollbar, html[data-style="monograph"] .board-view-switch-row::-webkit-scrollbar { display: none; }
+html[data-style="monograph"] .app-container > .app-navbar { order: -3; }
+html[data-style="monograph"] .app-container > .mg-subnav, html[data-style="monograph"] .app-container > .board-view-switch-row { order: -2; }
+html[data-style="monograph"] .mg-subnav a, html[data-style="monograph"] .view-switch-btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); white-space: nowrap; text-decoration: none; font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+html[data-style="monograph"] .mg-subnav a:first-child, html[data-style="monograph"] .view-switch-btn:first-child { padding-left: 0; }
+html[data-style="monograph"] .mg-subnav a:hover, html[data-style="monograph"] .view-switch-btn:hover { color: var(--text); background: transparent; }
+html[data-style="monograph"] .mg-subnav a[aria-current='page'], html[data-style="monograph"] .view-switch-btn.active, html[data-style="monograph"] .view-switch-btn[aria-pressed='true'] { color: var(--text); border-bottom-color: var(--accent); background: transparent; box-shadow: none; }
+html[data-style="monograph"] .mg-subnav .num { color: var(--accent); }
+html[data-style="monograph"] .view-switch { display: flex; gap: 0; background: transparent; border: 0; padding: 0; border-radius: 0; counter-reset: mgview; }
+html[data-style="monograph"] .view-switch-btn { counter-increment: mgview; }
+html[data-style="monograph"] .view-switch-btn::before { content: '02.' counter(mgview); color: var(--accent); }
+html[data-style="monograph"] .view-switch-btn svg { display: none; }
+@media (max-width: 767px) {
+  /* na mobilu je přepínač zobrazení v menu; Monograph ho nechá jako číslovanou podnabídku (jediná cesta k Poradám) */
+  html[data-style="monograph"] .board-view-switch-row { display: flex; }
+}
+
+/* ── Tvary: čtvercové rohy 0-2-4 px (zabírá na třídy z CSS; inline hodnoty zůstávají, kritické přebíjí pravidla níž) ── */
+html[data-style="monograph"] :is(div, span, button, input, select, textarea, a, li, ul, section, article, aside, header, code, pre, label, img, table, form, summary, details, fieldset, mark, kbd, th, td):where(:not(.ai-spinner, .live-status-dot, .pi-dot, .priority-indicator-dot, .card-meta-sep, .pi-chip-dot, .pi-pulse, .chip-dot, .calendar-chip-dot)) { border-radius: 2px; }
+
+/* ── Hero a panely: bez textur, skla a přechodů; sekce otevírá 2px inkoustová linka ── */
+html[data-style="monograph"] .app-hero { background-color: var(--bg-page); padding-top: 2.25rem; padding-bottom: 1.75rem; }
+html[data-style="monograph"] .app-hero::before { content: none; background-image: none; }
+html[data-style="monograph"] .hero-info-card { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-top: 2px solid var(--mg-rule); border-radius: 0; box-shadow: none; }
+html[data-style="monograph"] .hero-info-card.highlighted-border { border-left: 1px solid var(--border); border-top: 2px solid var(--accent); }
+html[data-style="monograph"] :is(.app-toolbar, .board-panel-card, .calendar-panel, .stat-card, .cs-card, .project-card, .cs-metric) { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-top: 2px solid var(--mg-rule); border-radius: 0; box-shadow: none; }
+html[data-style="monograph"] .board-panel-card { background: transparent; border-left: 0; border-right: 0; border-bottom: 0; }
+html[data-style="monograph"] .app-toolbar { z-index: 15; }
+html[data-style="monograph"] :is(.stat-card, .cs-metric):hover, html[data-style="monograph"] .project-card:hover, html[data-style="monograph"] .cs-card--interactive:hover { border-color: var(--border); border-top-color: var(--mg-rule); box-shadow: none; transform: none; }
+html[data-style="monograph"] :is(.stat-icon-box, .cs-metric-icon) { background: transparent; border: 1px solid var(--border); color: var(--accent); }
+html[data-style="monograph"] :is(.stat-chevron, .cs-metric-trail) { border-radius: 0; background: transparent; }
+html[data-style="monograph"] :is(.stat-value, .cs-metric-value) { font-family: var(--font-display); font-weight: 700; font-size: 2.25rem; line-height: 0.9; letter-spacing: -0.005em; }
+html[data-style="monograph"] .panel-title { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; text-transform: uppercase; letter-spacing: 0.01em; }
+html[data-style="monograph"] .live-status-dot { background: var(--accent); box-shadow: none; animation: none; }
+
+/* ── Tlačítka, pole, štítky ───────────────────────── */
+html[data-style="monograph"] :is(.cs-btn, .btn, .tag-add-btn, .toolbar-settings-btn) { font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 2px; box-shadow: none; }
+html[data-style="monograph"] :is(.cs-btn, .btn):not(.cs-btn--sm) { min-height: 40px; }
+html[data-style="monograph"] :is(.cs-btn, .btn):hover:not(:disabled) { transform: none; box-shadow: none; filter: none; }
+html[data-style="monograph"] :is(.cs-btn--secondary, .cs-btn--ghost, .btn-cancel) { background: transparent; color: var(--text); border: 1px solid var(--text); }
+html[data-style="monograph"] .cs-btn--ghost { border-color: var(--border); }
+html[data-style="monograph"] :is(.cs-btn--secondary, .cs-btn--ghost, .btn-cancel):hover:not(:disabled) { background: var(--text); color: var(--bg-page); border-color: var(--text); }
+html[data-style="monograph"] :is(.cs-btn--primary, .btn-submit) { background: var(--accent); border: 1px solid var(--accent); color: var(--text-on-accent); }
+html[data-style="monograph"] :is(.cs-btn--primary, .btn-submit):hover:not(:disabled) { background: var(--text); border-color: var(--text); color: var(--bg-page); }
+html[data-style="monograph"] :is(.cs-btn--danger, .btn-delete) { background: var(--danger); border: 1px solid var(--danger); color: var(--bg-page); }
+html[data-style="monograph"] :is(.cs-btn--danger, .btn-delete):hover:not(:disabled) { background: var(--text); border-color: var(--text); color: var(--bg-page); }
+html[data-style="monograph"] .cs-btn:disabled { opacity: 0.45; }
+/* tlačítka s inline bílým textem na výplni --accent (v tmavém motivu světlá oliva): bílá by neprošla kontrastem */
+html[data-style="monograph"][data-theme="dark"] button[style*="color: rgb(255, 255, 255)"], html[data-style="monograph"][data-theme="dark"] button[style*="color: #fff"] { color: var(--text-on-accent) !important; }
+/* pole formulářů: jediné !important -- inline border z komponent by jinak nechal ohraničení pod 3:1 (WCAG 1.4.11) */
+html[data-style="monograph"] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea) { border-color: var(--mg-input) !important; background-color: var(--surface); box-shadow: none; }
+html[data-style="monograph"] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']), select, textarea):hover { border-color: var(--text-muted) !important; }
+html[data-style="monograph"] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']), select, textarea):focus { border-color: var(--text) !important; box-shadow: none; outline: 2px solid var(--accent); outline-offset: 1px; }
+html[data-style="monograph"] :is(input[type='checkbox'], input[type='radio'], input[type='range']) { accent-color: var(--accent); }
+html[data-style="monograph"] :is(.form-input, .form-textarea, .cs-input, .toolbar-select, .toolbar-search-input, .form-select) { font-size: 0.875rem; }
+html[data-style="monograph"] :is(.cs-badge, .role-badge, .account-chip, .ai-badge, .pi-tag, .assignee-badge, .active-filter-badge) { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+html[data-style="monograph"] :is(.cs-badge--accent, .cs-badge--success) { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+html[data-style="monograph"] .cs-badge--danger { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+html[data-style="monograph"] .cs-badge--warning { background: var(--warning-soft); border-color: transparent; color: var(--warning); }
+
+/* ── Board: sloupce oddělené svislou linkou, display hlavičky, karty s hranou ── */
+html[data-style="monograph"] .board-container { gap: 0; padding: 0 0 0.75rem; }
+html[data-style="monograph"] .column { background: transparent; border-left: 1px solid var(--border); border-radius: 0; padding: 0 0.25rem; }
+html[data-style="monograph"] .column:first-child { border-left: 0; }
+html[data-style="monograph"] .column.drag-over { background: var(--accent-soft); outline: 1px dashed var(--accent); outline-offset: -1px; }
+html[data-style="monograph"] .column-title { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+html[data-style="monograph"] .column-card-count { background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 500; }
+html[data-style="monograph"] .column-header-plus { color: var(--text); }
+html[data-style="monograph"] .card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 0; box-shadow: none; }
+html[data-style="monograph"] .card:hover { transform: none; box-shadow: none; border-color: var(--text-muted); border-left-color: var(--accent); }
+html[data-style="monograph"] .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html[data-style="monograph"] .card-title { font-weight: 600; letter-spacing: 0; }
+html[data-style="monograph"] .card-meta-tag { color: var(--accent); }
+html[data-style="monograph"] :is(.card-assignee-initials, .card-assignee-avatar, .member-avatar, .selected-assignee-badge .assignee-avatar) { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--text) !important; border-radius: 0 !important; font-family: var(--font-mono); font-weight: 500; }
+html[data-style="monograph"] .column-add-card-btn { border-radius: 0; border-color: var(--border-strong); background: transparent; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; }
+html[data-style="monograph"] .column-add-card-btn:hover { border-color: var(--text); color: var(--text); background: transparent; }
+
+/* ── Dialogy a šuplata: plochý povrch, linka místo stínu; <= 900px dialog = spodní list ── */
+html[data-style="monograph"] :is(.modal-overlay, .drawer-overlay, .mobile-menu-overlay) { backdrop-filter: none; -webkit-backdrop-filter: none; background-color: var(--overlay); }
+html[data-style="monograph"] :is(.modal-content, .drawer-content, .mobile-menu) { background-color: var(--bg-page); border: 1px solid var(--text); box-shadow: var(--shadow-lg); border-radius: 4px; }
+html[data-style="monograph"] .drawer-content.mode-right { border-width: 0 0 0 1px; border-radius: 0; }
+html[data-style="monograph"] .drawer-content.mode-left { border-width: 0 1px 0 0; border-radius: 0; }
+html[data-style="monograph"] .drawer-content.mode-focused { border-radius: 4px; box-shadow: var(--shadow-lg); }
+html[data-style="monograph"] :is(.modal-header, .drawer-header) { background: var(--bg-page); border-bottom: 1px solid var(--border); }
+html[data-style="monograph"] :is(.modal-body, .drawer-scroll-area) { background: var(--bg-page); }
+html[data-style="monograph"] .modal-footer { background: var(--mg-sunken); border-top: 1px solid var(--border); }
+html[data-style="monograph"] .modal-title { font-size: 1.5rem; line-height: 1; }
+html[data-style="monograph"] .drawer-title-input { font-family: var(--font-display); text-transform: uppercase; font-weight: 700; letter-spacing: 0; }
+html[data-style="monograph"] .drawer-meta-grid { background: transparent; border: 1px solid var(--border); border-radius: 0; }
+html[data-style="monograph"] :is(.drawer-mode-switch, .pi-mode-switch) { background: transparent; border: 1px solid var(--text); border-radius: 2px; padding: 0; gap: 0; }
+html[data-style="monograph"] :is(.pi-mode-btn, .drawer-mode-btn) { border-radius: 0; font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
+html[data-style="monograph"] :is(.pi-mode-btn, .drawer-mode-btn).active { background: var(--text); color: var(--bg-page); box-shadow: none; }
+html[data-style="monograph"] :is(.drawer-section-title, .pi-sec-label) { color: var(--text); border-top: 2px solid var(--mg-rule); padding-top: 0.6rem; }
+@media (max-width: 900px) {
+  html[data-style="monograph"] .modal-overlay { align-items: flex-end; justify-content: stretch; padding: 0; }
+  html[data-style="monograph"] .modal-content { width: 100%; max-width: none; height: auto; max-height: 88dvh; border-width: 1px 0 0; border-color: var(--text); border-radius: 0; }
+}
+
+/* ── Mobilní menu (hamburger) ─────────────────────── */
+html[data-style="monograph"] .mobile-menu { border-width: 0 0 0 1px; border-radius: 0; box-shadow: none; }
+html[data-style="monograph"] .mobile-menu-item { font-weight: 500; }
+html[data-style="monograph"] .mobile-menu-item.active { background: var(--surface); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+html[data-style="monograph"] .navbar-burger { color: var(--text); }
+
+/* ── Avatary: ohraničené čtvercové iniciály (reference .avatar). Inline kruhy s textem = avatary; prázdné kruhy (tečky, spinnery) zůstávají. ── */
+html[data-style="monograph"] [style*='border-radius: 50%']:not(:empty):not(.ai-spinner) { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--text) !important; border-radius: 0 !important; font-family: var(--font-mono); font-weight: 500; }
+
+/* ── Kalendář: pevných 7 sloupců, plochá mřížka ───── */
+html[data-style="monograph"] :is(.calendar-weekdays, .calendar-week) { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+html[data-style="monograph"] .calendar-weekday { background: var(--mg-sunken); }
+html[data-style="monograph"] .calendar-day { background: var(--surface); }
+html[data-style="monograph"] .calendar-day.is-outside { background: var(--surface-2); }
+html[data-style="monograph"] .calendar-month-title { font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
+html[data-style="monograph"] .calendar-card-chip { background: var(--surface-2); border: 0; border-left: 2px solid var(--mg-olive); border-radius: 0; }
+html[data-style="monograph"] :is(.calendar-nav-btn, .calendar-today-btn) { border-radius: 2px; background: transparent; border: 1px solid var(--text); color: var(--text); }
+html[data-style="monograph"] .board-view-switch-row { justify-content: flex-start; }
+
+/* ── Přihlášení / registrace: olivová identita + ruled formulář (reference .login) ── */
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) { background-color: var(--accent) !important; color: var(--text-on-accent) !important; }
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) > [aria-hidden='true'] { display: none; }
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) :is(div, span, p, h1) { color: var(--text-on-accent) !important; }
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) h1 { font-family: var(--font-display); font-size: clamp(3.5rem, 7.5vw, 7rem) !important; line-height: 0.95 !important; letter-spacing: -0.01em !important; text-transform: uppercase; font-weight: 700; }
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) :is(p, span) { font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.6875rem !important; }
+html[data-style="monograph"] :is(.login-left-panel, .register-left-panel) p { font-family: var(--font-sans); text-transform: none; letter-spacing: 0; font-size: 1rem !important; opacity: 0.88; }
+html[data-style="monograph"] .auth-card { background: transparent !important; border: 0 !important; border-top: 2px solid var(--mg-rule) !important; border-radius: 0 !important; box-shadow: none !important; padding: 1.5rem 0 0 !important; }
+html[data-style="monograph"] .auth-card h1, html[data-style="monograph"] .auth-card h2 { font-size: 2.25rem !important; line-height: 0.95 !important; }
+
+/* ≤480px: podnabídka se musí vejít (Porady = jediná cesta k poradám na telefonu) */
+@media (max-width: 480px) {
+  html[data-style="monograph"] :is(.mg-subnav a, .view-switch-btn) { padding: 0 10px; gap: 5px; letter-spacing: 0.05em; font-size: 0.625rem; }
+  html[data-style="monograph"] :is(.mg-subnav a, .view-switch-btn):first-child { padding-left: 0; }
+}

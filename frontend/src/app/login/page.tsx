@@ -200,6 +200,7 @@ export default function LoginPage() {
         }}
       >
         <div
+          className="auth-card"
           style={{
             width: '100%',
             maxWidth: '420px',

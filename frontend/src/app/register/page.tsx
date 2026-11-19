@@ -185,6 +185,7 @@ export default function RegisterPage() {
         }}
       >
         <div
+          className="auth-card"
           style={{
             width: '100%',
             maxWidth: '420px',

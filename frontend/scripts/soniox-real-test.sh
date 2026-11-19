@@ -32,10 +32,17 @@ if [ "${DRY_RUN:-}" = 1 ]; then
 else
   [ "${CONFIRM_REAL_SONIOX_JOBS:-}" = 1 ] || { echo "refusing: set CONFIRM_REAL_SONIOX_JOBS=1 to confirm ONE REAL Soniox job (or DRY_RUN=1)"; exit 2; }
   command -v cloudflared >/dev/null || { echo "cloudflared is required for the public signed-URL leg (brew install cloudflared)"; exit 2; }
-  REGION=${SONIOX_REGION:-us}
-  case "$REGION" in us) SBASE=https://api.soniox.com/v1;; eu) SBASE=https://api.eu.soniox.com/v1;; jp) SBASE=https://api.jp.soniox.com/v1;; in) SBASE=https://api.in.soniox.com/v1;; *) echo "SONIOX_REGION must be us|eu|jp|in"; exit 2;; esac
   printf 'Vlozte Soniox API klic (vstup je skryty) a stisknete Enter: '; IFS= read -rs KEY; echo
   [ -n "$KEY" ] || { echo "empty key, nothing done"; exit 1; }
+  # REGION: never assumed. A FREE read-only call (GET /v1/files?limit=1, nothing is billed, nothing is created) decides which regional host accepts this key.
+  # The key goes only to Soniox hosts, through curl's stdin config (never argv). SONIOX_REGION=<r> restricts the check to that one region.
+  host_of() { case "$1" in us) echo https://api.soniox.com/v1;; eu) echo https://api.eu.soniox.com/v1;; jp) echo https://api.jp.soniox.com/v1;; in) echo https://api.in.soniox.com/v1;; *) echo "SONIOX_REGION must be us|eu|jp|in" >&2; return 1;; esac; }
+  probe() { printf 'header = "Authorization: Bearer %s"\n' "$KEY" | curl -s -o /dev/null -w '%{http_code}' --max-time 20 -K - "$(host_of "$1")/files?limit=1"; }
+  ACCEPT=(); CODES=""
+  for r in ${SONIOX_REGION:-us eu jp in}; do host_of "$r" >/dev/null || exit 2; c=$(probe "$r"); CODES="$CODES $r=$c"; [ "$c" = 200 ] && ACCEPT+=("$r"); done
+  echo "key check (free GET /v1/files?limit=1):$CODES"
+  [ "${#ACCEPT[@]}" = 1 ] || { echo "region NOT determined (accepted by ${#ACCEPT[@]} regions): no job was sent. Set SONIOX_REGION explicitly if more than one accepts, or check the key's project region in the Soniox Console."; exit 1; }
+  REGION=${ACCEPT[0]}; SBASE=$(host_of "$REGION"); echo "Soniox region for this key: $REGION ($SBASE)"
   FAKE_ENV=""
   curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$GATE_PORT/x" && { echo "refusing: something already listens on $GATE_PORT"; exit 2; }
   node e2e/support/storage-gate.mjs "$GATE_PORT" "$E2E_SUPABASE_URL" >"$WORK/gate.log" 2>&1 & PIDS+=($!)

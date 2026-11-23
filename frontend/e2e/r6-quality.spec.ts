@@ -37,7 +37,8 @@ async function loginUi(page: Page) {
   await expect(page).toHaveURL(/\/$/);
 }
 const ai = (request: APIRequestContext, route: string, body: Record<string, unknown> = {}) =>
-  request.post(`/api/ai/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, ...body } });
+  // owner-only Intelligence routes live outside the firewalled /api/ai prefix
+  request.post(`/api/${/^(project-brief|meetings\/|chat)/.test(route) ? 'intelligence' : 'ai'}/${route}`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` }, data: { projectId: PROJECT, ...body } });
 const last = async (request: APIRequestContext) => (await request.get(`${FAKE}/__last`).then((r) => r.json())) as { system: string; text: string };
 const calls = async (request: APIRequestContext) => (await request.get(`${FAKE}/__stats`).then((r) => r.json())).calls as number;
 

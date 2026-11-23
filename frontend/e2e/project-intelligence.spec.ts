@@ -123,7 +123,7 @@ test('brief generation: evidence-backed interpretation, verified facts separate,
   // stored: provenance, ledger, deterministic facts equal the overview, meeting conclusion cited as a source
   const runs = (await rest(request, owner.token, 'intelligence_runs?select=kind,status,prompt_version,validator_version,ai_request_id,rejected_count,output&kind=eq.project_brief')).json;
   expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({ status: 'succeeded', prompt_version: 'project-brief-p1', validator_version: 'cs-evidence-v2', rejected_count: 1 });
+  expect(runs[0]).toMatchObject({ status: 'succeeded', prompt_version: 'project-brief-p1', validator_version: 'cs-evidence-v3', rejected_count: 1 });
   expect(runs[0].ai_request_id).toBeTruthy();
   expect(runs[0].output.facts.score).toBe(84);
   expect(runs[0].output.sources.some((s: { kind: string; meetingId: string | null }) => s.kind === 'item' && s.meetingId === meetingId)).toBe(true);

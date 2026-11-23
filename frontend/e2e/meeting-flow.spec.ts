@@ -146,7 +146,7 @@ test('2. a person names the speakers; analysis proposes only evidence-backed ite
     expect(ev.find((i) => i.text === gone), gone).toBeUndefined();
   }
   const run1 = (await rest(request, owner.token, `intelligence_runs?select=rejected_count,validator_version&meeting_id=eq.${meetingId}`)).json[0];
-  expect(run1.validator_version).toBe('cs-evidence-v2');
+  expect(run1.validator_version).toBe('cs-evidence-v3');
   expect(run1.rejected_count).toBeGreaterThanOrEqual(3);
   // INVENTED OWNER: the hallucinated "Karel Dvořák" never reaches the UI
   const cert = item(page, 'Zkontrolovat certifikát.');

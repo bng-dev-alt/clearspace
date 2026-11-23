@@ -111,6 +111,8 @@ test('default board is seeded in the DATABASE with project-scoped ids, per user,
 });
 
 test('AI gateway at runtime: 401 without/with bad credentials, 415 wrong type, 403 foreign project, ledger + rate limit', async ({ request }) => {
+  // This check needs an app WITHOUT a Gemini key (fail-closed 503); the fake-provider harness has one, and owner-access.spec covers 401/403 there.
+  test.skip(!!process.env.E2E_FAKE_GEMINI_URL, 'needs an app without a Gemini key');
   const A = await apiSignUp(request, `ai-a-${run}@example.test`);
   const B = await apiSignUp(request, `ai-b-${run}@example.test`);
   const proj = `ai-p-${run}`;

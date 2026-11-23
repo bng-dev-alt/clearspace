@@ -60,3 +60,29 @@ describe('dev login fails closed', () => {
     expect(isLoopbackHost(null)).toBe(false);
   });
 });
+
+describe('dev AUTO-login: extra server guards', () => {
+  const AUTO_ENV: DevLoginEnv = { ...GOOD_ENV, autoEnabled: '1', supabaseUrl: 'http://127.0.0.1:55521' };
+  const auto = (extra: Record<string, string> = {}) => goodHeaders({ 'x-clearspace-dev-login': 'auto', ...extra });
+  it('allowed only against a loopback Supabase with the auto flag', () => {
+    expect(devLoginRefusal(AUTO_ENV, auto())).toBeNull();
+  });
+  it.each([
+    ['hosted Supabase', { ...AUTO_ENV, supabaseUrl: 'https://twjlnsxjtuntujarwner.supabase.co' }],
+    ['LAN Supabase', { ...AUTO_ENV, supabaseUrl: 'http://192.168.1.20:55521' }],
+    ['no Supabase URL', { ...AUTO_ENV, supabaseUrl: undefined }],
+    ['auto flag missing', { ...AUTO_ENV, autoEnabled: undefined }],
+    ['production build', { ...AUTO_ENV, nodeEnv: 'production' }],
+    ['Vercel (staging or production)', { ...AUTO_ENV, vercel: 'preview' }],
+    ['dev login disabled', { ...AUTO_ENV, enabled: undefined }],
+  ])('refuses: %s', (_n, env) => {
+    expect(devLoginRefusal(env as DevLoginEnv, auto())).not.toBeNull();
+  });
+  it.each([
+    ['LAN host', { host: '192.168.1.5:3421' }],
+    ['tunnel', { 'cf-ray': 'x' }],
+    ['foreign origin', { origin: 'https://evil.example' }],
+  ])('refuses non-local requests: %s', (_n, h) => {
+    expect(devLoginRefusal(AUTO_ENV, auto(h))).not.toBeNull();
+  });
+});

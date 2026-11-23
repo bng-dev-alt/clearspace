@@ -19,7 +19,7 @@ export default function DevLoginButton({ onError }: { onError: (message: string 
     () => process.env.NEXT_PUBLIC_DEV_LOGIN === '1' && hasSupabaseConfig && isLoopbackHost(window.location.host),
     () => false,
   );
-  if (!visible) return null;
+  const backend = useSyncExternalStore(() => () => {}, authBackendLabel, () => '');
 
   const run = async () => {
     onError(null);
@@ -39,6 +39,13 @@ export default function DevLoginButton({ onError }: { onError: (message: string 
   };
 
   return (
+    <>
+      {backend && (
+        <p data-testid="auth-backend" role="note" style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--gray-text)' }}>
+          {backend}
+        </p>
+      )}
+      {visible && (
     <button
       type="button"
       data-testid="dev-login-btn"
@@ -48,5 +55,22 @@ export default function DevLoginButton({ onError }: { onError: (message: string 
     >
       Dev přihlášení (jen lokálně)
     </button>
+      )}
+    </>
   );
+}
+
+/**
+ * Which Auth backend this dev server talks to, so nobody types a real password into an isolated instance (docs/LOCAL_DEV.md).
+ * Dev build only (this module is never part of a production bundle).
+ */
+export function authBackendLabel(): string {
+  if (process.env.NEXT_PUBLIC_FORCE_DEMO === '1' || !hasSupabaseConfig) {
+    return 'Demo režim: přihlášení jen přes testovací účty uložené v tomto prohlížeči, ne přes skutečný účet.';
+  }
+  let host = '';
+  try { host = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').host; } catch { /* ignore */ }
+  if (isLoopbackHost(host)) return `Lokální izolovaná Supabase (${host}): skutečné účty zde neexistují. Použijte Dev přihlášení.`;
+  const ref = /^([a-z0-9]{20})\.supabase\.co$/.exec(host)?.[1];
+  return ref ? `Auth: hostovaný projekt ${ref}.` : `Auth: ${host}.`;
 }

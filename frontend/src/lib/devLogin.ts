@@ -11,6 +11,10 @@ export interface DevLoginEnv {
   vercel?: string;
   email?: string;
   password?: string;
+  /** CLEARSPACE_DEV_AUTO_LOGIN: must be '1' for the automatic (no-click) variant. */
+  autoEnabled?: string;
+  /** NEXT_PUBLIC_SUPABASE_URL: the automatic variant only ever signs in against an isolated LOOPBACK Auth instance. */
+  supabaseUrl?: string;
 }
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
@@ -51,6 +55,15 @@ export function devLoginRefusal(env: DevLoginEnv, headers: Headers): string | nu
   }
   const site = headers.get('sec-fetch-site');
   if (site && site !== 'same-origin' && site !== 'none') return 'cross-site request';
-  if (headers.get('x-clearspace-dev-login') !== '1') return 'missing marker header';
+  const marker = headers.get('x-clearspace-dev-login');
+  if (marker === 'auto') {
+    // Auto-login (no click): extra guards on top of everything above. Hosted / production Auth is never auto-signed-in.
+    if (env.autoEnabled !== '1') return 'CLEARSPACE_DEV_AUTO_LOGIN is not 1';
+    let sbHost = '';
+    try { sbHost = new URL(env.supabaseUrl ?? '').host; } catch { return 'no Supabase URL'; }
+    if (!isLoopbackHost(sbHost)) return 'Supabase Auth is not a local loopback instance';
+    return null;
+  }
+  if (marker !== '1') return 'missing marker header';
   return null;
 }

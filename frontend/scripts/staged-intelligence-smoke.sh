@@ -5,6 +5,7 @@
 # Creates 2 DISPOSABLE confirmed accounts through the GoTrue admin API (service-role key from the Supabase CLI into a variable), drives the real UI (login, board,
 # Porady, create a meeting from pasted text, "Analyzovat" and the project brief must answer with the AI-disabled message after a firewall 403), checks RLS over HTTP,
 # then DELETES the accounts. The deletion of an account that created a meeting is itself the regression check of migration 0900: it must answer 200.
+# (baseline projects=2: the dev account's and the owner's own default project; raise it only for a real new account.)
 # Afterwards the leftovers are counted with the DB password from the macOS Keychain; anything left = exit 1.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -31,7 +32,7 @@ cleanup() {
   for id in "${IDS[@]:-}"; do [ -n "$id" ] || continue; c=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$URL/auth/v1/admin/users/$id" -H "apikey: $SRK" -H "Authorization: Bearer $SRK"); echo "  delete ${id:0:8} -> $c"; [ "$c" = 200 ] || DEL_BAD=1; done
   L=$(PGPASSWORD=$(security find-generic-password -s "ClearSpace V1 – Supabase Database" -a "postgres.$REF" -w 2>/dev/null) docker run --rm -e PGPASSWORD public.ecr.aws/supabase/postgres:17.6.1.147 psql "host=aws-0-eu-west-1.pooler.supabase.com port=5432 user=postgres.$REF dbname=postgres sslmode=require" -X -At -c "select 'users='||(select count(*) from auth.users where email like 'cs-p5-%@example.test')||' projects='||(select count(*) from public.projects)||' meetings='||(select count(*) from public.meetings)||' transcripts='||(select count(*) from public.meeting_transcripts)||' runs='||(select count(*) from public.intelligence_runs)||' items='||(select count(*) from public.intelligence_items)||' ai_requests='||(select count(*) from public.ai_requests)||' stt_jobs='||(select count(*) from public.stt_jobs)")
   echo "leftovers: $L"
-  case "$L" in "users=0 projects=1 meetings=0 transcripts=0 runs=0 items=0 ai_requests=0 stt_jobs=0") ;; *) DEL_BAD=1;; esac
+  case "$L" in "users=0 projects=2 meetings=0 transcripts=0 runs=0 items=0 ai_requests=0 stt_jobs=0") ;; *) DEL_BAD=1;; esac
   [ "$DEL_BAD" = 0 ] && echo "CLEANUP OK: accounts deleted (HTTP 200, including the one that created a meeting) and nothing left" || echo "CLEANUP PROBLEM: see above (exit 1)"
 }
 trap cleanup EXIT

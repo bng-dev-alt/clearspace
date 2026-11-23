@@ -20,7 +20,8 @@ const tok = async (email) => (await api('/auth/v1/token?grant_type=password', { 
   await page.route((u) => u.origin === origin, (route) => route.continue({ headers: { ...route.request().headers(), 'x-vercel-protection-bypass': BYPASS } }));
   const hosts = new Set(); page.on('request', (r) => { try { hosts.add(new URL(r.url()).hostname); } catch {} });
   const aiReq = []; page.on('request', (r) => { if (/\/api\/(ai|intelligence)\//.test(r.url())) aiReq.push(new URL(r.url()).pathname); });
-  const aiStatus = []; page.on('response', (r) => { if (/\/api\/(ai|intelligence)\//.test(r.url())) aiStatus.push(r.status()); });
+  const aiStatus = []; const accessStatus = []; // /api/intelligence/access is the capability check (200 for any signed-in user, answers {aiOwner:false} for a non-owner): not a provider route
+page.on('response', (r) => { if (/\/api\/intelligence\/access/.test(r.url())) accessStatus.push(r.status()); else if (/\/api\/(ai|intelligence)\//.test(r.url())) aiStatus.push(r.status()); });
   await page.goto(`${BASE}/login`);
   await page.getByPlaceholder('jmeno@firma.cz').fill(A); await page.locator('input[type="password"]').first().fill(PW);
   await page.getByRole('button', { name: 'Přihlásit se' }).click(); await page.waitForURL(/\/$/); ok('login (UI) on staged URL', true);
@@ -37,7 +38,8 @@ const tok = async (email) => (await api('/auth/v1/token?grant_type=password', { 
   await page.getByTestId('meeting-analyze').click(); await page.getByTestId('meeting-error').waitFor();
   const msg = (await page.getByTestId('meeting-error').textContent()) ?? ''; ok('Analyzovat shows the clear AI-disabled message', /AI funkce jsou v této instalaci zatím vypnuté|AI funkce jsou zatím dostupné jen vlastníkovi/.test(msg), msg);
   ok('analysis request answered 403 (firewall, or owner-only gate with the disposable non-owner account)', aiStatus.length > 0 && aiStatus.every((s) => s === 403), `paths=${aiReq.join(',')} statuses=${aiStatus.join(',')}`);
-  ok('audio panel is NOT shown (audio disabled)', (await page.getByTestId('audio-panel').count()) === 0);
+  ok('capability check answered 200 for the non-owner (and the audio panel below stays hidden)', accessStatus.length > 0 && accessStatus.every((s) => s === 200), `statuses=${accessStatus.join(',')}`);
+  ok('audio panel is NOT shown (non-owner / audio disabled)', (await page.getByTestId('audio-panel').count()) === 0);
   aiStatus.length = 0; aiReq.length = 0;
   await page.goto(`${BASE}/projects/${pid}`); await page.locator('.app-container[data-hydrated="true"]').waitFor();
   await page.getByTestId('project-intelligence-btn').click(); await page.getByTestId('project-intelligence-drawer').waitFor();

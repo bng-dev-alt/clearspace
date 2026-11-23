@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Sora, Fraunces } from "next/font/google";
 import "./globals.css";
 import "./design-system.css";
+import "./monograph.css"; // opt-in styl Monograph: celé pod html[data-style="monograph"], jinak inertní
 import { AuthProvider } from "../contexts/AuthContext";
 import { ThemeProvider, themeNoFlashScript } from "../contexts/ThemeContext";
 import ProtectedRoute from "../components/auth/ProtectedRoute";

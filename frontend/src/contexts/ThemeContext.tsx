@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import { MONOGRAPH_ENABLED, STYLE_STORAGE_KEY, resolveDesignStyle, type DesignStyle } from '../lib/designStyle';
 
 export type ThemeChoice = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -11,6 +12,9 @@ interface ThemeContextType {
   theme: ThemeChoice;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: ThemeChoice) => void;
+  /** Designový styl (opt-in Monograph, viz lib/designStyle.ts). Bez příznaku je vždy 'existing'. */
+  designStyle: DesignStyle;
+  setDesignStyle: (style: DesignStyle) => void;
 }
 
 // Bezpečná výchozí hodnota -> useTheme funguje i bez provideru (např. v testech,
@@ -19,6 +23,8 @@ const ThemeContext = createContext<ThemeContextType>({
   theme: 'system',
   resolvedTheme: 'light',
   setTheme: () => {},
+  designStyle: 'existing',
+  setDesignStyle: () => {},
 });
 
 function systemPrefersDark(): boolean {
@@ -42,11 +48,19 @@ function apply(resolved: ResolvedTheme): void {
   });
 }
 
+function applyStyle(style: DesignStyle): void {
+  if (typeof document === 'undefined') return;
+  const el = document.documentElement;
+  if (style === 'monograph') el.setAttribute('data-style', 'monograph');
+  else el.removeAttribute('data-style');
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Inicializace bez čtení localStorage (SSR-safe); skutečná hodnota se
   // dorovná v useEffect. Bliknutí řeší no-flash skript v <head>.
   const [theme, setThemeState] = useState<ThemeChoice>('system');
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
+  const [designStyle, setDesignStyleState] = useState<DesignStyle>('existing');
 
   // Načíst uloženou preferenci při startu
   useEffect(() => {
@@ -58,6 +72,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(stored);
     setResolvedTheme(res);
     apply(res);
+    if (MONOGRAPH_ENABLED) {
+      const style = resolveDesignStyle(localStorage.getItem(STYLE_STORAGE_KEY));
+      setDesignStyleState(style);
+      applyStyle(style);
+    }
   }, []);
 
   // Reagovat na změnu systémového nastavení, pokud je zvoleno 'system'
@@ -81,8 +100,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     apply(res);
   }, []);
 
+  const setDesignStyle = useCallback((next: DesignStyle) => {
+    const style = resolveDesignStyle(next);
+    setDesignStyleState(style);
+    localStorage.setItem(STYLE_STORAGE_KEY, style);
+    applyStyle(style);
+  }, []);
+
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, designStyle, setDesignStyle }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -92,5 +118,10 @@ export function useTheme() {
   return useContext(ThemeContext);
 }
 
-/** Inline skript pro <head>, který nastaví data-theme před prvním vykreslením. */
-export const themeNoFlashScript = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+/**
+ * Inline skript pro <head>, který nastaví data-theme (a jen při zapnutém příznaku i data-style) před prvním vykreslením.
+ * Bez NEXT_PUBLIC_ENABLE_MONOGRAPH=1 je skript znak po znaku stejný jako dřív.
+ */
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+const STYLE_SCRIPT = `(function(){try{if(localStorage.getItem('${STYLE_STORAGE_KEY}')==='monograph')document.documentElement.setAttribute('data-style','monograph');}catch(e){}})();`;
+export const themeNoFlashScript = MONOGRAPH_ENABLED ? THEME_SCRIPT + STYLE_SCRIPT : THEME_SCRIPT;

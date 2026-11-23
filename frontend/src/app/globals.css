@@ -3562,3 +3562,6 @@ body {
 
 /* Na mobilu je celý .navbar-right skrytý -- hledání proto žije
    v hamburger menu (sekce Akce). */
+
+/* Přepínač vzhledu (jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=1): textová tlačítka ve stejném segmentovaném ovladači jako motiv. */
+.style-toggle .theme-toggle-btn { width: auto; padding: 0 0.6rem; font-size: 0.7rem; font-weight: 600; font-family: var(--font-sans); }

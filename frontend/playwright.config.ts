@@ -17,6 +17,10 @@ export default defineConfig({
   use: {
     baseURL: baseUrl,
     trace: 'on-first-retry',
+    // E2E_STYLE=monograph: run a spec with the opt-in Monograph style selected (the app under test needs NEXT_PUBLIC_ENABLE_MONOGRAPH=1).
+    ...(process.env.E2E_STYLE === 'monograph'
+      ? { storageState: { cookies: [], origins: [{ origin: new URL(baseUrl).origin, localStorage: [{ name: 'clearspace-style', value: 'monograph' }] }] } }
+      : {}),
     // Optional: use an already-installed Chromium whose revision differs from the one this Playwright wants.
     ...(process.env.PW_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH } } : {}),
   },

@@ -12,3 +12,6 @@ Thumbs.db
 # Dependencies / build (also covered in frontend/.gitignore)
 **/node_modules/
 **/.next/
+
+# Monograph visual QA: full screenshot sets stay local (curated PNGs live in docs/monograph/screens)
+docs/monograph/shots-full/

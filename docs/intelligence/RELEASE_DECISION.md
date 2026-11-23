@@ -7,7 +7,7 @@
 | **Production (live)** | `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi` | `25ffce6` | `clearspace-ai.vercel.app` | unchanged by this work |
 | **RC1 Intelligence** | `dpl_HHh8yPGmyFvQBR73NeanPyeGvxNh` (`clearspace-1cvztwamq-…`) | `0ab25df` (`feature/intelligence-v2`) | none, protected | owner-only Meeting + Project Intelligence, classic design; Monograph flag NOT set |
 | **RC2 Monograph** | `dpl_G6U5cTfXVutSZgrN3aE3djrVhg12` (`clearspace-3zdtuvsmm-…`) | `a626874` (`release/rc2-monograph`) | none, protected | RC1 + Monograph, built with `NEXT_PUBLIC_ENABLE_MONOGRAPH=1` (per-deployment `--build-env`; project env unchanged). **Monograph is the default** for anyone without an explicit choice; "Stávající" (Classic) stays selectable and an explicit choice is respected; Light/Dark/System independent |
-| **RC3 (AI routes fix)** | `dpl_AskDZ79XPhxZf8yQ8ZRvEfUvR1Yi` (`clearspace-q1hix45ds-…`) | `f45c745` (`release/rc2-monograph`) | none, protected | RC2 + the existing AI features (Improve, Daily Brief, Project Manager, Generate Project/Backlog/Sprint, Risk, Capacity, Resource AI, Voice, Chat) call owner-gated `/api/intelligence/*` instead of the firewall-closed `/api/ai/*` (production RC2 `a626874` showed "AI funkce jsou v této instalaci zatím vypnuté") |
+| **RC3 (AI routes fix), PROMOTED to production 2026-11-23** | `dpl_AskDZ79XPhxZf8yQ8ZRvEfUvR1Yi` (`clearspace-q1hix45ds-…`) | `f45c745` (`release/rc2-monograph`) | none, protected | RC2 + the existing AI features (Improve, Daily Brief, Project Manager, Generate Project/Backlog/Sprint, Risk, Capacity, Resource AI, Voice, Chat) call owner-gated `/api/intelligence/*` instead of the firewall-closed `/api/ai/*` (production RC2 `a626874` showed "AI funkce jsou v této instalaci zatím vypnuté") |
 
 Later commits on both branches are tooling/docs only (`fdbd86f` idempotent project-member sync is in RC2 `c686c1a` and on `feature/intelligence-v2`; RC1 `0ab25df` predates it: the bug only shows a false "save failed" banner, see "Known").
 `origin/main` (`5c80dcf`) → RC1 → RC2 is a fast-forward chain. No hosted schema change is needed for either RC (no migration since production).
@@ -46,3 +46,7 @@ Approved meeting results, cards and knowledge live in the hosted database and ar
 - Project Intelligence drawer at 768 px: the model selector wraps to 3 lines (cosmetic).
 - RC1 `0ab25df` can show a false "Nepodařilo se uložit… (uložení členů projektu)" banner on a brand-new project's first open (fixed in `fdbd86f`, included in RC2). Promote RC2, or redeploy RC1 from `fdbd86f`, to avoid it.
 - Not run: real Soniox/Gemini (owner's earlier real run stands: validator/prompt changes affect only NEW analyses), VoiceOver, Safari/Firefox engines, hosted migrations (none needed).
+
+## Production now
+
+`dpl_AskDZ79XPhxZf8yQ8ZRvEfUvR1Yi` @ `f45c745` (RC3). Rollbacks: RC2 `dpl_G6U5cTfXVutSZgrN3aE3djrVhg12`, original `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi`. Git main still `5c80dcf` (sync = fast-forward `git push origin <commit>:main`, owner's go).

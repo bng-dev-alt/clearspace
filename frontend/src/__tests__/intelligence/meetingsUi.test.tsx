@@ -188,6 +188,12 @@ describe('ItemCard: evidence, hints and approval', () => {
     expect(target.details).toContain('Zmíněno v poradě: Klára');
     expect(target.details).toContain('datum porady nebo rozhodnutí');
   });
+  test('the due text is judged in the whole cited segment, not only the short quote', () => {
+    renderItem(item({ dueText: '25. listopadu', evidence: [{ ref: 'segment:seg-1', quote: 'připraví migraci databáze', quoteFound: true }] }), {
+      citedText: 'Honza připraví migraci databáze do 25. listopadu, to slibuji.',
+    });
+    expect(screen.getByTestId('due-hint')).toHaveAttribute('data-due-kind', 'deadline');
+  });
   test('an owner-edited due date stays authoritative (pre-filled from the item, no suggestion overrides it)', () => {
     renderItem(item({ dueText: 'do pátku', dueDate: '2026-12-09' }), { meetingDay: '2026-11-18' });
     fireEvent.click(screen.getByTestId('item-create'));

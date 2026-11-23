@@ -19,6 +19,8 @@ export interface ItemCardProps {
   meetingDay?: string;
   /** Položka pochází z dřívější analýzy (schválený závěr přežil novou analýzu). */
   fromEarlierRun?: boolean;
+  /** Plný text citovaných segmentů (termín z textu se posuzuje v celé větě, ne jen v krátké citaci). */
+  citedText?: string;
   onJump: (segmentId: string) => void;
   onChanged: (message?: string) => void;
 }
@@ -27,7 +29,7 @@ export interface ItemCardProps {
  * Jedna navržená položka s důkazy a rozhodnutím člověka. Nic se do projektu nezapíše, dokud uživatel
  * nepotvrdí konkrétní akci (vytvořit kartu / propojit / zamítnout). Opakované potvrzení je bezpečné (idempotentní RPC).
  */
-export default function ItemCard({ item, columns, cards, members, meetingDay, fromEarlierRun, onJump, onChanged }: ItemCardProps) {
+export default function ItemCard({ item, columns, cards, members, meetingDay, fromEarlierRun, citedText, onJump, onChanged }: ItemCardProps) {
   const [mode, setMode] = useState<null | 'create' | 'link'>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,7 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
   const [addComment, setAddComment] = useState(true);
 
   const suggestedMember = useMemo(() => suggestAssignee(item.ownerText, members), [item.ownerText, members]);
-  const quotes = item.evidence.map((e) => e.quote ?? '').join(' ');
-  const dueKind = classifyDue(item.dueText, quotes);
+  const dueKind = classifyDue(item.dueText, citedText || item.evidence.map((e) => e.quote ?? '').join(' '));
   // Datum porady/rozhodnutí nebo milník se jako termín úkolu nenabízí (nevymýšlíme termíny).
   const dueSuggestion = useMemo(
     () => (meetingDay && (dueKind === 'deadline' || dueKind === 'unknown') ? suggestDueDate(item.dueText, meetingDay) : null),

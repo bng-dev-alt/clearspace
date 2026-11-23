@@ -88,23 +88,16 @@ export const geminiProvider: AiProvider = {
       }
     };
 
-    // Přechodné chyby (timeout, API deadline, přetížený model 503/UNAVAILABLE)
-    // se často zhojí samy -> stojí za jeden automatický retry.
+    // Jediný automatický retry: model výslovně ODMÍTL požadavek (503/UNAVAILABLE/přetížen), takže se nic nezpracovalo ani neúčtovalo.
+    // Timeout/DEADLINE/504 je NEJISTÝ výsledek (placená generace může doběhnout): neopakuje se, chybu vidí uživatel a rozhodne sám.
     const isTransient = (e: unknown) => {
       const m = (e as Error)?.message || '';
-      return (
-        m === 'GEMINI_TIMEOUT' ||
-        m.includes('DEADLINE_EXCEEDED') ||
-        m.includes('504') ||
-        m.includes('UNAVAILABLE') ||
-        m.includes('503') ||
-        m.includes('overloaded') ||
-        m.includes('high demand')
-      );
+      if (m === 'GEMINI_TIMEOUT' || m.includes('DEADLINE_EXCEEDED') || m.includes('504')) return false;
+      return m.includes('UNAVAILABLE') || m.includes('503') || m.includes('overloaded') || m.includes('high demand');
     };
 
     try {
-      // -> jeden automatický retry na přechodnou chybu.
+      // -> jeden automatický retry jen na výslovné odmítnutí (viz výše).
       let response;
       try {
         response = await attempt();

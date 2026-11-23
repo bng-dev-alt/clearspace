@@ -3,7 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AiGatewayError } from '../ai/errors';
 import { authenticate, errorResponse, readJsonBody, requireProjectId } from '../ai/gateway';
 import { SonioxClient, SonioxError, sonioxConfigFromEnv } from './soniox';
-import { sttEnabled, sttLimitsFromEnv, sttServerSecret, toGatewayError, type SttLimits } from './pipeline';
+import { policyFor } from '../ai/policy';
+import { sttEnabled, sttServerSecret, toGatewayError, type SttLimits } from './pipeline';
 
 /**
  * Společný obal STT rout (R5): feature flag -> JSON tělo -> autentizace (JWT, RLS klient) -> projekt -> handler.
@@ -46,7 +47,8 @@ async function common<I>(req: NextRequest, parse: (b: Record<string, unknown>) =
   const projectId = requireProjectId(body);
   const meetingId = typeof body.meetingId === 'string' && UUID.test(body.meetingId) ? body.meetingId.toLowerCase() : null;
   if (needsMeeting && !meetingId) throw new AiGatewayError('bad_request', 'Neplatný identifikátor porady.');
-  return { db: auth.db, projectId, meetingId: meetingId ?? '', input: parse(body), limits: sttLimitsFromEnv() };
+  const policy = policyFor(auth.tier ?? 'dev');
+  return { db: auth.db, projectId, meetingId: meetingId ?? '', input: parse(body), limits: policy.stt as SttLimits, sttAllowed: policy.stt.allowed };
 }
 
 /** Routy, které PŘEPISUJÍ (transcribe, sync): vyžadují příznak, serverové tajemství i klíč poskytovatele. */
@@ -59,6 +61,7 @@ export async function runStt<I = Record<string, never>>(
   return respond(async () => {
     if (!sttEnabled()) throw new AiGatewayError('stt_disabled', 'Přepis zvuku je v této instalaci zatím vypnutý.');
     const c = await common(req, parse, opts.needsMeeting);
+    if (!c.sttAllowed) throw new AiGatewayError('forbidden', 'Přepis zvuku není pro tento účet dostupný.');
     const secret = sttServerSecret();
     const soniox = new SonioxClient(sonioxConfigFromEnv());
     return handler({ ...c, soniox, secret });

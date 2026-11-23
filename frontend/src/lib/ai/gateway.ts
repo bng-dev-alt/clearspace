@@ -5,7 +5,8 @@ import { Column } from '../../types/kanban';
 import { loadBoard } from './board';
 import { buildProjectContext, type ContextPurpose, type ProjectContext } from '../intelligence/context';
 import { AiGatewayError, AiProviderError } from './errors';
-import { aiAccessAllowed } from './owner';
+import { aiTier, type AiTier } from './owner';
+import { policyFor, type AiPolicy } from './policy';
 
 /**
  * AI gateway -- jediná cesta k Gemini.
@@ -85,22 +86,6 @@ export interface AiFeature<I> {
   finalize?(ctx: AiFinalizeContext<I>): Promise<Record<string, unknown>>;
 }
 
-// --- konfigurace (z env, s bezpečnými defaulty) ---
-
-function envInt(name: string, fallback: number, min: number, max: number): number {
-  const raw = process.env[name];
-  const n = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
-}
-
-export function aiLimits() {
-  return {
-    perMinute: envInt('AI_RATE_PER_USER_PER_MINUTE', 10, 1, 1000),
-    globalPerMinute: envInt('AI_RATE_GLOBAL_PER_MINUTE', 60, 1, 100000),
-    dailyTokenBudget: envInt('AI_DAILY_TOKEN_BUDGET_PER_USER', 200_000, 1_000, 100_000_000),
-  };
-}
-
 const DEFAULT_MAX_BODY = 256 * 1024;
 
 // --- kroky ---
@@ -132,6 +117,8 @@ export async function readJsonBody(req: NextRequest, maxBytes: number): Promise<
 
 export interface Authenticated {
   user: User;
+  /** Úroveň rozhodnutá na serveru z ověřeného user.id (viz owner.ts / policy.ts); null jen u `gate:false` (dotaz "mám přístup?"). */
+  tier: AiTier | null;
   /** Klient s identitou volajícího -- všechny dotazy procházejí RLS. */
   db: SupabaseClient;
 }
@@ -165,19 +152,20 @@ export async function authenticate(req: NextRequest, opts: { gate?: boolean } = 
   if (error || !data.user) {
     throw new AiGatewayError('unauthenticated', 'Přihlášení vypršelo nebo je neplatné. Přihlaste se prosím znovu.');
   }
-  if (opts.gate !== false && !aiAccessAllowed(data.user.id)) {
+  const tier = aiTier(data.user.id);
+  if (opts.gate !== false && !tier) {
     throw new AiGatewayError('ai_owner_only', 'AI funkce jsou zatím dostupné jen vlastníkovi instalace.');
   }
-  return { user: data.user, db };
+  return { user: data.user, tier, db };
 }
 
 async function reserve(
   db: SupabaseClient,
   feature: string,
   projectId: string | null,
-  reservedTokens: number
+  reservedTokens: number,
+  limits: AiPolicy
 ): Promise<string> {
-  const limits = aiLimits();
   const { data, error } = await db.rpc('ai_reserve', {
     p_feature: feature,
     p_project_id: projectId,
@@ -285,6 +273,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
   try {
     const body = await readJsonBody(req, feature.maxBodyBytes ?? DEFAULT_MAX_BODY);
     auth = await authenticate(req);
+    const policy = policyFor(auth.tier ?? 'dev'); // tier je po authenticate() (gate zapnutý) vždy daný; 'dev' jen pro typ
 
     const input = feature.parse(body);
     const projectId = feature.needsProject ? requireProjectId(body) : null;
@@ -317,7 +306,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
     if (pre) {
       // Deterministický výsledek nestojí tokeny, ale NENÍ zadarmo bez omezení: bere se z per-minutového limitu a zapíše se do
       // ledgeru (model 'deterministic', 0 tokenů), aby se opakovanými voláními nedala donekonečna zatěžovat DB.
-      const shortcutId = await reserve(auth.db, feature.name, projectId, 0);
+      const shortcutId = await reserve(auth.db, feature.name, projectId, 0, policy);
       await complete(auth.db, shortcutId, 'succeeded', { model: 'deterministic', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, startedAt });
       return NextResponse.json(
         { content: JSON.stringify(pre), model: 'deterministic', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, parsed: pre, deterministic: true },
@@ -333,7 +322,7 @@ export async function runAi<I>(req: NextRequest, feature: AiFeature<I>): Promise
 
     // Odhad: ~3 znaky na token vstupu + strop výstupu dané featury.
     const reserved = estimateReservation(JSON.stringify(body).length, contextChars, feature.maxOutputTokens);
-    requestId = await reserve(auth.db, feature.name, projectId, reserved);
+    requestId = await reserve(auth.db, feature.name, projectId, reserved, policy);
 
     let response: AiResponse;
     try {

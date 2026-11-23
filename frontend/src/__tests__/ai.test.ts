@@ -109,30 +109,15 @@ describe('AI Foundation Architecture Unit & Integration Tests', () => {
       expect(res.usage?.totalTokens).toBe(25);
     });
 
-    test('generateCompletion retries once on a transient timeout and succeeds', async () => {
+    test('a timeout is an UNCERTAIN paid request: never retried automatically', async () => {
       process.env.GEMINI_API_KEY = 'valid-key';
-      mockGenerateContent
-        .mockRejectedValueOnce(new Error('DEADLINE_EXCEEDED'))
-        .mockResolvedValueOnce({
-          text: 'Po retry OK',
-          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 2, totalTokenCount: 3 },
-        });
-
-      const res = await geminiProvider.generateCompletion([{ role: 'user', content: 'test' }], { model: 'gemini-3.5-flash' });
-      expect(res.content).toBe('Po retry OK');
-      expect(mockGenerateContent).toHaveBeenCalledTimes(2);
-    });
-
-    test('generateCompletion gives up (GEMINI_TIMEOUT) after one retry on repeated timeout', async () => {
-      process.env.GEMINI_API_KEY = 'valid-key';
-      mockGenerateContent
-        .mockRejectedValueOnce(new Error('DEADLINE_EXCEEDED'))
-        .mockRejectedValueOnce(new Error('DEADLINE_EXCEEDED'));
+      mockGenerateContent.mockRejectedValue(new Error('DEADLINE_EXCEEDED'));
 
       await expect(
         geminiProvider.generateCompletion([{ role: 'user', content: 'test' }], { model: 'gemini-3.5-flash' })
       ).rejects.toThrow('GEMINI_TIMEOUT');
-      expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+      mockGenerateContent.mockReset();
     });
 
     test('generateCompletion retries on overloaded model (503/UNAVAILABLE) then succeeds', async () => {

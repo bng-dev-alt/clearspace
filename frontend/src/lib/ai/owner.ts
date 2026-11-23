@@ -13,8 +13,26 @@ export function aiOwnerIds(env: Env = process.env): Set<string> {
   return new Set((env.AI_OWNER_USER_IDS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => UUID.test(s)));
 }
 
-export function aiAccessAllowed(userId: string, env: Env = process.env): boolean {
+export function aiDemoIds(env: Env = process.env): Set<string> {
+  return new Set((env.AI_DEMO_USER_IDS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => UUID.test(s)));
+}
+
+/**
+ * Úroveň (tier) ověřeného uživatele, rozhodnutá JEN na serveru podle neměnného `user.id` ze serverem ověřeného JWT:
+ *   owner = AI_OWNER_USER_IDS; demo = AI_DEMO_USER_IDS (výslovný seznam); null = AI zavřená (fail closed).
+ * Id na obou seznamech je chyba konfigurace a dostane NEJPŘÍSNĚJŠÍ úroveň (demo). 'dev' = jen lokální AI_ALLOW_ALL_AUTHENTICATED (na produkci ignorováno).
+ * Žádný e-mail, claim, hlavička ani parametr požadavku úroveň nemění.
+ */
+export type AiTier = 'owner' | 'demo' | 'dev';
+export function aiTier(userId: string, env: Env = process.env): AiTier | null {
+  const id = userId.toLowerCase();
+  if (aiDemoIds(env).has(id)) return 'demo';
   const owners = aiOwnerIds(env);
-  if (owners.size > 0) return owners.has(userId.toLowerCase());
-  return env.AI_ALLOW_ALL_AUTHENTICATED === '1' && env.VERCEL_ENV !== 'production';
+  if (owners.has(id)) return 'owner';
+  if (owners.size === 0 && aiDemoIds(env).size === 0 && env.AI_ALLOW_ALL_AUTHENTICATED === '1' && env.VERCEL_ENV !== 'production') return 'dev';
+  return null;
+}
+
+export function aiAccessAllowed(userId: string, env: Env = process.env): boolean {
+  return aiTier(userId, env) !== null;
 }

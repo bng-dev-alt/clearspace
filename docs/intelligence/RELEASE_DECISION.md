@@ -59,3 +59,7 @@ Approved meeting results, cards and knowledge live in the hosted database and ar
 ## RC5 (staged, not promoted): task attachment errors
 
 `dpl_` see `vercel ls`: `clearspace-b86qd3wy0-…` @ `12f7738`, protected, no alias. Upload refusals are now distinguishable (size, type, empty, card not saved yet, permission, auth, storage unavailable, network) and shown inline per file; the 10 MB limit is shown in the dropzone; an empty browser type falls back to the extension. Bucket, policies and schema untouched. Production stays on RC4 `dpl_5WCuVGh8U2qrioDtogza721GQfeP` until approved.
+
+## Production now (update 2)
+
+`dpl_HHk26E8sEJs1wF57mZeMkcNqzqbb` @ `12f7738` (RC5, promoted 2026-11-23). Rollback: `vercel promote dpl_5WCuVGh8U2qrioDtogza721GQfeP --scope bng-dev-alt-webadvisor` (RC4). Git main still `5c80dcf`.

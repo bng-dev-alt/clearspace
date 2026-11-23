@@ -49,3 +49,10 @@ Hard limits kept: no firewall change, no Cloudflare change, no key rotation, no 
 3. Vercel default function limit: analysis calls measured 2.6–6.4 s with Gemini; if a real call exceeds the plan's default duration the page shows the retryable "AI neodpověděla včas" and nothing is billed twice (ledger idempotency). Raise `maxDuration` only if observed.
 4. Anonymous/garbage traffic reaches the new owner routes (401). No provider cost; if abuse appears, add the path-specific firewall design (option 2) under its own approval.
 5. Soniox DPA/region legal review, no exactly-once provider billing, no scheduler (cleanup runs when a project's meeting list is opened).
+
+## Staging bypass secret: incident and rule (2026-11-23)
+A Playwright "Call log" printed the staged project's Vercel Deployment-Protection automation-bypass value (`hosted-verify.sh`, `request.post` with the header). It was **rotated** (revoked + regenerated through `PATCH /v1/projects/{id}/protection-bypass`); exactly one token exists (Vercel requires one to be the `VERCEL_AUTOMATION_BYPASS_SECRET` env var; no application code reads it, it is never `NEXT_PUBLIC_`). Rules now enforced in the harness:
+* the secret is read from the Vercel API into a shell variable only, never put in argv (curl uses `-K -`) or in a file;
+* the spec uses Node `fetch` (not Playwright's request context, which prints headers on errors); the browser gets it through `page.route`, which is not logged;
+* all test output passes through `scripts/redact-secrets.mjs` (exact values + the header pattern) and `--scan test-results playwright-report` deletes and fails on any artifact that still contains a value (`node scripts/redact-secrets.mjs --selftest`).
+Rotate again with the same endpoint (`revoke: {secret, regenerate: true}`) if a value is ever shown.

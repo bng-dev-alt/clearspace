@@ -324,7 +324,11 @@ test('AI History restore: owner restores a snapshot atomically; a non-member can
 
 const AI_MODE = process.env.E2E_AI_MODE ?? 'local';
 test('AI routes on the hosted DB: local = fail closed without a key (401/503 + ledger); production = blocked by the firewall (403), never called', async ({ request }) => {
-  const post = (headers: Record<string, string>) => request.post('/api/ai/improve', { headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...headers }, data: JSON.stringify({ projectId, card: { id: 'x', title: 'Improve me', details: '' } }) });
+  // Node fetch, NOT Playwright's request context: Playwright prints every request header (the bypass secret included) in its "Call log" on any network error.
+  const post = async (headers: Record<string, string>) => {
+    const res = await fetch(new URL('/api/ai/improve', process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://127.0.0.1:3410'), { method: 'POST', headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...headers }, body: JSON.stringify({ projectId, card: { id: 'x', title: 'Improve me', details: '' } }), signal: AbortSignal.timeout(60_000) });
+    return { status: () => res.status, text: () => res.text(), json: () => res.json() };
+  };
   if (AI_MODE === 'firewall') {
     // Vercel firewall deny on /api/ai answers before the app runs: no gateway, no ledger row, no provider call.
     expect((await post({})).status()).toBe(403);

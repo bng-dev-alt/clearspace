@@ -25,11 +25,14 @@ case "$BASE" in
     [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] && [ -n "${STAGED_BYPASS_SECRET:-}" ] || { echo "refusing the staged URL without PRODUCTION_SMOKE_OK=1 and STAGED_BYPASS_SECRET"; exit 2; }; AI_MODE=firewall; E2E_BYPASS_SECRET=$STAGED_BYPASS_SECRET; export E2E_BYPASS_SECRET;;
   *) echo "refusing BASE_URL $BASE (only loopback, the production domain, or a staged deployment of this project, with PRODUCTION_SMOKE_OK=1)"; exit 2;;
 esac
-curl -s -o /dev/null ${E2E_BYPASS_SECRET:+-H "x-vercel-protection-bypass: $E2E_BYPASS_SECRET"} "$BASE/login" || { echo "no server at $BASE"; exit 2; }
+{ [ -n "${E2E_BYPASS_SECRET:-}" ] && printf 'header = "x-vercel-protection-bypass: %s"\n' "$E2E_BYPASS_SECRET" || true; } | curl -s -o /dev/null -K - "$BASE/login" || { echo "no server at $BASE"; exit 2; }
 SRK=$(supabase projects api-keys --project-ref "$REF" --workdir "${TMPDIR:-/tmp}" --output-format json | python3 -c "import json,sys; print(next(k['api_key'] for k in json.load(sys.stdin)['keys'] if k['name']=='service_role'))")
 [ -n "$SRK" ] || { echo "no service key"; exit 2; }
 RUN=$(date +%s); PW="Cs!$(openssl rand -hex 10)"
 IDS=()
+# Nothing secret may reach the log, Playwright errors/reports or CI artifacts: every test output goes through the redactor; the run artifacts are scanned afterwards.
+redact() { SRK="$SRK" ANON="$ANON" PW="$PW" node scripts/redact-secrets.mjs "$@"; }
+rm -rf test-results playwright-report
 mkuser() { # email confirm(true|false)
   curl -s -X POST "$URL/auth/v1/admin/users" -H "apikey: $SRK" -H "Authorization: Bearer $SRK" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$1\",\"password\":\"$PW\",\"email_confirm\":$2,\"user_metadata\":{\"display_name\":\"P5 ${1%%@*}\"}}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))'; }
@@ -47,8 +50,9 @@ for id in "${IDS[@]}"; do [ -n "$id" ] || { echo "account creation failed"; exit
 echo "== accounts created (3, disposable)"
 rc=0
 echo "== Realtime check (hosted)"
-RT_URL=$URL RT_ANON=$ANON RT_A_EMAIL=$A RT_A_PASS=$PW RT_B_EMAIL=$B RT_B_PASS=$PW node supabase/tests/realtime_check.mjs || rc=1
+{ RT_URL=$URL RT_ANON=$ANON RT_A_EMAIL=$A RT_A_PASS=$PW RT_B_EMAIL=$B RT_B_PASS=$PW node supabase/tests/realtime_check.mjs 2>&1; } | redact || rc=1
 echo "== Playwright (hosted, real UI)"
 E2E_AI_MODE=$AI_MODE E2E_HOSTED=1 E2E_HOSTED_URL=$URL E2E_HOSTED_ANON=$ANON E2E_PASSWORD=$PW E2E_A_EMAIL=$A E2E_B_EMAIL=$B E2E_D_EMAIL=$D PLAYWRIGHT_TEST_BASE_URL=$BASE \
-  npx playwright test e2e/supabase-hosted.spec.ts --workers=1 || rc=1
+  npx playwright test e2e/supabase-hosted.spec.ts --workers=1 2>&1 | redact || rc=1
+redact --scan test-results playwright-report || rc=1
 exit $rc

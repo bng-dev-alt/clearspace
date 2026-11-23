@@ -41,7 +41,8 @@ export const aiClient = {
         ? { ...body, projectId: activeProjectId }
         : body;
 
-      const response = await fetch(endpoint, {
+      // Firewall drží /api/ai zavřené; stejné handlery (stejná gateway, limity, rozpočty, ledger) běží owner-only pod /api/intelligence.
+      const response = await fetch(endpoint.replace(/^\/api\/ai\//, '/api/intelligence/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

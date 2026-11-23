@@ -74,6 +74,16 @@ import { POST as analyze } from '../../app/api/intelligence/meetings/analyze/rou
 import { POST as brief } from '../../app/api/intelligence/project-brief/route';
 import { POST as chat } from '../../app/api/intelligence/chat/route';
 import { POST as legacyChat } from '../../app/api/ai/chat/route';
+import { POST as analyze_resource } from '../../app/api/intelligence/analyze-resource/route';
+import { POST as capacity_planning } from '../../app/api/intelligence/capacity-planning/route';
+import { POST as daily_brief } from '../../app/api/intelligence/daily-brief/route';
+import { POST as generate_backlog } from '../../app/api/intelligence/generate-backlog/route';
+import { POST as generate_project } from '../../app/api/intelligence/generate-project/route';
+import { POST as generate_sprint } from '../../app/api/intelligence/generate-sprint/route';
+import { POST as improve } from '../../app/api/intelligence/improve/route';
+import { POST as project_manager } from '../../app/api/intelligence/project-manager/route';
+import { POST as risk_analysis } from '../../app/api/intelligence/risk-analysis/route';
+import { POST as voice_action } from '../../app/api/intelligence/voice-action/route';
 import { POST as access } from '../../app/api/intelligence/access/route';
 
 const post = (route: (r: NextRequest) => Promise<Response>, token: string | null) =>
@@ -86,7 +96,7 @@ describe('every owner route: a non-owner is refused BEFORE any database, storage
     h.authError = false; h.touched.length = 0;
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
-  const routes = { transcribe, sync, purge, sweep, analyze, brief, chat, legacyChat };
+  const routes = { transcribe, sync, purge, sweep, analyze, brief, chat, legacyChat, analyze_resource, capacity_planning, daily_brief, generate_backlog, generate_project, generate_sprint, improve, project_manager, risk_analysis, voice_action };
   for (const [name, route] of Object.entries(routes)) {
     test(`${name}: other account -> 403 ai_owner_only, anonymous -> 401, nothing touched, no provider fetch`, async () => {
       const fetchSpy = vi.fn(); vi.stubGlobal('fetch', fetchSpy);

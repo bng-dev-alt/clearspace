@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 // A new route that talks to a provider without one of these fails here instead of shipping ungated.
 const API = join(__dirname, '../../app/api');
 const GATED = /\b(runAi|runStt|runSttDelete)\b/;
-const REEXPORT = /export \{ POST \} from '(\.\.\/)+ai\/chat\/route'/;
+const REEXPORT = /export \{ POST \} from '(\.\.\/)+ai\/[a-z-]+\/route'/;
 const ALLOWED_OTHER = new Set(['intelligence/access/route.ts']); // authenticate(req,{gate:false}); answers only {aiOwner, stt}
 
 function routes(dir: string): string[] {

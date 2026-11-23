@@ -6,15 +6,15 @@
 |---|---|---|---|---|
 | **Production (live)** | `dpl_Ff8CV7zK6sM3WcwezdmsgdFPGaRi` | `25ffce6` | `clearspace-ai.vercel.app` | unchanged by this work |
 | **RC1 Intelligence** | `dpl_HHh8yPGmyFvQBR73NeanPyeGvxNh` (`clearspace-1cvztwamq-…`) | `0ab25df` (`feature/intelligence-v2`) | none, protected | owner-only Meeting + Project Intelligence, classic design; Monograph flag NOT set |
-| **RC2 Monograph** | `dpl_CVDa4bxycKUX44AiTaqm9fhKVo88` (`clearspace-2zfrhubzr-…`) | `c686c1a` (`release/rc2-monograph`) | none, protected | RC1 + Monograph, built with `NEXT_PUBLIC_ENABLE_MONOGRAPH=1` (per-deployment `--build-env`; project env unchanged). Default style = classic; each user may choose Monograph Light/Dark |
+| **RC2 Monograph** | `dpl_G6U5cTfXVutSZgrN3aE3djrVhg12` (`clearspace-3zdtuvsmm-…`) | `a626874` (`release/rc2-monograph`) | none, protected | RC1 + Monograph, built with `NEXT_PUBLIC_ENABLE_MONOGRAPH=1` (per-deployment `--build-env`; project env unchanged). **Monograph is the default** for anyone without an explicit choice; "Stávající" (Classic) stays selectable and an explicit choice is respected; Light/Dark/System independent |
 
 Later commits on both branches are tooling/docs only (`fdbd86f` idempotent project-member sync is in RC2 `c686c1a` and on `feature/intelligence-v2`; RC1 `0ab25df` predates it: the bug only shows a false "save failed" banner, see "Known").
 `origin/main` (`5c80dcf`) → RC1 → RC2 is a fast-forward chain. No hosted schema change is needed for either RC (no migration since production).
 
 ## Shortest safe sequence (each step needs the owner's explicit go)
 
-1. **Promote RC2** (it contains RC1; with the flag on, the default look is still classic and pixel-identical to RC1 when nobody opts in):
-   `vercel promote dpl_CVDa4bxycKUX44AiTaqm9fhKVo88 --scope bng-dev-alt-webadvisor`
+1. **Promote RC2** (it contains RC1; new users get Monograph, Classic stays one click away):
+   `vercel promote dpl_G6U5cTfXVutSZgrN3aE3djrVhg12 --scope bng-dev-alt-webadvisor`
    *Alternative if Monograph should not be selectable yet:* promote RC1 `dpl_HHh8yPGmyFvQBR73NeanPyeGvxNh` first, RC2 later.
 2. **Verify production** (no paid call):
    `scripts/check-deployment.sh https://clearspace-ai.vercel.app` and

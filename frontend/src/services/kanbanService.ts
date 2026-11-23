@@ -132,7 +132,9 @@ async function setDbProjectMembers(projectId: string, memberIds: string[]): Prom
   if (toAdd.length > 0) {
     const { error: insErr } = await supabase
       .from('project_members')
-      .insert(toAdd.map((member_id) => ({ project_id: projectId, member_id })));
+      // Idempotent (ON CONFLICT DO NOTHING): two concurrent syncs of the same project (a double-run effect, two tabs) must not
+      // turn an already-saved membership into a "save failed" banner. Needs only INSERT; RLS is unchanged.
+      .upsert(toAdd.map((member_id) => ({ project_id: projectId, member_id })), { onConflict: 'project_id,member_id', ignoreDuplicates: true });
     if (insErr) throw insErr;
   }
 }

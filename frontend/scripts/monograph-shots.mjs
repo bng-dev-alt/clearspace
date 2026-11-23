@@ -107,7 +107,7 @@ for (const styleKey of STYLES) {
       let navigating = true; // fetches aborted by our own navigation (login -> goto) log "Failed to fetch"; only that is ignored, and only while navigating
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error' && !(navigating && /Failed to fetch/.test(m.text())) && !/favicon|Failed to load resource|\/realtime\/v1\/websocket/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
-      await page.addInitScript(([s, t]) => { localStorage.setItem('clearspace-theme', t); if (s === 'monograph') localStorage.setItem('clearspace-style', 'monograph'); else localStorage.removeItem('clearspace-style'); }, [style, theme]);
+      await page.addInitScript(([s, t]) => { localStorage.setItem('clearspace-theme', t); localStorage.setItem('clearspace-style', s === 'monograph' ? 'monograph' : 'existing'); /* explicit choice: no stored value = Monograph by default */ }, [style, theme]);
       if (c.clock) await page.clock.setFixedTime(SEED_NOW);
       await page.addInitScript(() => { const s = document.createElement('style'); s.textContent = 'nextjs-portal,[data-nextjs-toast],[data-next-badge-root]{display:none !important}'; document.addEventListener('DOMContentLoaded', () => document.head.appendChild(s)); });
       let ok = true, note = '';

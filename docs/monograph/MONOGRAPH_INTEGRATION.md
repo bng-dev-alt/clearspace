@@ -1,7 +1,8 @@
 # ClearSpace V1 x Monograph: opt-in design style
 
 Branch `integration/monograph-clearspace` (from `feature/intelligence-v2` @ `d01a523`). Nothing is pushed, merged or deployed.
-Everything is behind **`NEXT_PUBLIC_ENABLE_MONOGRAPH=1`**; unset (production today) the app renders exactly as before.
+Everything is behind **`NEXT_PUBLIC_ENABLE_MONOGRAPH=1`**; unset the app renders exactly as before. **With the flag on (RC2), Monograph is the
+default for every browser without an explicit choice; choosing "Stávající" (Classic) is stored as `existing` and always respected.** Light/Dark/System stays independent.
 
 ## 1. Design source, and why
 

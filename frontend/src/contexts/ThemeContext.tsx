@@ -123,5 +123,5 @@ export function useTheme() {
  * Bez NEXT_PUBLIC_ENABLE_MONOGRAPH=1 je skript znak po znaku stejný jako dřív.
  */
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
-const STYLE_SCRIPT = `(function(){try{if(localStorage.getItem('${STYLE_STORAGE_KEY}')==='monograph')document.documentElement.setAttribute('data-style','monograph');}catch(e){}})();`;
+const STYLE_SCRIPT = `(function(){try{if(localStorage.getItem('${STYLE_STORAGE_KEY}')!=='existing')document.documentElement.setAttribute('data-style','monograph');}catch(e){}})();`;
 export const themeNoFlashScript = MONOGRAPH_ENABLED ? THEME_SCRIPT + STYLE_SCRIPT : THEME_SCRIPT;

@@ -13,9 +13,9 @@ describe('resolveDesignStyle (čistá logika)', () => {
   });
   it('příznak zapnutý => monograph jen při explicitní uložené volbě, nikdy jako výchozí', () => {
     expect(resolveDesignStyle('monograph', true)).toBe('monograph');
-    expect(resolveDesignStyle(null, true)).toBe('existing');
-    expect(resolveDesignStyle('existing', true)).toBe('existing');
-    expect(resolveDesignStyle('cokoliv-jineho', true)).toBe('existing');
+    expect(resolveDesignStyle(null, true)).toBe('monograph'); // nový uživatel: Monograph je výchozí
+    expect(resolveDesignStyle('existing', true)).toBe('existing'); // výslovná volba Classic se respektuje
+    expect(resolveDesignStyle('cokoliv-jineho', true)).toBe('monograph');
   });
 });
 
@@ -31,6 +31,7 @@ function Probe({ useTheme }: { useTheme: () => { designStyle: string; setDesignS
     <div>
       <span data-testid="style">{designStyle}</span>
       <button onClick={() => setDesignStyle('monograph')}>go</button>
+      <button onClick={() => setDesignStyle('existing')}>classic</button>
     </div>
   );
 }
@@ -56,20 +57,34 @@ describe('ThemeProvider + příznak NEXT_PUBLIC_ENABLE_MONOGRAPH', () => {
     expect(screen.getByTestId('style').textContent).toBe('existing');
   });
 
-  it('příznak zapnutý: výchozí je stávající; uložený monograph se použije; volba se ukládá', async () => {
+  it('příznak zapnutý: nový uživatel = Monograph; výslovná volba Classic se uloží a respektuje; světlý/tmavý zůstává nezávislý', async () => {
     const m = await loadTheme('1');
     expect(m.themeNoFlashScript.startsWith(ORIGINAL_NO_FLASH)).toBe(true);
-    expect(m.themeNoFlashScript).toContain("data-style");
+    // no-flash: bez uložené volby nastaví data-style ještě před vykreslením, s volbou 'existing' ne
+    document.documentElement.removeAttribute('data-style');
+    new Function(m.themeNoFlashScript)();
+    expect(document.documentElement.getAttribute('data-style')).toBe('monograph');
+    localStorage.setItem('clearspace-style', 'existing');
+    document.documentElement.removeAttribute('data-style');
+    new Function(m.themeNoFlashScript)();
+    expect(document.documentElement.hasAttribute('data-style')).toBe(false);
+    localStorage.clear();
+
+    localStorage.setItem('clearspace-theme', 'dark');
     const first = render(<m.ThemeProvider><Probe useTheme={m.useTheme} /></m.ThemeProvider>);
+    expect(screen.getByTestId('style').textContent).toBe('monograph');
+    expect(document.documentElement.getAttribute('data-style')).toBe('monograph');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    act(() => screen.getByText('classic').click());
+    expect(document.documentElement.hasAttribute('data-style')).toBe(false);
+    expect(localStorage.getItem('clearspace-style')).toBe('existing');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark'); // styl nemění téma
+    first.unmount();
+    render(<m.ThemeProvider><Probe useTheme={m.useTheme} /></m.ThemeProvider>);
     expect(screen.getByTestId('style').textContent).toBe('existing');
     expect(document.documentElement.hasAttribute('data-style')).toBe(false);
     act(() => screen.getByText('go').click());
-    expect(document.documentElement.getAttribute('data-style')).toBe('monograph');
     expect(localStorage.getItem('clearspace-style')).toBe('monograph');
-    first.unmount();
-    document.documentElement.removeAttribute('data-style');
-    render(<m.ThemeProvider><Probe useTheme={m.useTheme} /></m.ThemeProvider>);
-    expect(screen.getByTestId('style').textContent).toBe('monograph');
-    expect(document.documentElement.getAttribute('data-style')).toBe('monograph');
+    expect(localStorage.getItem('clearspace-theme')).toBe('dark');
   });
 });

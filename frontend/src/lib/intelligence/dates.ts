@@ -168,3 +168,37 @@ export const DUE_BASIS_LABEL: Record<DueBasis, string> = {
   'next-week': 'pátek příštího týdne',
   'end-of-month': 'konec měsíce porady',
 };
+
+/**
+ * Co datum v textu úkolu znamená (deterministicky, z doslovné fráze a citace). Jen `deadline` a `unknown` nabízejí předvyplnění
+ * termínu; datum porady/rozhodnutí ("finální rozhodnutí padne na poradě 1. prosince") ani milník ("pilot začne 14. prosince")
+ * termínem úkolu není. Datum zadané člověkem se nikdy nepřepisuje.
+ */
+export type DueKind = 'deadline' | 'meeting' | 'milestone' | 'unknown';
+
+const DEADLINE_WORDS = /^(do|nejpozdeji|by|until|till|before|pred|termin|deadline)$/;
+const MEETING_WORDS = /^(rozhodnut\w*|rozhodn\w*|porad\w*|schuz\w*|jednani|meeting|decision|decide\w*|call|review)$/;
+const MILESTONE_WORDS = /^(spust\w*|start\w*|zacin\w*|zacne|zahaj\w*|pilot\w*|launch\w*|release|nasazeni|go|live)$/;
+
+export function classifyDue(dueText: string | null | undefined, citedText: string): DueKind {
+  const d = fold(dueText ?? '');
+  if (!d) return 'unknown';
+  const dw = d.split(' ');
+  if (dw.some((w) => DEADLINE_WORDS.test(w))) return 'deadline';
+  const words = fold(citedText).split(' ');
+  let at = -1;
+  for (let i = 0; i + dw.length <= words.length; i += 1) if (dw.every((w, k) => words[i + k] === w)) { at = i; break; }
+  if (at < 0) return 'unknown';
+  const before = words.slice(Math.max(0, at - 6), at);
+  if (DEADLINE_WORDS.test(before[before.length - 1] ?? '')) return 'deadline';
+  if (before.some((w) => MEETING_WORDS.test(w))) return 'meeting';
+  if (before.some((w) => MILESTONE_WORDS.test(w))) return 'milestone';
+  return 'unknown';
+}
+
+export const DUE_KIND_LABEL: Record<DueKind, string> = {
+  deadline: 'termín úkolu',
+  meeting: 'datum porady nebo rozhodnutí, ne termín úkolu',
+  milestone: 'milník projektu, ne termín úkolu',
+  unknown: 'nejasné, zda jde o termín úkolu',
+};

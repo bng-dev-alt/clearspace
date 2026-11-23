@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Badge, Button } from '../ui';
 import { meetingService, MeetingServiceError, type IntelligenceItem } from '../../services/meetingService';
 import { candidateDuplicateCards, suggestAssignee } from '../../lib/intelligence/duplicates';
-import { DUE_BASIS_LABEL, suggestDueDate } from '../../lib/intelligence/dates';
+import { classifyDue, DUE_BASIS_LABEL, DUE_KIND_LABEL, suggestDueDate } from '../../lib/intelligence/dates';
 import { isDoneColumn } from '../../lib/projectIntelligence';
 import type { ColumnRole } from '../../types/kanban';
 import { fmtMs, STATE_LABEL } from './labels';
@@ -42,7 +42,16 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
   const [addComment, setAddComment] = useState(true);
 
   const suggestedMember = useMemo(() => suggestAssignee(item.ownerText, members), [item.ownerText, members]);
-  const dueSuggestion = useMemo(() => (meetingDay ? suggestDueDate(item.dueText, meetingDay) : null), [item.dueText, meetingDay]);
+  const quotes = item.evidence.map((e) => e.quote ?? '').join(' ');
+  const dueKind = classifyDue(item.dueText, quotes);
+  // Datum porady/rozhodnutí nebo milník se jako termín úkolu nenabízí (nevymýšlíme termíny).
+  const dueSuggestion = useMemo(
+    () => (meetingDay && (dueKind === 'deadline' || dueKind === 'unknown') ? suggestDueDate(item.dueText, meetingDay) : null),
+    [item.dueText, meetingDay, dueKind]
+  );
+  // Zmíněná osoba, která není členem projektu: úkol zůstane nepřiřazený, nikdy se nepřiřadí přihlášenému uživateli.
+  const mentionedNotMember = Boolean(item.ownerText) && !suggestedMember;
+  const assigneeDiffers = Boolean(item.ownerText) && assignee !== '' && assignee !== suggestedMember;
   const similar = useMemo(() => candidateDuplicateCards(item.text, cards), [item.text, cards]);
   const appliedCard = cards.find((c) => c.id === item.appliedCardId);
   const canCreateCard = item.kind === 'action_item' || item.kind === 'follow_up';
@@ -100,8 +109,17 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
 
       {item.kind === 'action_item' && (item.ownerText || item.dueText) && (
         <div className="mi-muted" data-testid="item-hints">
-          {item.ownerText ? <>Vlastník z textu: <strong>{item.ownerText}</strong>. </> : null}
-          {item.dueText ? <>Termín z textu: <strong>&bdquo;{item.dueText}&ldquo;</strong> (datum zadejte ručně).</> : null}
+          {item.ownerText ? (
+            <span data-testid="owner-hint">
+              Zmíněno v poradě: <strong>{item.ownerText}</strong>
+              {mentionedNotMember ? ' (není členem projektu: bez výběru řešitele zůstane úkol nepřiřazený)' : ''}.{' '}
+            </span>
+          ) : null}
+          {item.dueText ? (
+            <span data-testid="due-hint" data-due-kind={dueKind}>
+              Datum z textu: <strong>&bdquo;{item.dueText}&ldquo;</strong> ({DUE_KIND_LABEL[dueKind]}).
+            </span>
+          ) : null}
         </div>
       )}
 
@@ -166,7 +184,11 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
                   mode: 'create_card',
                   column_id: colId,
                   title: title.trim() || undefined,
-                  details: item.evidence.find((x) => x.quote)?.quote ? `Z porady: „${item.evidence.find((x) => x.quote)!.quote}"` : '',
+                  details: [
+                    item.evidence.find((x) => x.quote)?.quote ? `Z porady: „${item.evidence.find((x) => x.quote)!.quote}"` : '',
+                    item.ownerText ? `Zmíněno v poradě: ${item.ownerText}` : '',
+                    item.dueText ? `Datum z textu: „${item.dueText}" (${DUE_KIND_LABEL[dueKind]})` : '',
+                  ].filter(Boolean).join('\n'),
                   due_date: due || null,
                   assignee_member_id: assignee || null,
                   allow_duplicate: allowDup,
@@ -194,6 +216,11 @@ export default function ItemCard({ item, columns, cards, members, meetingDay, fr
               <Button size="sm" type="button" onClick={() => setAssignee(suggestedMember)} data-testid="use-suggested-assignee">
                 Použít návrh: {members.find((m) => m.id === suggestedMember)?.fullName}
               </Button>
+            )}
+            {assigneeDiffers && (
+              <span role="note" className="mi-muted" data-testid="assignee-differs">
+                Vybraný řešitel není osoba zmíněná v poradě ({item.ownerText}).
+              </span>
             )}
             <label htmlFor={`d-${item.id}`}>Termín</label>
             <input id={`d-${item.id}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} data-testid="create-due" />

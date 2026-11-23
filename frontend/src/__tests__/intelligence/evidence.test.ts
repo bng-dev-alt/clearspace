@@ -44,7 +44,7 @@ describe('quoteSupported', () => {
 });
 
 describe('validateMeetingBrief: structure and fatal cases', () => {
-  test('exposes versions', () => expect(VALIDATOR_VERSION).toBe('cs-evidence-v2'));
+  test('exposes versions', () => expect(VALIDATOR_VERSION).toBe('cs-evidence-v3'));
   test('non-object output is fatal', () => {
     expect(run('text')).toMatchObject({ ok: false, code: 'unparseable' });
     expect(run(null)).toMatchObject({ ok: false, code: 'unparseable' });

@@ -11,7 +11,7 @@ import { VALIDATOR_VERSION, type ValidatedMeetingBrief } from './evidence';
  * termín jen doslova). Server-only (node:crypto).
  */
 
-export const MEETING_PROMPT_VERSION = 'meeting-brief-p1';
+export const MEETING_PROMPT_VERSION = 'meeting-brief-p2';
 export const MEETING_CONTRACT = `cs.meeting-brief@${CONTRACT_VERSION}`;
 
 function fmtTime(ms: number | null): string {
@@ -50,10 +50,10 @@ const SYSTEM = `Jste analytik porad pro projektový nástroj ClearSpace. Z přep
 
 Pravidla (závazná):
 1. Projděte CELÝ přepis. Raději položku vynechte, než byste ji vymysleli. Prázdná pole jsou v pořádku.
-2. Kategorie: decisions = výslovně dohodnuté rozhodnutí; action_items = někdo se zavázal něco udělat nebo mu to bylo uloženo; follow_ups = navazující krok bez závazku; risks = hrozba pro cíl nebo termín; blockers = věc, která už teď brání práci; open_questions = otázka, na kterou nepadla odpověď.
+2. Kategorie: decisions = výslovně dohodnuté rozhodnutí; action_items = někdo se zavázal něco udělat nebo mu to bylo uloženo (každý úkol s vlastním řešitelem nebo termínem je samostatná položka, i když zazní mimochodem nebo ve vedlejší větě); follow_ups = navazující krok bez závazku; risks = hrozba pro cíl nebo termín; blockers = věc, která už teď brání práci; open_questions = otázka, na kterou nepadla odpověď.
 3. KAŽDÁ položka má 1 až 4 důkazy: segment_id existujícího segmentu (např. seg-12) a quote = DOSLOVNÁ citace z TOHOTO segmentu (max 200 znaků, původní jazyk, beze změn; vynechání označte "…"). Časy nikdy nepište.
 4. owner_text: jen jméno, které je doslova v citovaném textu, nebo skutečné jméno mluvčího, který se zavazuje. Nikdy nehádejte z rolí. Nikdy "já", "my" ani "Mluvčí N". Jinak null.
-5. due_text: doslovná fráze termínu z citovaného textu (např. "do pátku"). Nikdy nepočítejte datum. Jinak null.
+5. due_text: doslovná fráze termínu TOHOTO úkolu z citovaného textu (např. "do pátku"). Datum porady, rozhodnutí, spuštění nebo jiné události termínem úkolu není (pak null). Nikdy nepočítejte datum. Jinak null.
 6. existing_card_id: pokud stejnou práci už řeší otevřená karta z kontextu projektu, uveďte její id (část za "card:" v [card:ID]). Jinak null. Nevytvářejte duplicity karet.
 7. summary: nejvýše 5 vět.
 8. Jazyk textů položek a shrnutí: {LANG}. Citace zůstávají v původním jazyce přepisu.

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { suggestDueDate } from '../../lib/intelligence/dates';
+import { classifyDue, suggestDueDate } from '../../lib/intelligence/dates';
 import { nameVariants, sameGivenName } from '../../lib/intelligence/names';
 
 const REF = '2026-11-18'; // středa
@@ -89,4 +89,16 @@ describe('given-name aliases', () => {
   test('unknown names map to themselves (diacritics folded)', () => {
     expect(nameVariants('Šárka')).toEqual(['sarka']);
   });
+});
+
+describe('classifyDue: task deadline vs meeting/decision date vs milestone (Northstar)', () => {
+  test.each([
+    ['do 27. listopadu', 'Zvlášť když David také do 27. listopadu garantuje klíčový test bezpečnosti', 'deadline'],
+    ['30. listopadu', 'Klára pak na to navazuje a do 30. listopadu musí vybrat ty konkrétní zákazníky', 'deadline'],
+    ['hned 1. prosince', 'Klára k tomu teď zjišťuje data z praxe a finální rozhodnutí padne na další poradě hned 1. prosince.', 'meeting'],
+    ['14. prosince', 'Ten pilotní provoz má totiž začít už 14. prosince.', 'milestone'],
+    ['4. prosinec', 'Kritické datum pro to zpoždění je totiž 4. prosinec.', 'unknown'],
+    ['by Friday', 'Pete will send it by Friday', 'deadline'],
+    [null, 'x', 'unknown'],
+  ])('%s -> %s', (due, cited, kind) => expect(classifyDue(due, cited)).toBe(kind));
 });

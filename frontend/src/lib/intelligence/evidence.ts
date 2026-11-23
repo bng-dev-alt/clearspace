@@ -8,7 +8,7 @@ import type { BriefSupport, Evidence, SourceRecord, Support, Transcript, Transcr
  * Port scribe_ BriefValidator + MicroCRM groundedOwner, podle UMC `umc-validator-1`.
  */
 
-export const VALIDATOR_VERSION = 'cs-evidence-v2';
+export const VALIDATOR_VERSION = 'cs-evidence-v3';
 
 export const MIN_QUOTE_LETTERS = 6;
 /** v2: jedno slovo není důkaz (ani dlouhé, např. "migrace"): citace musí mít aspoň 2 slova. */
@@ -180,14 +180,24 @@ const NEJ_VERBS = new Set(['nejde', 'nejdu', 'nejdeme', 'nejdete', 'nejdou', 'ne
  */
 const NOT_NEG = /^(?:nebo|nebot|nez|nebe|nebesa|nebesky|neco|nekdo|nekde|nekdy|nekam|nekolik\w*|nekter\w*|nedele|nedeli|nedelni|nedelou|nedelich|nedavn\w*|nemocn\w*|nemoc|nemoci|nemec\w*|nemci|nemovit\w*|neustal\w*|nesmirn\w*|nesmysl\w*|nese|nesu|nesou|nesl|nesla|nesli|neslo|nezbyt\w*|nepochyb\w*|neodklad\w*|negativ\w*|neutral\w*|nerv\w*|next|need\w*|new\w*|net|nets|network\w*|neat|near\w*|necessar\w*|neck|nest|nexus)$/;
 
-function isNegWord(w: string): boolean {
+/** cs: v češtině je "no" výplň/souhlas ("No jasně", "No, jedou MVP"), ne anglické "no". */
+function isNegWord(w: string, cs = false): boolean {
+  if (cs && w === 'no') return false;
   if (NEG_WORDS.has(w) || NEG_STEMS.test(w)) return true;
   if (w.startsWith('nej')) return NEJ_VERBS.has(w);
   return /^ne./.test(w) && !NOT_NEG.test(w);
 }
 
-function wordsHaveNegation(words: string[]): boolean {
-  return words.some((w, i) => isNegWord(w) || (w === 't' && i > 0 && EN_NT_STEMS.has(words[i - 1])));
+function wordsHaveNegation(words: string[], cs = false): boolean {
+  return words.some((w, i) => isNegWord(w, cs) || (w === 't' && i > 0 && EN_NT_STEMS.has(words[i - 1])));
+}
+
+/** Přepis je český: explicitní nápověda porady, jinak aspoň 0,5 % písmen s háčkem/kroužkem (ěščřžůňťď; v angličtině nejsou). */
+export function isCzech(text: string, hint?: 'cs' | 'en' | null): boolean {
+  if (hint) return hint === 'cs';
+  const letters = text.match(/\p{L}/gu)?.length ?? 0;
+  const marks = text.match(/[ěščřžůňťďĚŠČŘŽŮŇŤĎ]/g)?.length ?? 0;
+  return letters > 0 && marks / letters >= 0.005;
 }
 
 export function hasNegation(text: string): boolean {
@@ -195,8 +205,22 @@ export function hasNegation(text: string): boolean {
 }
 
 /** Krátká odpověď na začátku sousední klauze ("Ne, nebudeme."): zápor v ní se vztahuje k citované větě. */
-const SHORT_ANSWERS = new Set(['ne', 'ano', 'no', 'yes', 'nope', 'nikoli', 'nikoliv', 'jo', 'yep', 'yeah']);
+const NEG_ANSWERS = new Set(['ne', 'no', 'nope', 'nikoli', 'nikoliv']);
+const YES_ANSWERS = new Set(['ano', 'yes', 'jo', 'yep', 'yeah']);
 const ANSWER_WORDS = 6;
+/**
+ * Klauze začínající krátkou odpovědí se počítá k citaci. Záporná odpověď ("Ne, …", "Nope, …") vždy; souhlasná ("Ano, …", "Jo, …",
+ * v češtině i "No, …") jen když je celá klauze krátká ("Jo, to nepůjde.", "Ano, ale ne v pátek."). Dlouhá souhlasná klauze je
+ * samostatné tvrzení ("Ano, zákazník A nesmí za žádných okolností tušit, co řeší zákazník B.") a zápor v ní se k citaci nevztahuje
+ * (Northstar: takhle se zahodily dva skutečné úkoly).
+ */
+function answerClause(words: string[], at: number, end: number, cs: boolean): string[] | null {
+  const w = words[at];
+  const neg = NEG_ANSWERS.has(w) && !(cs && w === 'no');
+  const yes = YES_ANSWERS.has(w) || (cs && w === 'no');
+  if (!neg && !(yes && end - at <= ANSWER_WORDS)) return null;
+  return words.slice(at, Math.min(at + ANSWER_WORDS, end));
+}
 
 interface Scan {
   before: string[];
@@ -210,7 +234,7 @@ interface Scan {
 }
 
 /** Pro každý výskyt citace: okno od hranice klauze k hranici klauze (+ krátká odpověď v sousední klauzi). */
-function scanOccurrences(quote: string, sourceText: string): Scan[] {
+function scanOccurrences(quote: string, sourceText: string, cs = false): Scan[] {
   const parts = rawParts(quote);
   if (parts.length === 0) return [];
   const { toks, words, brk, qm } = analyse(sourceText);
@@ -218,15 +242,16 @@ function scanOccurrences(quote: string, sourceText: string): Scan[] {
   const clauseStart = (i: number) => { let k = i; while (k > 0 && !brk[k]) k -= 1; return k; };
   const clauseEnd = (j: number) => { let k = j + 1; while (k < n && !brk[k]) k += 1; return k; };
   return findOccurrences(parts, words).map((o) => {
-    const cs = clauseStart(o.a);
+    const start = clauseStart(o.a);
     const ce = clauseEnd(o.b);
-    let before = words.slice(cs, o.a);
+    let before = words.slice(start, o.a);
     let after = words.slice(o.b + 1, ce);
-    if (cs > 0) {
-      const ps = clauseStart(cs - 1);
-      if (SHORT_ANSWERS.has(words[ps])) before = [...words.slice(ps, Math.min(ps + ANSWER_WORDS, cs)), ...before];
+    if (start > 0) {
+      const prevAnswer = answerClause(words, clauseStart(start - 1), start, cs);
+      if (prevAnswer) before = [...prevAnswer, ...before];
     }
-    if (ce < n && SHORT_ANSWERS.has(words[ce])) after = [...after, ...words.slice(ce, Math.min(ce + ANSWER_WORDS, clauseEnd(ce)))];
+    const nextAnswer = ce < n ? answerClause(words, ce, clauseEnd(ce), cs) : null;
+    if (nextAnswer) after = [...after, ...nextAnswer];
     let question = false;
     for (let k = o.a + 1; k <= ce; k += 1) if (qm[k]) question = true;
     return { before, inside: words.slice(o.a, o.b + 1), after, question, gapNeg: o.gapNeg, start: toks[o.a].s };
@@ -259,17 +284,18 @@ export function negationRisk(
   claim: string,
   quote: string,
   sourceText: string,
-  opts: { citedRange?: [number, number]; question?: boolean } = {}
+  opts: { citedRange?: [number, number]; question?: boolean; cs?: boolean } = {}
 ): boolean {
-  const claimNeg = hasNegation(claim);
-  let scans = scanOccurrences(quote, sourceText);
+  const cs = opts.cs ?? false;
+  const claimNeg = wordsHaveNegation(foldedWords(claim), cs);
+  let scans = scanOccurrences(quote, sourceText, cs);
   if (opts.citedRange) {
     const [lo, hi] = opts.citedRange;
     const own = scans.filter((s) => s.start >= lo && s.start < hi);
     if (own.length > 0) scans = own;
   }
-  if (scans.length === 0) return hasNegation(quote) && !claimNeg;
-  const neg = scans.some((s) => s.gapNeg || wordsHaveNegation([...s.before, ...s.inside, ...s.after]));
+  if (scans.length === 0) return wordsHaveNegation(foldedWords(quote), cs) && !claimNeg;
+  const neg = scans.some((s) => s.gapNeg || wordsHaveNegation([...s.before, ...s.inside, ...s.after], cs));
   return (neg && !claimNeg) || (opts.question !== false && scans.some((s) => s.question));
 }
 
@@ -393,13 +419,14 @@ const MUST_BE_LINKED: MeetingItemKind[] = ['decision', 'action_item'];
 export function validateMeetingBrief(
   raw: unknown,
   transcript: Transcript,
-  opts: { activeCardIds?: Iterable<string> } = {}
+  opts: { activeCardIds?: Iterable<string>; languageHint?: 'cs' | 'en' | null } = {}
 ): ValidationResult<ValidatedMeetingBrief> {
   if (!isObj(raw)) return { ok: false, code: 'unparseable', message: 'Výstup modelu není objekt.' };
   const summary = clipStr(raw.summary, 2000);
   if (!summary) return { ok: false, code: 'empty_summary', message: 'Model nevrátil shrnutí.' };
 
   const segById = new Map(transcript.segments.map((s) => [s.id, s]));
+  const cs = isCzech(transcript.segments.map((s) => s.text).join(' '), opts.languageHint);
   const segIndex = new Map(transcript.segments.map((s, i) => [s.id, i]));
   const seenItems = new Set<string>();
   const activeCards = new Set(opts.activeCardIds ?? []);
@@ -451,7 +478,7 @@ export function validateMeetingBrief(
           quoteFound: found,
           startMs: seg.startMs,
           endMs: seg.endMs,
-          ...(found && quote !== null && negationRisk(text, quote, around, { citedRange: [lo, lo + seg.text.length], question: MUST_BE_LINKED.includes(kind) }) ? { flag: 'negation_nearby' as const } : {}),
+          ...(found && quote !== null && negationRisk(text, quote, around, { citedRange: [lo, lo + seg.text.length], question: MUST_BE_LINKED.includes(kind), cs }) ? { flag: 'negation_nearby' as const } : {}),
         });
         cited.push(seg);
       }
@@ -579,6 +606,7 @@ export function validateProjectBrief(
 
   const byRef = new Map(sources.map((s) => [s.ref, s]));
   const activeCards = new Set(opts.activeCardIds ?? []);
+  const cs = isCzech(sources.map((x) => x.text).join(' '));
   let rejected = 0;
 
   /** Společná kontrola: refs musí existovat, citace musí sedět, data musí být podložená. */
@@ -590,7 +618,7 @@ export function validateProjectBrief(
     const quote = typeof r.quote === 'string' && r.quote.trim() ? clipStr(r.quote, MAX_QUOTE_CHARS) : null;
     const hit = quote ? refs.find((x) => quoteSupported(quote, byRef.get(x)!.text)) : undefined;
     const text = clipStr(r.text, MAX_ITEM_TEXT);
-    const risky = quote !== null && hit !== undefined && negationRisk(text, quote, byRef.get(hit)!.text, { question });
+    const risky = quote !== null && hit !== undefined && negationRisk(text, quote, byRef.get(hit)!.text, { question, cs });
     const evidence: Evidence[] = refs.map((ref) => ({ ref, quote: ref === hit ? quote : null, quoteFound: ref === hit, ...(ref === hit && risky ? { flag: 'negation_nearby' as const } : {}) }));
     // linked = citace nalezena (a bez záporu navíc); sourced = odkaz na existující zdroj BEZ citace (nic se neporovnávalo);
     // unverified = citace uvedena, ale nenalezena, nebo je v ní zápor, který tvrzení nemá.

@@ -111,7 +111,7 @@ export const meetingAnalyze: AiFeature<{ meetingId: string; force: boolean }> = 
   finalize: async ({ db, input, prepared, parsed, response, requestId, context, board }) => {
     const p = prepared as Prepared;
     const activeCardIds = board.flatMap((c) => c.cards.filter((k) => !k.archived).map((k) => k.id));
-    const result = validateMeetingBrief(parsed, p.transcript, { activeCardIds });
+    const result = validateMeetingBrief(parsed, p.transcript, { activeCardIds, languageHint: p.meeting.languageHint });
     if (!result.ok) {
       // Nic se neukládá; předchozí výsledek zůstává platný.
       throw new AiGatewayError('bad_model_output', 'AI vrátila neúplný zápis. Zkuste to prosím znovu.');

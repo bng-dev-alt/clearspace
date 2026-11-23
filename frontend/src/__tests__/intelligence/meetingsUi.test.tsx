@@ -159,8 +159,39 @@ describe('ItemCard: evidence, hints and approval', () => {
     expect(screen.getByText('Citace nalezena')).toBeInTheDocument();
     expect(screen.getByTestId('evidence-link')).toHaveTextContent('„Honza připraví migraci databáze"');
     expect(screen.getByTestId('evidence-link')).toHaveTextContent('0:05');
-    expect(screen.getByTestId('item-hints')).toHaveTextContent('Vlastník z textu: Honza');
-    expect(screen.getByTestId('item-hints')).toHaveTextContent('datum zadejte ručně');
+    expect(screen.getByTestId('item-hints')).toHaveTextContent('Zmíněno v poradě: Honza');
+    expect(screen.getByTestId('owner-hint')).not.toHaveTextContent('není členem projektu');
+    expect(screen.getByTestId('due-hint')).toHaveTextContent('termín úkolu');
+  });
+  test('Northstar: a mentioned person who is not a project member is never assigned; picking someone else is called out', async () => {
+    svc().apply.mockResolvedValue({ cardId: 'card-new', alreadyApplied: false });
+    const klara = item({
+      text: 'Klára zjistí data z praxe ohledně velikosti příloh.', ownerText: 'Klára', dueText: 'hned 1. prosince',
+      evidence: [{ ref: 'segment:seg-251310-0', quote: 'Klára k tomu teď zjišťuje data z praxe a finální rozhodnutí padne na další poradě hned 1. prosince.', quoteFound: true }],
+    });
+    const { onChanged } = renderItem(klara, { meetingDay: '2026-11-23' });
+    expect(screen.getByTestId('owner-hint')).toHaveTextContent('není členem projektu');
+    expect(screen.getByTestId('due-hint')).toHaveAttribute('data-due-kind', 'meeting');
+    expect(screen.getByTestId('due-hint')).toHaveTextContent('ne termín úkolu');
+    fireEvent.click(screen.getByTestId('item-create'));
+    expect((screen.getByTestId('create-assignee') as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByTestId('use-suggested-assignee')).toBeNull();
+    expect(screen.queryByTestId('use-suggested-due')).toBeNull(); // the decision date is not offered as the task deadline
+    fireEvent.change(screen.getByTestId('create-assignee'), { target: { value: 'm-jana' } });
+    expect(screen.getByTestId('assignee-differs')).toHaveTextContent('Klára');
+    fireEvent.change(screen.getByTestId('create-assignee'), { target: { value: '' } });
+    expect(screen.queryByTestId('assignee-differs')).toBeNull();
+    fireEvent.click(screen.getByTestId('create-confirm'));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    const target = svc().apply.mock.calls[0][1];
+    expect(target).toMatchObject({ assignee_member_id: null, due_date: null });
+    expect(target.details).toContain('Zmíněno v poradě: Klára');
+    expect(target.details).toContain('datum porady nebo rozhodnutí');
+  });
+  test('an owner-edited due date stays authoritative (pre-filled from the item, no suggestion overrides it)', () => {
+    renderItem(item({ dueText: 'do pátku', dueDate: '2026-12-09' }), { meetingDay: '2026-11-18' });
+    fireEvent.click(screen.getByTestId('item-create'));
+    expect((screen.getByTestId('create-due') as HTMLInputElement).value).toBe('2026-12-09');
   });
   test('clicking evidence jumps to the transcript segment', () => {
     const { onJump } = renderItem(item());

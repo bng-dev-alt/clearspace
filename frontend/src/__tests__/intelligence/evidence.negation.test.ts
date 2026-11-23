@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   hasNegation,
+  isCzech,
   negationAfterQuote,
   negationBeforeQuote,
   negationRisk,
@@ -84,6 +85,23 @@ describe('negationRisk: clause-aware window, questions, answers', () => {
   });
   test('ellipsis gap with a negation is flagged by the risk check too', () => {
     expect(negationRisk(claim, 'nasadíme … v pátek', 'Nasadíme, ale ne v pátek.')).toBe(true);
+  });
+  test('answer clauses: a negative answer always counts, an affirmative one only when the whole clause is short', () => {
+    const c = 'Release se posouvá na pátek.';
+    const q = 'release posuneme na pátek';
+    expect(negationRisk(c, q, 'Release posuneme na pátek. Ne, to v pátek určitě nestihneme nasadit.')).toBe(true); // long, negative
+    expect(negationRisk(c, q, 'Release posuneme na pátek. Jo, to nepůjde.')).toBe(true); // short, affirmative + negation
+    expect(negationRisk(c, q, 'Release posuneme na pátek. Ano, ale ne v pátek.')).toBe(true);
+    expect(negationRisk(c, q, 'Release posuneme na pátek. Ano, zákazník A nesmí za žádných okolností tušit, co řeší zákazník B.')).toBe(false);
+    expect(negationRisk(c, q, 'Ano, zákazník A nesmí za žádných okolností tušit, co řeší zákazník B. Release posuneme na pátek.')).toBe(false);
+  });
+  test('Czech "No," is a filler, English "No," a negation; Czech "No, nebudeme." still flags', () => {
+    expect(negationRisk('We ship on Friday.', 'ship on Friday', 'We ship on Friday. No, we will wait.')).toBe(true);
+    expect(negationRisk('Release se posouvá na pátek.', 'release posuneme na pátek', 'Release posuneme na pátek. No, jedou vyloženě takzvaný minimum viable product.', { cs: true })).toBe(false);
+    expect(negationRisk('Release se posouvá na pátek.', 'release posuneme na pátek', 'Release posuneme na pátek. No, nebudeme.', { cs: true })).toBe(true);
+    expect(isCzech('Představme si stavbu letadla.')).toBe(true);
+    expect(isCzech('We ship on Friday, no doubt.')).toBe(false);
+    expect(isCzech('We ship on Friday.', 'cs')).toBe(true);
   });
   test('false-positive guards: nebo / neděle / nejlepší stay clean', () => {
     expect(negationRisk(claim, 'nasadíme release v pátek nebo v neděli', 'Nasadíme release v pátek nebo v neděli, nejlepší varianta.')).toBe(false);

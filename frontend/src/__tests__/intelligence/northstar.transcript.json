@@ -1,0 +1,276 @@
+{
+ "_note": "Real Soniox transcript of the owner's Northstar test meeting (staging, 2026-11-23); segments verbatim. Used by deterministic regression tests, no provider calls.",
+ "speakers": [
+  {
+   "id": "S1",
+   "label": "Mluvčí 1",
+   "displayName": null
+  },
+  {
+   "id": "S2",
+   "label": "Mluvčí 2",
+   "displayName": null
+  }
+ ],
+ "segments": [
+  {
+   "id": "seg-150-0",
+   "startMs": 150,
+   "endMs": 9870,
+   "speakerId": "S1",
+   "text": "Představme si stavbu letadla. Letadla, které už za pár týdnů musí letět, ale my z něj právě teď vyhazujeme sedačky, abychom vůbec dokázali vzlétnout."
+  },
+  {
+   "id": "seg-10470-0",
+   "startMs": 10470,
+   "endMs": 12870,
+   "speakerId": "S2",
+   "text": "To je mimochodem velmi přesné přirovnání pro dnešní téma."
+  },
+  {
+   "id": "seg-13050-0",
+   "startMs": 13050,
+   "endMs": 27090,
+   "speakerId": "S1",
+   "text": "Vlastně ano. Dnešní hloubková analýza se totiž zaměřuje na reálný projekt B2B portálu s názvem Northstar. Podkladem je nám zápis z projektové porady, která se konala shodou okolností právě dnes, tedy 23. listopadu 2026."
+  },
+  {
+   "id": "seg-27270-0",
+   "startMs": 27270,
+   "endMs": 40110,
+   "speakerId": "S2",
+   "text": "Přesně tak. A myslím, že je to fascinující pohled pod pokličku. Ukazuje to, proč je někdy nutné, ehm, takzvaně zabít své miláčky, abychom přežili ostrý start. Ten pilotní provoz má totiž začít už 14. prosince."
+  },
+  {
+   "id": "seg-40410-0",
+   "startMs": 40410,
+   "endMs": 53970,
+   "speakerId": "S1",
+   "text": "Což je opravdu za rohem. A když jsem ten zápis z porady četl, vedení schválilo pro prvních 8 zákazníků opravdu jen naprostou kostru. Prostě přihlášení, založení požadavku, sledování stavu a nějaké e-mailové notifikace."
+  },
+  {
+   "id": "seg-54210-0",
+   "startMs": 54210,
+   "endMs": 59550,
+   "speakerId": "S2",
+   "text": "No, jedou vyloženě takzvaný minimum viable product. Berou jen to absolutně nezbytné pro přežití."
+  },
+  {
+   "id": "seg-59730-0",
+   "startMs": 59730,
+   "endMs": 67530,
+   "speakerId": "S1",
+   "text": "Jasně, ale počkej, oni vyřadili i fakturaci. Jako v B2B portálu? To přece zní jako vyložená sebevražda, ne?"
+  },
+  {
+   "id": "seg-67770-0",
+   "startMs": 67770,
+   "endMs": 82350,
+   "speakerId": "S2",
+   "text": "Hele, z byznysového pohledu to tak možná působí. Jenže tým prostě nesmí tříštět kapacity. Fakturace je extrémně složitý proces s komplexní vazbou na účetnictví, takže šla přes palubu. Stejně jako třeba mobilní aplikace nebo takové ty hezké vizuální statistiky."
+  },
+  {
+   "id": "seg-83070-0",
+   "startMs": 83070,
+   "endMs": 90210,
+   "speakerId": "S1",
+   "text": "A všiml jsem si, že výslovně dostali stopku i automatické odpovědi generované umělou inteligencí, což asi dává smysl."
+  },
+  {
+   "id": "seg-90570-0",
+   "startMs": 90570,
+   "endMs": 95250,
+   "speakerId": "S2",
+   "text": "Určitě. Tým jasně řekl, že k AI se vrátí nejdříve v lednu 2027."
+  },
+  {
+   "id": "seg-95850-0",
+   "startMs": 95850,
+   "endMs": 106890,
+   "speakerId": "S1",
+   "text": "Zní to logicky, protože umělá inteligence je v tomhle kontextu luxus. Sice to krásně vypadá na prezentacích, ale vyžaduje to prostě náročné testování spolehlivosti. Na to teď zjevně není čas."
+  },
+  {
+   "id": "seg-107250-0",
+   "startMs": 107250,
+   "endMs": 116730,
+   "speakerId": "S2",
+   "text": "Což nás vlastně přivádí k samotnému jádru problému. Právě proto, že je ten rozsah tak strašně malý, nezůstává tam vůbec žádný prostor, za který by se dala schovat nějaká chyba."
+  },
+  {
+   "id": "seg-117210-0",
+   "startMs": 117210,
+   "endMs": 120930,
+   "speakerId": "S1",
+   "text": "Rozumím. Ten ořezaný základ musí fungovat naprosto neprůstřelně."
+  },
+  {
+   "id": "seg-121110-0",
+   "startMs": 121110,
+   "endMs": 131610,
+   "speakerId": "S2",
+   "text": "Přesně. A hned tu máme první obrovské riziko. Jde o technickou chybu v API rozhraní. Zápis zmiňuje, že při rychlých úpravách systém občas přepíše novější stav požadavku tím starším."
+  },
+  {
+   "id": "seg-131850-0",
+   "startMs": 131850,
+   "endMs": 137910,
+   "speakerId": "S1",
+   "text": "Počkej, jak se vůbec něco takového v moderním systému stane? Že starší informace přepíše tu novou?"
+  },
+  {
+   "id": "seg-138090-0",
+   "startMs": 138090,
+   "endMs": 147630,
+   "speakerId": "S2",
+   "text": "Může za to asynchronní zpracování dat. Když to API pracuje požadavky paralelně a ne v tom přesném pořadí, tak vzniká takzvaný souběh, neboli race condition."
+  },
+  {
+   "id": "seg-147750-0",
+   "startMs": 147750,
+   "endMs": 152670,
+   "speakerId": "S1",
+   "text": "Aha, takže ta starší aktualizace prostě dorazí na server o milisekundu později než ta nová."
+  },
+  {
+   "id": "seg-152850-0",
+   "startMs": 152850,
+   "endMs": 167730,
+   "speakerId": "S2",
+   "text": "No jasně. A výsledkem je, že stará informace nechtěně přepíše tu novou. Což je pro zákazníka, který čeká na vyřešení kritického problému, absolutní noční můra. Technický vedoucí David teď musí do 2. prosince urgentně vymyslet zamykání těch datových záznamů."
+  },
+  {
+   "id": "seg-168030-0",
+   "startMs": 168030,
+   "endMs": 181110,
+   "speakerId": "S1",
+   "text": "Tak tomu nezávidím. A další vrásky jim tam evidentně dělá externí dodavatel pro e-maily. Klára jako projektová manažerka ho musí urgovat hned do 25. listopadu. Kritické datum pro to zpoždění je totiž 4. prosinec."
+  },
+  {
+   "id": "seg-181230-0",
+   "startMs": 181230,
+   "endMs": 183570,
+   "speakerId": "S2",
+   "text": "Přesně tak, to je to takzvané SMTP rozhraní."
+  },
+  {
+   "id": "seg-183750-0",
+   "startMs": 183750,
+   "endMs": 196470,
+   "speakerId": "S1",
+   "text": "Tady se u toho trochu zastavím. Proč se s tím dodavatelem tolik stresují? Nemohli by prostě pro ten pilotní provoz těch 8 zákazníků použít nějaký dočasný interní sandbox server? Mě by hrozně lákalo to tam prostě překlopit a nečekat."
+  },
+  {
+   "id": "seg-196650-0",
+   "startMs": 196650,
+   "endMs": 206250,
+   "speakerId": "S2",
+   "text": "Zní to lákavě, to jo. Ale sandbox je určený striktně jen pro interní testy. Třeba zrovna David v něm má do 3. prosince otestovat, jestli systém neposílá notifikace duplicitně."
+  },
+  {
+   "id": "seg-206310-0",
+   "startMs": 206310,
+   "endMs": 208110,
+   "speakerId": "S1",
+   "text": "Rozumím, ale proč to nejde naostro?"
+  },
+  {
+   "id": "seg-208410-0",
+   "startMs": 208410,
+   "endMs": 218970,
+   "speakerId": "S2",
+   "text": "Protože jakmile jde o reálnou rozesílku skutečným klientům, sandbox naprosto selhává. Nedokáže garantovat doručitelnost. Ty e-maily by končily u klientů ve spamu nebo by přes firemní firewally neprošly vůbec."
+  },
+  {
+   "id": "seg-219090-0",
+   "startMs": 219090,
+   "endMs": 229290,
+   "speakerId": "S1",
+   "text": "Jasně, chybí tam ty ostré certifikáty a garance. Zvlášť když David také do 27. listopadu garantuje klíčový test bezpečnosti, což je striktní izolace dat mezi zákazníky."
+  },
+  {
+   "id": "seg-229470-0",
+   "startMs": 229470,
+   "endMs": 239130,
+   "speakerId": "S2",
+   "text": "Ano, zákazník A nesmí za žádných okolností tušit, co řeší zákazník B. Klára pak na to navazuje a do 30. listopadu musí vybrat ty konkrétní zákazníky a ověřit jejich souhlasy."
+  },
+  {
+   "id": "seg-239250-0",
+   "startMs": 239250,
+   "endMs": 250890,
+   "speakerId": "S1",
+   "text": "Všechno do sebe zapadá. Ale i tak tam zůstávají věci, které mně v tom zápisu praštily do očí. Narážím na ten chystaný limit příloh. Otevřenou otázkou je velikost souborů a zatím tam svítí limit pouhých 10 MB."
+  },
+  {
+   "id": "seg-251310-0",
+   "startMs": 251310,
+   "endMs": 257190,
+   "speakerId": "S2",
+   "text": "Je to tak. Klára k tomu teď zjišťuje data z praxe a finální rozhodnutí padne na další poradě hned 1. prosince."
+  },
+  {
+   "id": "seg-257490-0",
+   "startMs": 257490,
+   "endMs": 273870,
+   "speakerId": "S1",
+   "text": "Ale počkej, zastavme se u těch 10 MB. V roce 2026 pro B2B servisní portál. Není to až absurdně malé? Představme si, že tam někdo potřebuje nahrát detailní chybové logy nebo video s tou závadou. Do 10 MB se dneska nevleze skoro nic."
+  },
+  {
+   "id": "seg-274410-0",
+   "startMs": 274410,
+   "endMs": 284850,
+   "speakerId": "S2",
+   "text": "Z uživatelského hlediska je to hodně bolestivé, to souhlasím. Ale z pohledu té architektury má tohle omezení železnou logiku. Velké soubory totiž extrémně zatěžují propustnost sítě."
+  },
+  {
+   "id": "seg-285090-0",
+   "startMs": 285090,
+   "endMs": 286770,
+   "speakerId": "S1",
+   "text": "Takže by to zpomalilo celý portál."
+  },
+  {
+   "id": "seg-286830-0",
+   "startMs": 286830,
+   "endMs": 299430,
+   "speakerId": "S2",
+   "text": "Přesně, a raketově by to zvýšilo náklady na cloud. Ta infrastruktura a stabilita v této fázi zkrátka diktují byznys. Nejde o to, co by klienti teoreticky chtěli, ale co ten ořezaný systém před spuštěním dokáže stabilně ustát."
+  },
+  {
+   "id": "seg-300090-0",
+   "startMs": 300090,
+   "endMs": 311130,
+   "speakerId": "S1",
+   "text": "Vývoj portálu Northstar je vlastně docela drsná lekce. Je vidět, jak zásadní je před pilotem řešit bezpečnost dat, stabilitu API a komunikaci s dodavateli, a ne ty líbivé funkce."
+  },
+  {
+   "id": "seg-311670-0",
+   "startMs": 311670,
+   "endMs": 320130,
+   "speakerId": "S2",
+   "text": "A to se týká i té umělé inteligence, kterou jsme zmiňovali na začátku. Zamítli ji kvůli nákladům a hlavně nutnosti kontrolovat správnost těch vygenerovaných odpovědí."
+  },
+  {
+   "id": "seg-320490-0",
+   "startMs": 320490,
+   "endMs": 330210,
+   "speakerId": "S1",
+   "text": "Což ve mně vyvolává jednu docela provokativní myšlenku na samotný závěr naší dnešní analýzy. Všichni dnes cpou AI úplně všude, do každého možného tlačítka."
+  },
+  {
+   "id": "seg-330570-0",
+   "startMs": 330570,
+   "endMs": 331170,
+   "speakerId": "S2",
+   "text": "No, to je pravda."
+  },
+  {
+   "id": "seg-331410-0",
+   "startMs": 331410,
+   "endMs": 353070,
+   "speakerId": "S1",
+   "text": "Nabízí se tedy otázka, nestane se v budoucnu v tomhle specifickém korporátním sektoru právě absence umělé inteligence obrovskou výhodou? Možná bude právě garance stoprocentně lidského a ověřeného přístupu bez zásahů algoritmů fungovat jako ta nejvyšší prémiová výhoda. Taková, za kterou si klienti velmi rádi připlatí. Zkuste se nad tím zamyslet."
+  }
+ ]
+}

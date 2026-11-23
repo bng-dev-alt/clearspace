@@ -15,11 +15,72 @@ export const ALLOWED_RESOURCE_MIME = [
 /** Signed links are short-lived; they are re-created every time the list is loaded. */
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
-/** Returns a user-facing reason when the file would be refused, otherwise null. */
-export function validateResourceFile(file: { size: number; type: string }): string | null {
-  if (file.size > MAX_RESOURCE_BYTES) return 'Soubor je větší než 10 MB.';
-  if (!ALLOWED_RESOURCE_MIME.includes(file.type)) return 'Tento typ souboru není povolený (obrázky, PDF, text, CSV, JSON, Office).';
+export type ResourceErrorKind =
+  | 'too_large' | 'type_not_allowed' | 'empty'      // refused by validation (nothing was sent)
+  | 'not_saved' | 'permission' | 'auth'             // refused by the server's access rules
+  | 'unavailable' | 'network' | 'metadata' | 'unknown';
+
+/** A user-safe upload failure: `message` is always our own Czech text (never a raw server message, path or key). */
+export class ResourceUploadError extends Error {
+  constructor(public kind: ResourceErrorKind, message: string) {
+    super(message);
+    this.name = 'ResourceUploadError';
+  }
+}
+
+const MESSAGES: Record<ResourceErrorKind, string> = {
+  too_large: 'Soubor je větší než 10 MB.',
+  type_not_allowed: 'Tento typ souboru není povolený (obrázky, PDF, text, CSV, Markdown, JSON, Office).',
+  empty: 'Soubor je prázdný.',
+  not_saved: 'Úkol ještě není uložený na serveru. Počkejte chvíli, případně obnovte stránku, a zkuste to znovu.',
+  permission: 'K tomuto úkolu nemáte oprávnění nahrávat soubory.',
+  auth: 'Platnost přihlášení vypršela. Přihlaste se prosím znovu.',
+  unavailable: 'Úložiště souborů je dočasně nedostupné. Zkuste to prosím později.',
+  network: 'Nepodařilo se spojit se serverem. Zkontrolujte připojení a zkuste to znovu.',
+  metadata: 'Soubor se nahrál, ale nepodařilo se ho připojit k úkolu. Zkuste to prosím znovu.',
+  unknown: 'Nahrávání souboru selhalo. Zkuste to prosím znovu.',
+};
+export const resourceErrorMessage = (kind: ResourceErrorKind) => MESSAGES[kind];
+
+/** Browsers (Safari/Firefox, drag and drop) often report an EMPTY type for .md/.csv; fall back to the extension, never to anything outside the allow-list. */
+const EXT_MIME: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  txt: 'text/plain', csv: 'text/csv', md: 'text/markdown', markdown: 'text/markdown', json: 'application/json',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+export function effectiveMime(file: { name?: string; type: string }): string {
+  if (file.type) return file.type;
+  const ext = (file.name ?? '').includes('.') ? (file.name ?? '').split('.').pop()!.toLowerCase() : '';
+  return EXT_MIME[ext] ?? '';
+}
+
+/** The kind of refusal when the file would be refused before any request, otherwise null. */
+export function checkResourceFile(file: { name?: string; size: number; type: string }): ResourceErrorKind | null {
+  if (file.size === 0) return 'empty';
+  if (file.size > MAX_RESOURCE_BYTES) return 'too_large';
+  if (!ALLOWED_RESOURCE_MIME.includes(effectiveMime(file))) return 'type_not_allowed';
   return null;
+}
+
+/** Returns a user-facing reason when the file would be refused, otherwise null. */
+export function validateResourceFile(file: { name?: string; size: number; type: string }): string | null {
+  const kind = checkResourceFile(file);
+  return kind ? MESSAGES[kind] : null;
+}
+
+/** Maps a Storage / PostgREST error to a kind. Storage reports the real reason in the body's `statusCode` (the HTTP status may be a generic 400). */
+export function classifyUploadError(err: { message?: string; status?: number | string; statusCode?: number | string; code?: string } | null | undefined): ResourceErrorKind {
+  const code = Number(err?.statusCode ?? err?.status);
+  const msg = (err?.message ?? '').toLowerCase();
+  if (code === 413 || /maximum allowed size|payload too large|too large/.test(msg)) return 'too_large';
+  if (code === 415 || /mime type|invalid mime/.test(msg)) return 'type_not_allowed';
+  if (/jwt expired|invalid jwt|invalid token/.test(msg) || code === 401) return 'auth';
+  if (code === 403 || err?.code === '42501' || /row-level security|unauthorized|not allowed/.test(msg)) return 'permission';
+  if (code === 404 || /bucket not found/.test(msg) || code >= 500) return 'unavailable';
+  if (/failed to fetch|network|load failed|fetch failed/.test(msg) || (err as { name?: string } | null)?.name === 'StorageUnknownError') return 'network';
+  return 'unknown';
 }
 
 /** Extension of the storage object: lowercase alphanumerics only, so a crafted file name cannot shape the path. */
@@ -42,12 +103,21 @@ export const resourceService = {
     if (hasSupabaseConfig && supabase) {
       // 1. Upload to the PRIVATE bucket. Files are immutable (unique name, no upsert), and a refused upload
       //    (size / type / membership) must fail loudly instead of pretending the file was saved.
-      const invalid = validateResourceFile(file);
-      if (invalid) throw new Error(invalid);
+      const refused = checkResourceFile(file);
+      if (refused) throw new ResourceUploadError(refused, MESSAGES[refused]);
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET)
-        .upload(storagePath, file, { upsert: false, contentType: file.type });
-      if (uploadErr) throw new Error(`Nahrání souboru selhalo: ${uploadErr.message}`);
+        .upload(storagePath, file, { upsert: false, contentType: effectiveMime(file) });
+      if (uploadErr) {
+        let kind = classifyUploadError(uploadErr as never);
+        // An access refusal on a card the database does not know yet is a different problem from a missing membership.
+        if (kind === 'permission') {
+          const { data: card, error: cardErr } = await supabase.from('cards').select('id').eq('id', taskId).maybeSingle();
+          if (!card && !cardErr) kind = 'not_saved';
+        }
+        console.warn('[resource-upload] refused:', kind, (uploadErr as { statusCode?: string }).statusCode ?? (uploadErr as { status?: number }).status);
+        throw new ResourceUploadError(kind, MESSAGES[kind]);
+      }
       const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
       downloadUrl = signed?.signedUrl;
 
@@ -59,7 +129,7 @@ export const resourceService = {
           task_id: taskId,
           storage_path: storagePath,
           filename: file.name,
-          mime_type: file.type || 'application/octet-stream',
+          mime_type: effectiveMime(file) || 'application/octet-stream',
           size: file.size,
           uploaded_by: uploadedBy,
         })
@@ -69,7 +139,9 @@ export const resourceService = {
       if (dbErr) {
         // metadata failed: do not leave an orphaned file behind
         await supabase.storage.from(BUCKET).remove([storagePath]);
-        throw new Error(`Uložení metadat přílohy selhalo: ${dbErr.message}`);
+        const kind = classifyUploadError(dbErr as never) === 'permission' ? 'permission' : 'metadata';
+        console.warn('[resource-upload] metadata refused:', kind, dbErr.code);
+        throw new ResourceUploadError(kind, MESSAGES[kind]);
       }
       if (data) {
         return {

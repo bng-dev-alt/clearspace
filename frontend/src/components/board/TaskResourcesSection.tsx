@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Paperclip, Upload, Trash2, Download, Eye, FileText, Image as ImageIcon, FileSpreadsheet, FileCode, X, Sparkles } from 'lucide-react';
-import { resourceService } from '../../services/resourceService';
+import { resourceService, resourceErrorMessage, ResourceUploadError } from '../../services/resourceService';
 import { TaskResource } from '../../types/kanban';
 import ResourceAiModal from './ResourceAiModal';
 
@@ -22,6 +22,7 @@ export default function TaskResourcesSection({
   const [resources, setResources] = useState<TaskResource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [previewResource, setPreviewResource] = useState<TaskResource | null>(null);
   const [aiResource, setAiResource] = useState<TaskResource | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -49,19 +50,21 @@ export default function TaskResourcesSection({
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setIsUploading(true);
+    setUploadErrors([]);
 
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+    // One bad file must not hide the others: every file is tried, each failure is reported with its own reason.
+    const failures: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
         const newRes = await resourceService.uploadResource(taskId, file, uploadedBy);
         setResources((prev) => [newRes, ...prev]);
+      } catch (err) {
+        failures.push(`${file.name}: ${err instanceof ResourceUploadError ? err.message : resourceErrorMessage('unknown')}`);
       }
-    } catch {
-      alert('Nahrávání souboru selhalo.');
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+    setUploadErrors(failures);
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDelete = async (res: TaskResource) => {
@@ -172,9 +175,17 @@ export default function TaskResourcesSection({
             ? 'Nahrávání...'
             : isDragOver
             ? 'Pusťte soubory zde pro nahrání'
-            : 'Přetáhněte soubory sem (PDF, DOCX, PNG, JPG, MD, CSV) nebo klikněte'}
+            : 'Přetáhněte soubory sem (PDF, DOCX, PNG, JPG, MD, CSV; do 10 MB) nebo klikněte'}
         </p>
       </div>
+
+      {uploadErrors.length > 0 && (
+        <div role="alert" data-testid="resource-upload-error" style={{ fontSize: '0.75rem', color: 'var(--danger)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+          {uploadErrors.map((m, i) => (
+            <span key={i}>{m}</span>
+          ))}
+        </div>
+      )}
 
       {/* Resource List */}
       {isLoading ? (

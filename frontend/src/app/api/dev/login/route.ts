@@ -10,9 +10,11 @@ export async function POST(req: NextRequest) {
     {
       nodeEnv: process.env.NODE_ENV,
       enabled: process.env.CLEARSPACE_DEV_LOGIN,
-      vercel: process.env.VERCEL,
+      vercel: process.env.VERCEL || process.env.VERCEL_ENV,
       email: process.env.DEV_LOGIN_EMAIL,
       password: process.env.DEV_LOGIN_PASSWORD,
+      autoEnabled: process.env.CLEARSPACE_DEV_AUTO_LOGIN,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     },
     req.headers,
   );

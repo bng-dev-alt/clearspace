@@ -61,7 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (hasSupabaseConfig) {
         try {
           // Get current session
-          const { data: { session: activeSession } } = await supabase.auth.getSession();
+          let { data: { session: activeSession } } = await supabase.auth.getSession();
+          // LOCAL DEV AUTO-LOGIN (lib/devAutoLogin.ts): NODE_ENV is a build-time constant, so a production build drops this branch and the
+          // dynamic import entirely. In development it runs only with NEXT_PUBLIC_DEV_AUTO_LOGIN=1 against a loopback Supabase.
+          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN === '1') {
+            const { ensureDevSession } = await import('../lib/devAutoLogin');
+            activeSession = await ensureDevSession(supabase, activeSession);
+          }
           if (!mounted) return;
 
           if (activeSession) {
@@ -313,6 +319,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setIsLoading(true);
     try {
+      if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEV_AUTO_LOGIN === '1') {
+        (await import('../lib/devAutoLogin')).disableAutoLoginForTab(); // logout stays logged out in this tab (explicit-login mode)
+      }
       if (hasSupabaseConfig) {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;

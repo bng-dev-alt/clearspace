@@ -348,6 +348,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
                         cards={cards}
                         members={members}
                         meetingDay={meetingDay}
+                        citedText={it.evidence.map((e) => transcript?.segments.find((s) => `segment:${s.id}` === e.ref)?.text ?? e.quote ?? '').join(' ')}
                         fromEarlierRun={!!run && it.runId !== run.id}
                         onJump={jumpTo}
                         onChanged={(msg) => {

@@ -81,7 +81,7 @@ BEGIN
 
   -- invitee sees the workspace contact list only via collaboration rules (can_view_workspace needs a shared project)
   PERFORM test.act_as(e, 'invitee@example.test');
-  PERFORM test.ok((select count(*) from public.workspace_members where owner_id = a) = 0, 'invitee sees no owner contacts until added to a project');
+  PERFORM test.ok((select count(*) from public.workspace_members where owner_id = a and profile_id is distinct from auth.uid()) = 0, 'invitee sees no owner contacts until added to a project (only their own identity row)');
 
   -- expiry
   PERFORM test.act_as(a, 'owner@example.test');

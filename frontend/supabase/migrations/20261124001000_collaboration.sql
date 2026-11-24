@@ -362,6 +362,10 @@ DECLARE
     v_uid UUID := auth.uid();
     v_source TEXT := coalesce(nullif(current_setting('clearspace.event_source', true), ''), 'app');
 BEGIN
+    -- Anonymous tooling (no user AND no declared source, e.g. a demo-data import or admin SQL) writes no events:
+    -- it would only add "Systém" entries dated today next to imported history. Integrations running without a
+    -- user must identify themselves: set_config('clearspace.event_source', '<source>', true).
+    IF v_uid IS NULL AND nullif(current_setting('clearspace.event_source', true), '') IS NULL THEN RETURN NULL; END IF;
     SELECT p.user_id INTO v_owner FROM public.projects p WHERE p.id = p_project_id;
     IF NOT FOUND THEN RETURN NULL; END IF;   -- project is being deleted
     IF v_source !~ '^[a-z][a-z0-9_.:-]{0,63}$' THEN v_source := 'app'; END IF;
@@ -822,7 +826,7 @@ BEGIN
         END IF;
         IF (SELECT count(*) FROM public.task_comments tc
             WHERE tc.author_id = v_uid AND tc.created_at > now() - interval '1 minute') >= 20 THEN
-            RAISE EXCEPTION 'Příliš mnoho komentářů za krátkou dobu. Zkuste to za chvíli.' USING ERRCODE = '54000';
+            RAISE EXCEPTION 'Příliš mnoho komentářů za krátkou dobu. Zkuste to za chvíli.' USING ERRCODE = 'PT429';
         END IF;
         NEW.author_id := v_uid;
         NEW.author_name := left(public.collab_actor_name(v_pid, v_uid), 200);
@@ -1044,10 +1048,10 @@ BEGIN
     -- rate limits: per inviter per hour, and the existing per-workspace pending cap
     PERFORM pg_advisory_xact_lock(hashtextextended('collab_invite:' || v_uid::text, 0));
     IF (SELECT count(*) FROM public.invitations i WHERE i.invited_by = v_uid AND i.created_at > now() - interval '1 hour') >= 20 THEN
-        RAISE EXCEPTION 'Příliš mnoho pozvánek za hodinu. Zkuste to později.' USING ERRCODE = '54000';
+        RAISE EXCEPTION 'Příliš mnoho pozvánek za hodinu. Zkuste to později.' USING ERRCODE = 'PT429';
     END IF;
     IF (SELECT count(*) FROM public.invitations i WHERE i.workspace_id = v_owner AND i.status = 'pending') >= 50 THEN
-        RAISE EXCEPTION 'Příliš mnoho nevyřízených pozvánek.' USING ERRCODE = '54000';
+        RAISE EXCEPTION 'Příliš mnoho nevyřízených pozvánek.' USING ERRCODE = 'PT429';
     END IF;
 
     -- one live invitation per workspace + e-mail: a newer one replaces the older

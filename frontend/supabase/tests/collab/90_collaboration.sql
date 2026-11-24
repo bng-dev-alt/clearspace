@@ -356,7 +356,7 @@ BEGIN
   -- per-inviter rate limit (20 / hour)
   PERFORM test.act_as(current_setting('t.a')::uuid, 'own@example.test');
   PERFORM test.throws($q$DO $x$ BEGIN FOR i IN 1..25 LOOP PERFORM public.create_project_invitation('pX', 'bulk' || i || '@example.test', 'viewer'); END LOOP; END $x$ $q$,
-    '54000', 'invitation rate limit');
+    'PT429', 'invitation rate limit');
 END $$;
 
 -- Owner deletes another's comment; restore keeps history quiet
@@ -369,13 +369,13 @@ END $$;
 DO $$
 BEGIN
   PERFORM test.act_as(current_setting('t.a')::uuid, 'own@example.test');
-  PERFORM public.restore_project_board('pX', '{"columns":[{"id":"pX-todo","name":"K řešení","cards":[{"id":"k1","title":"Obnoveno","comments":[{"id":"cmr","author_name":"Bob z minulosti","content":"staré","created_at":"2026-01-01T00:00:00Z"}]}]},{"id":"pX-done","name":"Hotovo","cards":[]}]}'::jsonb);
+  PERFORM public.restore_project_board_v2('pX', '{"columns":[{"id":"pX-todo","name":"K řešení","cards":[{"id":"k1","title":"Obnoveno","comments":[{"id":"cmr","author_name":"Bob z minulosti","content":"staré","created_at":"2026-01-01T00:00:00Z"}]}]},{"id":"pX-done","name":"Hotovo","cards":[]}]}'::jsonb);
 END $$;
 DO $$
 BEGIN
   PERFORM test.ok((select count(*) from public.activity_logs where project_id = 'pX' and action_type = 'board_restored') = 1, 'restore = ONE board_restored event');
   PERFORM test.ok((select count(*) from public.activity_logs where project_id = 'pX' and action_type in ('card_created', 'card_deleted', 'column_deleted', 'column_created') and created_at = (select created_at from public.activity_logs where project_id = 'pX' and action_type = 'board_restored')) = 0, 'no per-row noise from the restore');
-  PERFORM test.ok((select author_name = 'Bob z minulosti' and author_id is null from public.task_comments where id = 'cmr'), 'restored comment keeps its recorded name, unverified');
+  PERFORM test.ok((select author_name = 'Bob z minulosti' and author_id is null and origin = 'import' from public.task_comments where id = 'cmr'), 'restored comment keeps its recorded name, marked as import (unverified)');
 END $$;
 
 -- A normal column add/delete later IS logged

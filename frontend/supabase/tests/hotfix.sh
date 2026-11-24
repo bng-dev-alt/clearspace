@@ -13,7 +13,7 @@ done
 echo "ok - 0500-0700 are byte-identical to the files applied to hosted"
 BASEH=("$MIGH"/20261117000100_security_foundation.sql "$MIGH"/20261117000200_restore_project_board.sql "$MIGH"/20261117000300_least_privilege_table_grants.sql "$MIGH"/20261117000400_task_resources_storage.sql)
 HOSTED7=("$MIGH"/20261118000500_intelligence_core.sql "$MIGH"/20261118000600_intelligence_quality.sql "$MIGH"/20261118000700_meeting_audio.sql)
-newdb cs_h_fresh; apply cs_h_fresh "$BASELINE" "$MIGH"/*.sql
+newdb cs_h_fresh; apply cs_h_fresh "$BASELINE" "${UPTO_0900[@]}"   # this scenario is about the 0900 hotfix
 HF=$(snapshot cs_h_fresh)
 newdb cs_h; apply cs_h "$BASELINE" "${BASEH[@]}" "${HOSTED7[@]}"
 H0=$(snapshot cs_h)

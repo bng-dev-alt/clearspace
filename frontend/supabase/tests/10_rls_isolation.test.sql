@@ -71,12 +71,10 @@ BEGIN
   -- activity log spoofing
   PERFORM test.throws(format($q$insert into public.activity_logs (id, project_id, actor_id, actor_name, action_type, entity_type) values ('act-spoof','pA',%L,'B','x','task')$q$, b),
     '42501', 'A cannot log activity as B');
-  INSERT INTO public.activity_logs (id, project_id, actor_id, actor_name, action_type, entity_type) VALUES ('act-ok','pA',a,'A','x','task');
-  INSERT INTO public.activity_logs (id, project_id, actor_name, action_type, entity_type) VALUES ('act-null','pA','A','x','task');
-  PERFORM test.ok(true, 'A can log activity as self or NULL');
-  UPDATE public.activity_logs SET actor_name = 'x' WHERE id = 'act-ok';
-  GET DIAGNOSTICS n = ROW_COUNT;
-  PERFORM test.ok(n = 0, 'activity logs are immutable for clients (0 rows updated)');
+  -- 20261124001000: events are written by database triggers only; even an honest client insert is refused
+  PERFORM test.throws(format($q$insert into public.activity_logs (id, project_id, actor_id, actor_name, action_type, entity_type) values ('act-ok','pA',%L,'A','x','task')$q$, a),
+    '42501', 'clients cannot write activity events (not even as themselves)');
+  PERFORM test.throws($q$update public.activity_logs set actor_name = 'x' where project_id = 'pA'$q$, '42501', 'activity logs are immutable for clients');
 EXCEPTION WHEN OTHERS THEN
   PERFORM test.reset();
   RAISE;

@@ -19,7 +19,7 @@ snapg() { snapshot "$1"; }
 mk_old() { newdb "$1"; apply "$1" "$BASELINE" "${BASE4[@]}" "$OLDDIR"/20261118000500_intelligence_core.sql "$OLDDIR"/20261118000600_intelligence_quality.sql "$OLDDIR"/20261118000700_meeting_audio.sql; }
 
 # fresh reference
-newdb cs_g_fresh; apply cs_g_fresh "$BASELINE" "$MIGG"/*.sql
+newdb cs_g_fresh; apply cs_g_fresh "$BASELINE" "${UPTO_0900[@]}"   # this scenario is about the 0800/0900 history
 SF=$(snapg cs_g_fresh)
 
 # old state + legacy data (created through the OLD member-callable functions)

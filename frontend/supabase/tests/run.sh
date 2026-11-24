@@ -14,6 +14,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND="$(cd "$HERE/../.." && pwd)"
 BASELINE="$FRONTEND/supabase_schema.sql"
 MIGRATIONS=("$FRONTEND"/supabase/migrations/*.sql)
+# The upgrade/hotfix scenarios (G, H) reproduce the 0800/0900 history; later migrations are not part of it.
+UPTO_0900=(); for f in "${MIGRATIONS[@]}"; do [[ "$(basename "$f")" > "20261118000900~" ]] || UPTO_0900+=("$f"); done
 NAME=clearspace-v1-sectest
 IMAGE=${PG_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.167}
 PORT=54999
@@ -87,6 +89,7 @@ source "$HERE/concurrency.sh"
 source "$HERE/rollback.sh"
 source "$HERE/upgrade.sh"
 source "$HERE/hotfix.sh"
+source "$HERE/collab.sh"
 fi
 source "$HERE/hosted_fidelity.sh"
 echo "ALL DATABASE TESTS PASSED ($TOTAL SQL assertions: suites run as superuser in scenario A and as the hosted non-superuser role in scenario E; plus legacy-upgrade, drift/ownership preflight and concurrency checks)"

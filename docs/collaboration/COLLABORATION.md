@@ -22,7 +22,7 @@ Realtime        database broadcasts (realtime.send) of content-free SIGNALS on P
 Presence        Realtime Presence on the same private project topic; ephemeral, no DB writes
 Concurrency     cards.version + conditional update + three-way merge; field-level / conditional writes for
                 checklists and column names; atomic column reorder; server-assigned card positions
-E-mail          server-only SMTP submission (no dependency), invitation template (cs), delivery bookkeeping
+E-mail          server-only SMTP submission (nodemailer), invitation template (cs), delivery bookkeeping
 ```
 
 ## 2. Membership and permissions
@@ -63,9 +63,13 @@ token, expiry (7 days), single use and the **verified** account e-mail -> projec
 * **Rate limits**: 20 invitations/hour per inviter (DB), 50 pending per workspace, 30 e-mail sends/hour per inviter.
 * **Existing accounts** additionally get an in-app invitation (accept button, verified e-mail required).
 
-E-mail delivery (`frontend/src/lib/email/`): dependency-free SMTP submission client (STARTTLS or implicit TLS,
-AUTH PLAIN/LOGIN; plain SMTP only to a loopback capture server), MIME multipart/alternative (text + HTML, UTF-8),
-template with escaped untrusted names and defused links, bounded retries (3 attempts, transient errors only),
+E-mail delivery (`frontend/src/lib/email/`): SMTP submission through nodemailer 10 (MIT-0, no dependencies; RUN 01C
+replaced the RUN 01B hand-written client): mandatory STARTTLS or implicit TLS, certificate validation, TLS >= 1.2,
+plain SMTP only to a loopback capture server, 25 s cap per session, MIME by nodemailer's MailComposer (text + HTML,
+UTF-8, folded headers), template with escaped untrusted names and defused links. Retries (3 attempts) ONLY when nothing
+can have been submitted (connection/TLS before the message) or after a definite 4xx; 5xx, credentials and certificate
+errors are final; a failure during transfer without a server verdict is `smtp_ambiguous`: never retried automatically
+(no duplicate invitations) and shown as "server nepotvrdil převzetí, e-mail mohl přesto odejít",
 error details sanitised (no tokens/credentials), raw tokens never logged. Delivery bookkeeping goes through
 `email_delivery_start/finish`, which require the server secret (`EMAIL_SERVER_SECRET`, SHA-256 in
 `server_trust('email')`) *and* that the caller manages the project -- clients cannot forge delivery states.
@@ -190,9 +194,11 @@ Rollback in reverse order:
 | Real stack HTTP | `supabase/tests/real_stack.sh` | 46 + 29 PASS |
 | Multi-user realtime (adversarial) | `supabase/tests/collab_realtime.mjs` | 64/64 |
 | Hosted-style realtime check | `supabase/tests/realtime_check.mjs` (used by `scripts/hosted-verify.sh`) | 9/9 |
-| Invitation e-mail lifecycle (real SMTP -> Mailpit) | `supabase/tests/invite_email.mjs` | 41/41 |
+| Invitation e-mail lifecycle (real SMTP -> Mailpit) | `supabase/tests/invite_email.mjs` | 41/41 (01C, nodemailer) |
+| New person with e-mail confirmation ON (as hosted) | `e2e/collaboration-01c-confirm.spec.ts` | PASS |
+| Production copy: 0900 schema identical, 1000+1100 as `postgres`, rollback to 0900, RUN 00 verify/dry-run | `scripts/apply-collab-hosted.sh` rehearsal | PASS |
 | Browser, two/three users | `e2e/collaboration.spec.ts`, `e2e/collaboration-01b.spec.ts` | PASS (repeated) |
-| Unit | `src/__tests__/**` | 1197/1197 |
+| Unit | `src/__tests__/**` | 1205/1205 |
 
 Local stack: `frontend/scripts/collab-stack.sh up|seed|app|env|mail|down` (Realtime + Mailpit, loopback only).
 

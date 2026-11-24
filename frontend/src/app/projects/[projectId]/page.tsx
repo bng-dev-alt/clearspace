@@ -123,6 +123,9 @@ export default function ProjectBoardPage() {
     [roster, user?.id]
   );
   const readOnly = hasSupabaseConfig && !canEdit;
+  const conflictText = conflict
+    ? `Kolega mezitím změnil ${conflict.fields.map((f) => FIELD_LABELS[f]).join(', ')} úkolu „${conflict.theirs.title}“. Zobrazujeme jeho verzi; vaše změna uložena nebyla.`
+    : null;
   // Viewer: board actions are no-ops (the database refuses them anyway; this just avoids dead clicks).
   const editOnly = <T extends unknown[]>(fn: (...args: T) => unknown) => (...args: T) => {
     if (!readOnly) fn(...args);
@@ -531,7 +534,7 @@ export default function ProjectBoardPage() {
   );
 
   return (
-    <div className="app-container" data-hydrated={isHydrated ? 'true' : 'false'}>
+    <div className={`app-container${readOnly ? ' is-readonly' : ''}`} data-hydrated={isHydrated ? 'true' : 'false'}>
       {/* Board akce se na mobilu objeví v hamburger menu (na desktopu zůstávají v toolbaru). */}
       <Navbar
         boardActions={{
@@ -612,12 +615,9 @@ export default function ProjectBoardPage() {
         </div>
       )}
 
-      {conflict && (
+      {conflict && !(isDrawerOpen && selectedCard?.id === conflict.cardId) && (
         <div className="collab-notice collab-notice--warning" role="alert" data-testid="conflict-notice">
-          <span>
-            Kolega mezitím změnil {conflict.fields.map((f) => FIELD_LABELS[f]).join(', ')} úkolu „{conflict.theirs.title}“.
-            Zobrazujeme jeho verzi. Vaše změna zatím uložena nebyla.
-          </span>
+          <span>{conflictText}</span>
           <div className="collab-notice-actions">
             <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => resolveConflict('theirs')} data-testid="conflict-keep-theirs">Ponechat jejich verzi</button>
             <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => resolveConflict('mine')} data-testid="conflict-use-mine">Přepsat mou verzí</button>
@@ -805,6 +805,8 @@ export default function ProjectBoardPage() {
           mentionables={mentionables}
           onEditComment={editComment}
           onDeleteComment={deleteComment}
+          conflictText={conflict && conflict.cardId === selectedCard.id ? conflictText : null}
+          onResolveConflict={resolveConflict}
         />
       )}
 

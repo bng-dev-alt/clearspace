@@ -3634,3 +3634,16 @@ body {
   font-size: 0.78rem; color: var(--dark-navy); cursor: pointer; display: flex; gap: 0.4rem; align-items: center;
 }
 .mention-suggestions li button[aria-selected="true"], .mention-suggestions li button:hover { background: var(--accent-soft); }
+
+/* Read-only role (viewer): creation/editing controls of the board are hidden; the database refuses
+   those writes anyway (RUN 01). Reading, filters, search, calendar and the activity stay. */
+.is-readonly .column-add-card-btn,
+.is-readonly .column-header-plus,
+.is-readonly .toolbar-new-task-btn { display: none !important; }
+.is-readonly .kanban-card { cursor: pointer; }
+
+@media (max-width: 767px) {
+  /* next to the burger, not floating in the middle of the bar */
+  .navbar-notifications { margin-left: auto; margin-right: 0.5rem; }
+  .navbar-bell { width: 44px; height: 44px; }   /* touch target, same as the burger */
+}

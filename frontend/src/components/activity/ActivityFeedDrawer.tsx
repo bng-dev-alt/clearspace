@@ -81,10 +81,12 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
   if (!isOpen) return null;
 
   return (
-    <div className="drawer-overlay" onClick={onClose} data-testid="activity-feed-overlay">
+    <>
+      {/* Overlay and panel are siblings (as in the task drawer): nested inside the overlay (z 90) the panel
+          sat below the sticky navbar (z 100), which covered its header and close button. */}
+      <div className="drawer-overlay" onClick={onClose} data-testid="activity-feed-overlay" />
       <div
         className="drawer-content mode-right"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Aktivita projektu"
@@ -174,6 +176,6 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -39,6 +39,9 @@ interface TaskDetailDrawerProps {
   mentionables?: Mentionable[];
   onEditComment?: (cardId: string, commentId: string, content: string, mentions: string[]) => Promise<boolean>;
   onDeleteComment?: (cardId: string, commentId: string) => Promise<boolean>;
+  /** A colleague changed these fields of THIS task concurrently; the drawer shows their version. */
+  conflictText?: string | null;
+  onResolveConflict?: (choice: 'theirs' | 'mine') => void;
 }
 
 export default function TaskDetailDrawer({
@@ -64,6 +67,8 @@ export default function TaskDetailDrawer({
   mentionables = [],
   onEditComment,
   onDeleteComment,
+  conflictText = null,
+  onResolveConflict,
 }: TaskDetailDrawerProps) {
   const { profile } = useAuth();
   const params = useParams();
@@ -87,9 +92,14 @@ export default function TaskDetailDrawer({
 
   // Plynulé zavření: nejdřív přehraj exit animaci, pak teprve odmountuj (onClose).
   const [isClosing, setIsClosing] = useState(false);
+  // The pending close must die with this drawer: otherwise a task reopened within the animation window
+  // (or a drawer already closed by the page's Escape handler) was closed again by the stale timer.
+  const closeTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (closeTimer.current !== null) window.clearTimeout(closeTimer.current); }, []);
   const requestClose = useCallback(() => {
+    if (closeTimer.current !== null) return;
     setIsClosing(true);
-    window.setTimeout(onClose, 230);
+    closeTimer.current = window.setTimeout(() => { closeTimer.current = null; onClose(); }, 230);
   }, [onClose]);
 
   const handleModeChange = (newMode: TaskDetailMode) => {
@@ -145,6 +155,12 @@ export default function TaskDetailDrawer({
   useEffect(() => { if (titleBase.current === null) setTitle(remoteTitle); }, [remoteTitle]);
   useEffect(() => { if (detailsBase.current === null) setDetails(remoteDetails); }, [remoteDetails]);
   useEffect(() => { setTag(card?.tag || ''); setPriority(card?.priority || ''); setDueDate(card?.dueDate || ''); }, [card?.tag, card?.priority, card?.dueDate]);
+  // A conflict means our edit was NOT saved: show the server's values again (unless still being edited).
+  useEffect(() => {
+    if (!conflictText) return;
+    if (titleBase.current === null) setTitle(remoteTitle);
+    if (detailsBase.current === null) setDetails(remoteDetails);
+  }, [conflictText, remoteTitle, remoteDetails]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Activity collapse state
@@ -529,6 +545,15 @@ export default function TaskDetailDrawer({
 
         {/* Scrollable workspace area */}
         <fieldset disabled={readOnly} className="drawer-scroll-area" style={{ border: 0, margin: 0, minWidth: 0 }} data-readonly={readOnly ? 'true' : 'false'}>
+          {conflictText && onResolveConflict && (
+            <div className="collab-notice collab-notice--warning" style={{ margin: 0 }} role="alert" data-testid="conflict-notice">
+              <span>{conflictText}</span>
+              <div className="collab-notice-actions">
+                <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => onResolveConflict('theirs')} data-testid="conflict-keep-theirs">Ponechat jejich verzi</button>
+                <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => onResolveConflict('mine')} data-testid="conflict-use-mine">Přepsat mou verzí</button>
+              </div>
+            </div>
+          )}
           {readOnly && (
             <p className="collab-notice" style={{ margin: 0 }} data-testid="drawer-readonly-note">
               Máte roli Čtenář: úkol můžete číst, ale ne upravovat.

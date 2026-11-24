@@ -142,14 +142,14 @@ export default function ProjectTeamModal({
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', marginTop: '0.5rem' }}>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
           {error && (
             <p role="alert" style={{ margin: 0, fontSize: '0.78rem', color: 'var(--danger)', fontWeight: 600 }} data-testid="project-team-error">
               {error}
             </p>
           )}
 
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '260px', overflowY: 'auto' }} data-testid="project-team-list">
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }} data-testid="project-team-list">
             {roster.length === 0 && (
               <li><EmptyState icon={<Users size={20} />} title="Zatím jen vy" description="Pozvěte kolegy e-mailem níže." /></li>
             )}
@@ -314,7 +314,7 @@ export default function ProjectTeamModal({
           )}
         </div>
 
-        <div className="modal-footer" style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'space-between' }}>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
           {myRole === 'owner' ? (
             <Button type="button" variant="ghost" size="sm" onClick={onManageWorkspace} data-testid="manage-workspace-link">
               <Settings2 size={13} /> Spravovat Workspace

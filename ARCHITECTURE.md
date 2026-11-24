@@ -60,6 +60,14 @@ projects → columns → cards
 
 The schema is a single idempotent SQL file (`frontend/supabase_schema.sql`), safe to re-run, including a backfill migration from the old JSONB shape.
 
+## Collaboration (RUN 01)
+
+Roles (owner / admin / editor / viewer), viewer read-only enforced in the database on every write path, project
+invitations, a trusted project event log written by database triggers, in-app notifications, comments with
+@mentions, realtime board sync (Supabase Realtime as a signal, the database stays authoritative), presence on private
+channels and optimistic concurrency on cards (`version` + three-way merge). Full description, contracts, security
+boundaries, rollback and extension points: [docs/collaboration/COLLABORATION.md](docs/collaboration/COLLABORATION.md).
+
 ## AI layer
 
 - **Server-side proxy.** All AI calls go through `/api/ai/*`; the `GEMINI_API_KEY` never reaches the client.

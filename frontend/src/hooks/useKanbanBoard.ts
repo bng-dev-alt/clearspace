@@ -67,6 +67,9 @@ export function useKanbanBoard(projectId?: string) {
   // Latest board for async callbacks (realtime merges, write results) without stale closures.
   const columnsRef = useRef<Column[]>([]);
   useEffect(() => { columnsRef.current = columns; }, [columns]);
+  // Server positions of the columns (seeded from each load, which is ordered by position): lets a
+  // colleague's reorder be applied live.
+  const positionsRef = useRef(new Map<string, number>());
   // Cards with a write in flight: a refetch must not paint an older server copy over the optimistic one.
   const pendingWrites = useRef(new Map<string, number>());
 
@@ -150,6 +153,7 @@ export function useKanbanBoard(projectId?: string) {
         // Řešitele karet resolvujeme proti členům projektu -> úkol patří
         // jen členům projektu; identita (jméno/barva) je vždy aktuální.
         setColumns(resolveBoardAssignees(board, projectMembers));
+        positionsRef.current = new Map(board.map((col, index) => [col.id, index]));
         setError(null);
       }
     } catch (err: unknown) {
@@ -945,8 +949,6 @@ export function useKanbanBoard(projectId?: string) {
         : next;
     });
   }, []);
-  const positionsRef = useRef(new Map<string, number>());
-
   const onMembershipChange = useCallback(() => {
     if (!hasSupabaseConfig) return;
     void Promise.all([

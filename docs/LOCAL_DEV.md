@@ -42,3 +42,11 @@ Dev builds show which Auth backend the login page talks to (`data-testid="auth-b
 ## Claude Browser / agents
 
 `.claude/launch.json` (workspace root) has `clearspace-local` (this worktree) / `clearspace-rc2-local` (release worktree): `preview_start` it and open the URL; no credentials needed. One-time per machine: create the stack project (`docs/intelligence/IMPLEMENTATION_REPORT.md`, "Local E2E recipe": `supabase init` in `$S1_STACK_DIR`, ports 55520-55529, `site_url` 127.0.0.1).
+
+## Collaboration stack (two users, Realtime)
+
+The default local stack runs without Realtime. For collaboration work use the separate isolated stack
+(`frontend/scripts/collab-stack.sh`, ports 55530-55539, loopback only, Realtime on): `up`, `seed` (synthetic
+alice/bob/vera accounts and a shared project; the password is generated into `$COLLAB_STACK_DIR/collab-accounts.env`),
+`app` (http://127.0.0.1:3431). Open two browser profiles (or one normal + one private window) and sign in as two
+different accounts. Details: [collaboration/COLLABORATION.md](collaboration/COLLABORATION.md).

@@ -207,7 +207,7 @@ try {
 } finally {
   for (const [c, ch] of channels) { try { await c.removeChannel(ch); } catch { /* already gone */ } }
   const d = await A.c.from('projects').delete().eq('id', P);
-  d.error ? bad(`cleanup failed: ${d.error.message}`) : console.log('cleanup: project deleted');
+  if (d.error) bad(`cleanup failed: ${d.error.message}`); else console.log('cleanup: project deleted');
   for (const c of [A.c, A2, B.c, V.c, R.c, C.c]) c.realtime.disconnect();
 }
 console.log(`${passed} passed, ${failed} failed`);

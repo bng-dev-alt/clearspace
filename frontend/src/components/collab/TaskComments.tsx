@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Comment } from '../../types/kanban';
 import { formatRelativeTime } from '../../lib/collab/activityText';
 import { activeMentionQuery, collectMentions, splitMentions, type Mentionable } from '../../lib/collab/mentions';
@@ -32,6 +32,16 @@ function MentionComposer({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
+  // Caret position to restore right after the value we just set is rendered (synchronously, before
+  // the next keystroke can land -- a deferred restore would move the caret back mid-typing).
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null || !ref.current) return;
+    const pos = pendingCaret.current;
+    pendingCaret.current = null;
+    ref.current.focus();
+    ref.current.setSelectionRange(pos, pos);
+  }, [value]);
   const [active, setActive] = useState(0);
   const query = activeMentionQuery(value, caret);
   const suggestions = useMemo(() => {
@@ -42,13 +52,9 @@ function MentionComposer({
 
   const pick = (m: Mentionable) => {
     const before = value.slice(0, caret).replace(/@[^\s@]*$/u, `@${m.name} `);
-    const next = before + value.slice(caret);
-    onChange(next);
-    requestAnimationFrame(() => {
-      ref.current?.focus();
-      ref.current?.setSelectionRange(before.length, before.length);
-      setCaret(before.length);
-    });
+    pendingCaret.current = before.length;
+    setCaret(before.length);
+    onChange(before + value.slice(caret));
   };
 
   return (

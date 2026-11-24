@@ -46,7 +46,10 @@ function invitationState(inv: InvitationRow): InvitationState {
 }
 
 /** Only what is actually known: SMTP acceptance is not inbox delivery. */
-function deliveryLabel(status?: DeliveryState): string {
+const UNCERTAIN = 'Server nepotvrdil převzetí e-mailu, mohl ale odejít. Než pošlete znovu, ověřte u příjemce, zda pozvánka nedorazila.';
+
+function deliveryLabel(status?: DeliveryState, errorCode?: string): string {
+  if (status === 'failed' && errorCode === 'smtp_ambiguous') return UNCERTAIN;
   switch (status) {
     case 'accepted': return 'E-mail předán poštovnímu serveru (doručení do schránky nelze ověřit).';
     case 'failed': return 'Odeslání e-mailu selhalo. Zkuste „Poslat znovu“ nebo předejte odkaz jinak.';
@@ -56,7 +59,8 @@ function deliveryLabel(status?: DeliveryState): string {
   }
 }
 
-function deliveryMessage(status: DeliveryState, email: string): string {
+function deliveryMessage(status: DeliveryState, email: string, errorCode?: string): string {
+  if (status === 'failed' && errorCode === 'smtp_ambiguous') return `Pozvánka je vytvořená. ${UNCERTAIN}`;
   switch (status) {
     case 'accepted': return `Pozvánka odeslána na ${email}.`;
     case 'failed': return `Pozvánka je vytvořená, ale e-mail na ${email} se nepodařilo odeslat. Odkaz můžete zkopírovat.`;
@@ -148,7 +152,7 @@ export default function ProjectTeamModal({
       setFreshLink({ id: r.id, url: r.link });
       setCopied(false);
       setInviteEmail('');
-      setInfo(deliveryMessage(r.delivery.status, email));
+      setInfo(deliveryMessage(r.delivery.status, email, r.delivery.errorCode));
     });
   };
 
@@ -334,7 +338,7 @@ export default function ProjectTeamModal({
                         {inv.email} · {ROLE_LABEL[inv.projectRole ?? 'member']} · <strong>{STATE_LABEL[st]}</strong>
                         {st === 'pending' ? ` do ${new Date(inv.expiresAt).toLocaleDateString('cs-CZ')}` : ''}
                       </span>
-                      {live && <span style={{ color: inv.delivery?.status === 'failed' ? 'var(--danger)' : 'var(--gray-text)', fontSize: '0.7rem' }}>{deliveryLabel(inv.delivery?.status)}</span>}
+                      {live && <span style={{ color: inv.delivery?.status === 'failed' ? 'var(--danger)' : 'var(--gray-text)', fontSize: '0.7rem' }}>{deliveryLabel(inv.delivery?.status, inv.delivery?.errorCode)}</span>}
                     </span>
                     {live && (
                       <span style={{ display: 'flex', gap: '0.6rem' }}>
@@ -350,7 +354,7 @@ export default function ProjectTeamModal({
                           onClick={() => void run(`resend-${inv.id}`, async () => {
                             const r = await collaborationService.resendInvitation(inv.id);
                             setFreshLink({ id: r.id, url: r.link }); setCopied(false);
-                            setInfo(deliveryMessage(r.delivery.status, inv.email));
+                            setInfo(deliveryMessage(r.delivery.status, inv.email, r.delivery.errorCode));
                           })}
                           data-testid={`project-invite-resend-${inv.id}`}>
                           {busy === `resend-${inv.id}` ? 'Odesílám…' : 'Poslat znovu'}

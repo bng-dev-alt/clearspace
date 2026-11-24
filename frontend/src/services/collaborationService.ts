@@ -117,7 +117,7 @@ export interface SendResult {
   id: string;
   expiresAt: string;
   link: string;
-  delivery: { status: DeliveryState; detail?: string };
+  delivery: { status: DeliveryState; detail?: string; errorCode?: string };
 }
 
 async function authHeader(): Promise<Record<string, string>> {

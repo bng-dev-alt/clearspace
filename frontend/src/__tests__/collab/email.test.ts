@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import net from 'node:net';
+import tls from 'node:tls';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { emailConfig, appBaseUrl, isReservedRecipient } from '../../lib/email/config';
-import { buildMime, encodeHeaderWord, formatAddress } from '../../lib/email/mime';
-import { smtpSend, dataBlock, SmtpError } from '../../lib/email/smtp';
+import { smtpSend, composeMessage, isPlainAddress, SmtpError } from '../../lib/email/smtp';
 import { sendEmail, sanitizeError } from '../../lib/email/send';
 import { invitationHtml, invitationText, invitationSubject, safeName } from '../../lib/email/invitationTemplate';
 import { acceptUrl } from '../../lib/collab/invitationServer';
@@ -48,24 +52,28 @@ describe('email configuration', () => {
   });
 });
 
-describe('message building', () => {
-  it('encodes Czech headers and refuses header injection', () => {
-    expect(encodeHeaderWord('Pozvánka')).toMatch(/^=\?UTF-8\?B\?/);
-    expect(encodeHeaderWord('Hello')).toBe('Hello');
-    expect(formatAddress('Šárka <s@x.cz>')).toMatch(/^=\?UTF-8\?B\?.+\?= <s@x\.cz>$/);
-    expect(() => formatAddress('x\r\nBcc: evil@x.cz')).toThrow();
-    expect(() => buildMime({ from: 'a@x.cz', to: 'b@x.cz\r\nBcc: c@x.cz', subject: 's', text: 't', html: 'h', messageIdDomain: 'x.cz' })).toThrow();
+describe('message building (nodemailer MailComposer)', () => {
+  it('encodes Czech headers and refuses header injection', async () => {
+    const { raw } = await composeMessage({ from: 'Šárka z ClearSpace <a@x.cz>', to: 'b@x.cz', subject: 'Pozvánka do projektu Stěhování', text: 't', html: 'h' });
+    const head = raw.toString().split('\r\n\r\n')[0];
+    expect(head).toMatch(/^Subject: =\?UTF-8\?/m);
+    expect(head).toMatch(/^From: =\?UTF-8\?.+<a@x\.cz>$/m);
+    expect(head).toMatch(/^Auto-Submitted: auto-generated$/m);
+    await expect(composeMessage({ from: 'a@x.cz', to: 'b@x.cz\r\nBcc: c@x.cz', subject: 's', text: 't', html: 'h' })).rejects.toThrow(/injection/);
+    await expect(composeMessage({ from: 'a@x.cz', to: 'b@x.cz', subject: 's\nBcc: c@x.cz', text: 't', html: 'h' })).rejects.toThrow(/injection/);
   });
-  it('multipart/alternative with plain text first, base64 UTF-8 bodies', () => {
-    const { raw, messageId } = buildMime({ from: 'ClearSpace <a@x.cz>', to: 'b@x.cz', subject: 'Žluťoučký kůň', text: 'čeština', html: '<p>čeština</p>', messageIdDomain: 'x.cz' });
-    expect(messageId).toMatch(/^<[0-9a-f]{32}@x\.cz>$/);
-    expect(raw).toContain('Content-Type: multipart/alternative');
-    expect(raw.indexOf('text/plain')).toBeLessThan(raw.indexOf('text/html'));
-    expect(raw).toContain(Buffer.from('čeština').toString('base64'));
-    expect(raw).not.toMatch(/[^\r]\n/);
+  it('multipart/alternative with plain text first; long Czech subjects are folded under the line limit', async () => {
+    const { raw, messageId } = await composeMessage({ from: 'ClearSpace <a@x.cz>', to: 'b@x.cz', subject: `Žluťoučký kůň ${'úpěl ďábelské ódy '.repeat(20)}`, text: 'čeština', html: '<p>čeština</p>' });
+    const s = raw.toString();
+    expect(messageId).toMatch(/^<.+@x\.cz>$/);
+    expect(s).toContain('Content-Type: multipart/alternative');
+    expect(s.indexOf('text/plain')).toBeLessThan(s.indexOf('text/html'));
+    expect(s.split('\r\n').every((l) => l.length <= 998)).toBe(true);
+    expect(s).not.toMatch(/[^\r]\n/);
   });
-  it('dot-stuffs DATA lines', () => {
-    expect(dataBlock('a\n.b\n..c')).toBe('a\r\n..b\r\n...c');
+  it('envelope addresses must be plain addr-spec', () => {
+    expect(isPlainAddress('jan.novak+tag@firma.cz')).toBe(true);
+    for (const a of ['a@b', '"x@y"@z.cz', 'a b@c.cz', 'a@c.cz>', '<a@c.cz>', 'a@c.cz\r\nRCPT TO:<x@y.cz>']) expect(isPlainAddress(a), a).toBe(false);
   });
 });
 
@@ -95,7 +103,7 @@ describe('invitation template', () => {
 });
 
 // ---- SMTP client against an in-process fake server -------------------------------------------------
-type Script = { onRcpt?: string; onData?: string; ehlo?: string[] };
+type Script = { onRcpt?: string; onData?: string; ehlo?: string[]; afterData?: 'silent' | 'close' };
 const servers: net.Server[] = [];
 afterEach(() => { servers.splice(0).forEach((s) => s.close()); });
 function fakeSmtp(script: Script = {}): Promise<{ port: number; log: string[]; messages: string[] }> {
@@ -109,6 +117,8 @@ function fakeSmtp(script: Script = {}): Promise<{ port: number; log: string[]; m
         const end = buf.indexOf('\r\n.\r\n');
         if (end === -1) return;
         messages.push(buf.slice(0, end)); buf = buf.slice(end + 5); data = false;
+        if (script.afterData === 'silent') return; // accepted or not? the client cannot know
+        if (script.afterData === 'close') { sock.destroy(); return; }
         sock.write(script.onData ?? '250 2.0.0 queued as X\r\n');
         return;
       }
@@ -117,6 +127,7 @@ function fakeSmtp(script: Script = {}): Promise<{ port: number; log: string[]; m
         const line = buf.slice(0, i); buf = buf.slice(i + 2); log.push(line);
         if (/^EHLO/.test(line)) sock.write(['250-fake', ...(script.ehlo ?? ['AUTH PLAIN LOGIN']).map((l) => `250-${l}`), '250 SIZE 1000000'].join('\r\n') + '\r\n');
         else if (/^AUTH PLAIN/.test(line)) sock.write('235 ok\r\n');
+        else if (/^STARTTLS/.test(line)) sock.write('502 not here\r\n');
         else if (/^MAIL FROM/.test(line)) sock.write('250 ok\r\n');
         else if (/^RCPT TO/.test(line)) sock.write(script.onRcpt ?? '250 ok\r\n');
         else if (line === 'DATA') { sock.write('354 go\r\n'); data = true; }
@@ -129,23 +140,89 @@ function fakeSmtp(script: Script = {}): Promise<{ port: number; log: string[]; m
   return new Promise((res) => server.listen(0, '127.0.0.1', () => res({ port: (server.address() as net.AddressInfo).port, log, messages })));
 }
 
-describe('SMTP client', () => {
+const until = async (f: () => boolean) => { for (let i = 0; i < 50 && !f(); i++) await new Promise((r) => setTimeout(r, 20)); };
+
+describe('SMTP client (nodemailer connection)', () => {
   it('sends one message (EHLO, AUTH only when configured, MAIL, RCPT, DATA, QUIT)', async () => {
     const srv = await fakeSmtp();
-    await smtpSend({ host: '127.0.0.1', port: srv.port, security: 'none', user: 'u', password: 'p' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'Subject: t\r\n\r\nbody');
+    await smtpSend({ host: '127.0.0.1', port: srv.port, security: 'none', user: 'u', password: 'p' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'Subject: t\r\n\r\nbody\r\n.leading dot');
+    await until(() => srv.log.includes('QUIT'));
     expect(srv.log.map((l) => l.split(' ')[0])).toEqual(['EHLO', 'AUTH', 'MAIL', 'RCPT', 'DATA', 'QUIT']);
     expect(srv.messages[0]).toContain('body');
+    expect(srv.messages[0]).toContain('\r\n..leading dot'); // dot-stuffing
   });
-  it('STARTTLS is required when configured (no silent downgrade)', async () => {
+  it('STARTTLS is required when configured: no plaintext fallback, nothing sent before TLS', async () => {
     const srv = await fakeSmtp({ ehlo: ['AUTH PLAIN'] });
-    await expect(smtpSend({ host: '127.0.0.1', port: srv.port, security: 'starttls' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toThrow(/STARTTLS/);
+    await expect(smtpSend({ host: '127.0.0.1', port: srv.port, security: 'starttls', user: 'u', password: 'p' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'never' });
     expect(srv.log.some((l) => l.startsWith('AUTH') || l.startsWith('MAIL'))).toBe(false);
   });
-  it('4xx is transient, 5xx is permanent', async () => {
+  it('4xx is a definite refusal (safe to retry), 5xx is permanent', async () => {
     const t = await fakeSmtp({ onRcpt: '451 try later\r\n' });
-    await expect(smtpSend({ host: '127.0.0.1', port: t.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ transient: true, code: 451 });
+    await expect(smtpSend({ host: '127.0.0.1', port: t.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'safe', code: 451 });
     const p = await fakeSmtp({ onRcpt: '550 no such user\r\n' });
-    await expect(smtpSend({ host: '127.0.0.1', port: p.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ transient: false, code: 550 });
+    await expect(smtpSend({ host: '127.0.0.1', port: p.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'never', code: 550 });
+    const d = await fakeSmtp({ onData: '452 mailbox full\r\n' });
+    await expect(smtpSend({ host: '127.0.0.1', port: d.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'safe', code: 452 });
+  });
+  it('connection dropped after the message was transferred = AMBIGUOUS (may have been accepted)', async () => {
+    const srv = await fakeSmtp({ afterData: 'close' });
+    await expect(smtpSend({ host: '127.0.0.1', port: srv.port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'ambiguous' });
+  });
+  it('a silent server cannot hang the request: the whole session is capped', async () => {
+    const srv = await fakeSmtp({ afterData: 'silent' });
+    const t0 = Date.now();
+    await expect(smtpSend({ host: '127.0.0.1', port: srv.port, security: 'none', totalTimeoutMs: 800 }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'ambiguous' });
+    expect(Date.now() - t0).toBeLessThan(3000);
+  });
+  it('nothing listening = safe to retry (nothing was submitted)', async () => {
+    const srv = await fakeSmtp(); const port = srv.port; servers.splice(0).forEach((s) => s.close());
+    await new Promise((r) => setTimeout(r, 50));
+    await expect(smtpSend({ host: '127.0.0.1', port, security: 'none' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'safe' });
+  });
+  it('refuses a malformed envelope before connecting', async () => {
+    await expect(smtpSend({ host: '127.0.0.1', port: 1, security: 'none' }, { from: 'a@x.cz', to: 'x@y.cz>\r\nRCPT TO:<z@w.cz' }, 'x')).rejects.toMatchObject({ retry: 'never' });
+  });
+});
+
+// ---- TLS certificate validation against a real TLS server with a self-signed certificate -----------------
+let cert: { key: string; cert: string } | null = null;
+beforeAll(() => {
+  try {
+    const dir = mkdtempSync(path.join(tmpdir(), 'cs-smtp-tls-'));
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem')], { stdio: 'ignore' });
+    cert = { key: readFileSync(path.join(dir, 'k.pem'), 'utf8'), cert: readFileSync(path.join(dir, 'c.pem'), 'utf8') };
+  } catch { cert = null; }
+});
+function tlsSmtp(): Promise<{ port: number; sawMail: () => boolean }> {
+  let mail = false;
+  const server = tls.createServer({ key: cert!.key, cert: cert!.cert }, (sock) => {
+    sock.write('220 tls ESMTP\r\n');
+    sock.on('data', (d) => {
+      const line = d.toString();
+      if (/^EHLO/.test(line)) sock.write('250-tls\r\n250 AUTH PLAIN\r\n');
+      else if (/^AUTH/.test(line)) sock.write('235 ok\r\n');
+      else if (/^MAIL/.test(line)) { mail = true; sock.write('250 ok\r\n'); }
+      else if (/^QUIT/.test(line)) { sock.write('221 bye\r\n'); sock.end(); }
+      else sock.write('250 ok\r\n');
+    });
+    sock.on('error', () => undefined);
+  });
+  servers.push(server as unknown as net.Server);
+  return new Promise((res) => server.listen(0, '127.0.0.1', () => res({ port: (server.address() as net.AddressInfo).port, sawMail: () => mail })));
+}
+describe('SMTP TLS certificate validation', () => {
+  it('rejects an untrusted certificate before sending credentials, and does not retry around it', async (ctx) => {
+    if (!cert) ctx.skip();
+    const srv = await tlsSmtp();
+    await expect(smtpSend({ host: '127.0.0.1', port: srv.port, security: 'tls', user: 'u', password: 'p' }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x')).rejects.toMatchObject({ retry: 'never' });
+    expect(srv.sawMail()).toBe(false);
+  });
+  it('control: the same server works only when validation is explicitly disabled (test seam)', async (ctx) => {
+    if (!cert) ctx.skip();
+    const srv = await tlsSmtp();
+    // the toy server's DATA handling is minimal; what matters is that the session got past TLS to MAIL FROM
+    await smtpSend({ host: '127.0.0.1', port: srv.port, security: 'tls', rejectUnauthorized: false, totalTimeoutMs: 1500 }, { from: 'a@x.cz', to: 'b@x.cz' }, 'x').catch(() => undefined);
+    expect(srv.sawMail()).toBe(true);
   });
 });
 
@@ -159,15 +236,26 @@ describe('sendEmail (bounded retries, honest outcomes)', () => {
   });
   it('retries transient failures at most 3 times, then reports failure', async () => {
     let calls = 0;
-    const r = await sendEmail(mail, cfgFor(1), async () => { calls += 1; throw new SmtpError('SMTP connect: ECONNREFUSED', null, true); });
+    const r = await sendEmail(mail, cfgFor(1), async () => { calls += 1; throw new SmtpError('ESOCKET CONN: ECONNREFUSED', null, 'safe'); });
     expect(calls).toBe(3);
     expect(r).toMatchObject({ status: 'failed', errorCode: 'smtp_unreachable', attempts: 3 });
   }, 10000);
   it('does not retry permanent failures', async () => {
     let calls = 0;
-    const r = await sendEmail(mail, cfgFor(1), async () => { calls += 1; throw new SmtpError('550 nope', 550, false); });
+    const r = await sendEmail(mail, cfgFor(1), async () => { calls += 1; throw new SmtpError('550 nope', 550, 'never'); });
     expect(calls).toBe(1);
     expect(r).toMatchObject({ status: 'failed', errorCode: 'smtp_550' });
+  });
+  it('an ambiguous failure is never retried (no duplicate invitation) and is reported as uncertain', async () => {
+    const srv = await fakeSmtp({ afterData: 'close' });
+    const r = await sendEmail(mail, cfgFor(srv.port));
+    expect(r).toMatchObject({ status: 'failed', errorCode: 'smtp_ambiguous', attempts: 1 });
+    expect(srv.messages).toHaveLength(1);
+  });
+  it('a definite 4xx after the message is retried and then accepted once', async () => {
+    let calls = 0;
+    const r = await sendEmail(mail, cfgFor(1), async () => { calls += 1; if (calls === 1) throw new SmtpError('451', 451, 'safe'); return { reply: '250' }; });
+    expect(r).toMatchObject({ status: 'accepted', attempts: 2 });
   });
   it('never sends to a reserved/fictional domain through a real server', async () => {
     let calls = 0;

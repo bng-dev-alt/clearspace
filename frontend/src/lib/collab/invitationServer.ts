@@ -38,6 +38,7 @@ export function fromDbError(error: { code?: string; message?: string }): HttpErr
 export interface DeliveryReport {
   status: SendOutcome['status'] | 'not_configured';
   detail?: string;
+  errorCode?: string;
 }
 
 /**
@@ -70,7 +71,7 @@ export async function deliverInvitation(db: SupabaseClient, invitationId: string
     p_error_detail: outcome.status === 'accepted' ? null : outcome.errorDetail,
   });
   if (outcome.status !== 'accepted') console.warn('[invitations] e-mail not sent:', outcome.errorCode);
-  return { status: outcome.status, detail: outcome.status === 'accepted' ? undefined : outcome.errorDetail };
+  return { status: outcome.status, detail: outcome.status === 'accepted' ? undefined : outcome.errorDetail, errorCode: outcome.status === 'accepted' ? undefined : outcome.errorCode };
 }
 
 /** Link for the optional copy fallback: only from APP_BASE_URL (falls back to the caller's own origin in the client). */

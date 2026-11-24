@@ -4,6 +4,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Comment } from '../../types/kanban';
 import { formatRelativeTime } from '../../lib/collab/activityText';
 import { activeMentionQuery, collectMentions, splitMentions, type Mentionable } from '../../lib/collab/mentions';
+import { kanbanService } from '../../services/kanbanService';
 
 interface TaskCommentsProps {
   comments: Comment[];
@@ -120,6 +121,11 @@ export default function TaskComments({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [revisions, setRevisions] = useState<{ id: string; rows: { content: string; editedAt: string }[] } | null>(null);
+  const showRevisions = async (id: string) => {
+    if (revisions?.id === id) { setRevisions(null); return; }
+    setRevisions({ id, rows: await kanbanService.fetchCommentRevisions(id) });
+  };
   const nameById = useMemo(() => new Map(mentionables.map((m) => [m.profileId, m.name])), [mentionables]);
 
   const submit = () => {
@@ -157,10 +163,20 @@ export default function TaskComments({
                   <time className="comment-date" dateTime={c.createdAt} title={new Date(c.createdAt).toLocaleString('cs-CZ')}>
                     {formatRelativeTime(c.createdAt)}
                   </time>
-                  {c.updatedAt && <span className="comment-edited">(upraveno)</span>}
+                  {c.origin && c.origin !== 'app' && (
+                    <span className="comment-edited" title="Autor ani čas nebyly ověřeny aplikací (obnova ze zálohy, import nebo starší data)." data-testid={`comment-origin-${c.id}`}>
+                      {c.origin === 'import' ? '(importováno)' : '(starší záznam)'}
+                    </span>
+                  )}
+                  {c.updatedAt && (
+                    <button type="button" className="comment-edited" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      onClick={() => void showRevisions(c.id)} data-testid={`comment-edited-${c.id}`} title="Zobrazit předchozí znění">
+                      (upraveno)
+                    </button>
+                  )}
                   {!readOnly && (mine || canModerate) && editingId !== c.id && (
                     <span className="comment-actions">
-                      {mine && onEdit && (
+                      {mine && onEdit && (c.origin ?? 'app') === 'app' && (
                         <button type="button" onClick={() => { setEditingId(c.id); setEditDraft(c.content); }} data-testid={`comment-edit-${c.id}`}>Upravit</button>
                       )}
                       {onDelete && (
@@ -178,6 +194,15 @@ export default function TaskComments({
                     </span>
                   )}
                 </div>
+                {revisions?.id === c.id && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--gray-text)', borderLeft: '2px solid var(--border)', paddingLeft: '0.5rem', margin: '0.25rem 0' }} data-testid={`comment-revisions-${c.id}`}>
+                    {revisions.rows.length === 0 ? 'Předchozí znění není k dispozici.' : revisions.rows.map((r, i) => (
+                      <p key={i} style={{ margin: '0.15rem 0', whiteSpace: 'pre-wrap' }}>
+                        <time dateTime={r.editedAt}>{new Date(r.editedAt).toLocaleString('cs-CZ')}</time>: {r.content}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {editingId === c.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     <MentionComposer value={editDraft} onChange={setEditDraft} mentionables={mentionables} placeholder="Upravit komentář…" testId={`comment-edit-input-${c.id}`} onSubmit={() => void saveEdit(c.id)} autoFocus />

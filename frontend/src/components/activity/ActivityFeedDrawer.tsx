@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { ProjectActivityLog } from '../../types/kanban';
 import { collaborationService, mapActivityRow } from '../../services/collaborationService';
-import { useRealtimeBoard, type DbActivityRow } from '../../hooks/useRealtimeBoard';
+import { onProjectActivity, onProjectResync, type DbActivityRow } from '../../hooks/useRealtimeBoard';
 import { describeActivity, formatRelativeTime, type ActivityKind } from '../../lib/collab/activityText';
 
 interface ActivityFeedDrawerProps {
@@ -43,7 +43,7 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
     let active = true;
     collaborationService
       .fetchActivities(projectId)
-      .then((rows) => { if (active) { setActivities(rows); setFailed(false); } })
+      .then((rows) => { if (active) { setActivities(rows.filter((r) => r.entityType !== 'checklist')); setFailed(false); } })
       .catch(() => { if (active) { setActivities([]); setFailed(true); } });
     return () => { active = false; };
   }, [projectId]);
@@ -66,17 +66,18 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
     setActivities((prev) => {
       const next = prev ?? [];
       if (next.some((a) => a.id === row.id)) return next;
+      if (row.entity_type === 'checklist') return next; // per-task detail, shown in the task history
       return [mapActivityRow(row), ...next];
     });
   }, []);
 
-  useRealtimeBoard({
-    projectId,
-    enabled: isOpen && Boolean(projectId),
-    channelName: 'activity',
-    onActivityInsert: handleActivityInsert,
-    onResync: load,
-  });
+  // Live events come through the board's private project channel (RUN 01B); no second subscription.
+  useEffect(() => {
+    if (!isOpen || !projectId) return;
+    const off1 = onProjectActivity(projectId, handleActivityInsert);
+    const off2 = onProjectResync(projectId, () => { load(); });
+    return () => { off1(); off2(); };
+  }, [isOpen, projectId, handleActivityInsert, load]);
 
   if (!isOpen) return null;
 

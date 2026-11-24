@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { supabase, hasSupabaseConfig } from '../lib/supabase';
-
+/**
+ * Presence model (RUN 01). The channel itself lives in useRealtimeBoard (RUN 01B): presence and the server's
+ * change signals share ONE private, keyed project channel per tab. Ephemeral: no database writes.
+ */
 export interface PresenceUser {
   userId: string;
   name: string;
@@ -12,7 +13,7 @@ export interface PresenceUser {
   sessions: number;
 }
 
-interface PresenceMeta {
+export interface PresenceMeta {
   user_id: string;
   name: string;
   initials: string;
@@ -40,49 +41,4 @@ export function foldPresence(state: Record<string, PresenceMeta[]>, selfId?: str
       sessions: metas.length,
     }))
     .sort((a, b) => Number(a.idle) - Number(b.idle) || a.name.localeCompare(b.name, 'cs-CZ'));
-}
-
-/**
- * Who else is looking at this project right now (RUN 01). Ephemeral: Realtime Presence only, no
- * database writes. The channel `project:<id>` is PRIVATE: joining is authorized by the
- * realtime.messages policies (project members only), so the list never leaks to outsiders.
- * Disconnected sessions drop out when the socket's heartbeat stops (Realtime server side).
- */
-export function usePresence(projectId: string, me: PresenceIdentity | null, enabled: boolean): PresenceUser[] {
-  const [others, setOthers] = useState<PresenceUser[]>([]);
-  const userId = me?.userId;
-  const name = me?.name;
-  const initials = me?.initials;
-  const color = me?.color;
-
-  useEffect(() => {
-    if (!enabled || !hasSupabaseConfig || !projectId || !userId) return;
-    const channel = supabase.channel(`project:${projectId}`, {
-      config: { private: true, presence: { key: userId } },
-    });
-    const meta = (): PresenceMeta => ({
-      user_id: userId,
-      name: name || 'Uživatel',
-      initials: initials || '?',
-      color: color || '#209dd7',
-      idle: typeof document !== 'undefined' && document.visibilityState === 'hidden',
-    });
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        setOthers(foldPresence(channel.presenceState<PresenceMeta>() as Record<string, PresenceMeta[]>, userId));
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') void channel.track(meta());
-      });
-
-    const onVisibility = () => { void channel.track(meta()); };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      supabase.removeChannel(channel);
-      setOthers([]);
-    };
-  }, [projectId, enabled, userId, name, initials, color]);
-
-  return enabled ? others : [];
 }

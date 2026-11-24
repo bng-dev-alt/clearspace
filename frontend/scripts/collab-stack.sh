@@ -8,8 +8,10 @@
 #   frontend/scripts/collab-stack.sh down    # stop and delete the stack
 # Stack project dir: $COLLAB_STACK_DIR (default $TMPDIR/cs-collab-sb; ports 55530-55539). One-time creation:
 #   mkdir -p "$TMPDIR/cs-collab-sb" && cd "$_" && supabase init --force, then in supabase/config.toml: ports api 55531, db 55532,
-#   shadow 55530, pooler 55539, studio 55533, smtp 55534, analytics 55537, inspector 55538; site_url http://127.0.0.1:3431;
-#   auth.rate_limit sign_in_sign_ups = 1000; enable_confirmations = false (local only).
+#   shadow 55530, pooler 55539, studio 55533, local_smtp port 55534 (Mailpit UI) + smtp_port 55535, analytics 55537,
+#   inspector 55538; site_url http://127.0.0.1:3431; auth.rate_limit sign_in_sign_ups = 1000; enable_confirmations = false (local only).
+# E-mail (RUN 01B): the app sends invitations by SMTP to the stack's Mailpit (127.0.0.1:55535, capture only -- Mailpit never
+# relays anything to the internet); read them at http://127.0.0.1:55534. EMAIL_SERVER_SECRET is generated into the accounts file.
 # Synthetic account passwords are generated once into $COLLAB_STACK_DIR/collab-accounts.env (mode 600, outside the repo).
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -25,7 +27,7 @@ case "${1:-}" in
       if ! { [ -S "$SOCK" ] && [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }; then
         rm -f "$SOCK"; node "$HERE/scripts/docker-loopback-proxy.mjs" "$SOCK" "$REAL" >"$DIR/proxy.log" 2>&1 & echo $! >"$PIDF"; sleep 1
       fi
-      (cd "$DIR" && DOCKER_HOST=unix://$SOCK supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta,supavisor,mailpit >/dev/null)
+      (cd "$DIR" && DOCKER_HOST=unix://$SOCK supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta,supavisor >/dev/null)
     fi
     if docker ps --filter name=$NAME --format '{{.Ports}}' | tr ',' '\n' | grep -qE '(0\.0\.0\.0|\[::\]):[0-9]+->'; then
       echo "REFUSING: stack is LAN-reachable"; (cd "$DIR" && supabase stop --no-backup >/dev/null); exit 1
@@ -35,6 +37,11 @@ case "${1:-}" in
       psql_db --single-transaction -f - < "$HERE/supabase_schema.sql" >/dev/null
     fi
     for f in "$HERE"/supabase/migrations/*.sql; do psql_db --single-transaction -f - < "$f" >/dev/null; done
+    ACC="$DIR/collab-accounts.env"; [ -f "$ACC" ] || { umask 077; printf 'COLLAB_PASSWORD=%s\n' "$(openssl rand -hex 12)" > "$ACC"; }
+    grep -q '^EMAIL_SERVER_SECRET=' "$ACC" || { umask 077; printf 'EMAIL_SERVER_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$ACC"; }
+    # shellcheck disable=SC1090
+    . "$ACC"
+    printf "INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('email', encode(sha256(convert_to('%s', 'UTF8')), 'hex')) ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256, rotated_at = now();\n" "$EMAIL_SERVER_SECRET" | psql_db >/dev/null
     echo "stack up (loopback only), schema + migrations applied: $(keys | grep API_URL)";;
   seed)
     eval "$(keys)"; ACC="$DIR/collab-accounts.env"
@@ -45,10 +52,18 @@ case "${1:-}" in
     echo "accounts: alice@collab.test (owner), bob@collab.test (editor), vera@collab.test (viewer); password in $ACC";;
   app)
     eval "$(keys)"
-    cd "$HERE" && NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY exec npx next dev -p "$PORT" -H 127.0.0.1;;
+    # shellcheck disable=SC1090
+    . "$DIR/collab-accounts.env"
+    # E-mail goes ONLY to the stack's Mailpit (loopback, capture only); reserved/test domains allowed there and nowhere else.
+    cd "$HERE" && NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY \
+      EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=55535 SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
+      APP_BASE_URL="http://127.0.0.1:$PORT" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET" \
+      exec npx next dev -p "$PORT" -H 127.0.0.1;;
+  mail)
+    curl -s "http://127.0.0.1:55534/api/v1/messages?limit=${2:-10}";;
   env)
     eval "$(keys)"
-    echo "export E2E_SUPABASE_URL=$API_URL E2E_SUPABASE_ANON_KEY=$ANON_KEY E2E_SUPABASE_SERVICE_KEY=$SERVICE_ROLE_KEY RT_URL=$API_URL RT_ANON=$ANON_KEY";;
+    echo "export E2E_SUPABASE_URL=$API_URL E2E_SUPABASE_ANON_KEY=$ANON_KEY E2E_SUPABASE_SERVICE_KEY=$SERVICE_ROLE_KEY RT_URL=$API_URL RT_ANON=$ANON_KEY E2E_MAILPIT_URL=http://127.0.0.1:55534";;
   down) (cd "$DIR" && supabase stop --no-backup 2>&1 | tail -1); [ -f "$PIDF" ] && kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF" "$SOCK";;
-  *) echo "usage: $0 up|seed|app|env|down"; exit 2;;
+  *) echo "usage: $0 up|seed|app|env|mail|down"; exit 2;;
 esac

@@ -1,25 +1,17 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { foldPresence, type PresenceIdentity, type PresenceUser, type PresenceMeta } from './usePresence';
 
 export type PgEvent = 'INSERT' | 'UPDATE' | 'DELETE';
 export type SyncStatus = 'off' | 'connecting' | 'live' | 'reconnecting';
 
-export interface DbCardSignal {
-  id: string;
-  column_id?: string;
-  project_id?: string;
-  version?: number;
-  child_rev?: number;
-}
-
-export interface DbColumnRow {
-  id: string;
-  name: string;
-  project_id: string;
-  position: number;
-  role?: string | null;
-}
+/** Server broadcast on the project topic (RUN 01B): a signal, never the authoritative data. */
+export type ChangeSignal =
+  | { t: 'card'; op: 'upsert'; id: string; v?: number; r?: number }
+  | { t: 'card'; op: 'removed'; id: string }
+  | { t: 'column'; op: 'upsert'; id: string; name: string; position: number; role?: string | null }
+  | { t: 'column'; op: 'removed'; id: string }
+  | { t: 'membership'; op: string };
 
 export interface DbActivityRow {
   id: string;
@@ -35,108 +27,106 @@ export interface DbActivityRow {
   created_at: string;
 }
 
+/** In-tab fan-out of project activity to the timeline drawer (one channel per project and tab). */
+const activityTarget = typeof window !== 'undefined' ? new EventTarget() : null;
+export function onProjectActivity(projectId: string, cb: (row: DbActivityRow) => void): () => void {
+  if (!activityTarget) return () => {};
+  const h = (e: Event) => { const row = (e as CustomEvent<DbActivityRow>).detail; if (row.project_id === projectId) cb(row); };
+  activityTarget.addEventListener('activity', h);
+  return () => activityTarget.removeEventListener('activity', h);
+}
+const resyncTarget = typeof window !== 'undefined' ? new EventTarget() : null;
+export function onProjectResync(projectId: string, cb: () => void): () => void {
+  if (!resyncTarget) return () => {};
+  const h = (e: Event) => { if ((e as CustomEvent<string>).detail === projectId) cb(); };
+  resyncTarget.addEventListener('resync', h);
+  return () => resyncTarget.removeEventListener('resync', h);
+}
+
+export function projectTopic(projectId: string, key: string): string {
+  return `project:${projectId}:${key}`;
+}
+
 interface UseRealtimeBoardParams {
   projectId: string;
+  /** Per-project secret from projects.realtime_key (readable by members only); rotates when a member leaves. */
+  realtimeKey: string | null;
   enabled: boolean;
-  /** Distinguishes several subscribers of the same project in one tab (board vs. activity drawer). */
-  channelName?: string;
-  onCardChange?: (event: PgEvent, row: DbCardSignal) => void;
-  onColumnChange?: (event: PgEvent, newRow: DbColumnRow | null, oldRow: Partial<DbColumnRow> | null) => void;
-  onActivityInsert?: (row: DbActivityRow) => void;
-  /** Roster / role of somebody changed (or the caller lost access). */
-  onMembershipChange?: () => void;
-  /** Called after the channel came back from an interruption: re-read the authoritative state. */
+  presence?: PresenceIdentity | null;
+  onSignal?: (s: ChangeSignal) => void;
   onResync?: () => void;
   onStatus?: (status: SyncStatus) => void;
 }
 
 /**
- * Realtime for one project (RUN 01). Realtime is only a SIGNAL: the database stays the source of
- * truth. Every change event names an entity; the caller re-reads it (or merges the row) and drops
- * stale/out-of-order data by `version`. Authorization: postgres_changes are filtered by the table's
- * RLS for each subscriber, so a non-member (or a member who was just removed) receives nothing.
- *
- * Filters: cards / columns / activity_logs / project_members carry project_id, so only this
- * project's rows are evaluated. Exactly one channel per (project, purpose); it is removed on
- * unmount / project switch. After CHANNEL_ERROR / TIMED_OUT / CLOSED the client library rejoins on
- * its own; the next SUBSCRIBED triggers `onResync` so events missed while offline are reconciled.
+ * The project's realtime channel (RUN 01B). PRIVATE topic `project:<id>:<key>`: joining is authorized by the
+ * realtime.messages policies (current members only, with the current key), the database is the only one who
+ * broadcasts (clients may only track presence), and the payloads are signals the client re-reads under its own
+ * RLS. One channel per project per tab, removed on unmount/project switch/key rotation. After an interruption the
+ * next SUBSCRIBED (and the browser `online` event) triggers `onResync`, which re-reads the board.
  */
-export function useRealtimeBoard({
-  projectId,
-  enabled,
-  channelName = 'board',
-  onCardChange,
-  onColumnChange,
-  onActivityInsert,
-  onMembershipChange,
-  onResync,
-  onStatus,
-}: UseRealtimeBoardParams) {
-  const handlers = useRef({ onCardChange, onColumnChange, onActivityInsert, onMembershipChange, onResync, onStatus });
-  useEffect(() => {
-    handlers.current = { onCardChange, onColumnChange, onActivityInsert, onMembershipChange, onResync, onStatus };
-  });
-
-  const wants = useRef({ cards: Boolean(onCardChange), columns: Boolean(onColumnChange), activity: Boolean(onActivityInsert), members: Boolean(onMembershipChange) });
+export function useRealtimeBoard({ projectId, realtimeKey, enabled, presence, onSignal, onResync, onStatus }: UseRealtimeBoardParams): PresenceUser[] {
+  const [others, setOthers] = useState<PresenceUser[]>([]);
+  const handlers = useRef({ onSignal, onResync, onStatus });
+  useEffect(() => { handlers.current = { onSignal, onResync, onStatus }; });
+  const userId = presence?.userId;
+  const name = presence?.name;
+  const initials = presence?.initials;
+  const color = presence?.color;
 
   useEffect(() => {
-    if (!enabled || !hasSupabaseConfig || !projectId) {
+    if (!enabled || !hasSupabaseConfig || !projectId || !realtimeKey) {
       handlers.current.onStatus?.('off');
       return;
     }
-    const filter = `project_id=eq.${projectId}`;
     let wasLive = false;
     let interrupted = false;
     handlers.current.onStatus?.('connecting');
-
-    let channel = supabase.channel(`${channelName}:${projectId}`);
-    if (wants.current.cards) {
-      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter },
-        (payload: RealtimePostgresChangesPayload<DbCardSignal>) => {
-          const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as DbCardSignal;
-          if (row?.id) handlers.current.onCardChange?.(payload.eventType as PgEvent, row);
-        });
-    }
-    if (wants.current.columns) {
-      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'columns', filter },
-        (payload: RealtimePostgresChangesPayload<DbColumnRow>) => {
-          handlers.current.onColumnChange?.(
-            payload.eventType as PgEvent,
-            payload.eventType === 'DELETE' ? null : (payload.new as DbColumnRow),
-            (payload.old as Partial<DbColumnRow>) ?? null
-          );
-        });
-    }
-    if (wants.current.activity) {
-      channel = channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs', filter },
-        (payload: RealtimePostgresChangesPayload<DbActivityRow>) => {
-          if (payload.new) handlers.current.onActivityInsert?.(payload.new as DbActivityRow);
-        });
-    }
-    if (wants.current.members) {
-      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'project_members', filter },
-        () => handlers.current.onMembershipChange?.());
-    }
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        handlers.current.onStatus?.('live');
-        if (wasLive && interrupted) handlers.current.onResync?.();
-        wasLive = true;
-        interrupted = false;
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        if (wasLive) interrupted = true;
-        handlers.current.onStatus?.('reconnecting');
-      }
+    const channel = supabase.channel(projectTopic(projectId, realtimeKey), {
+      config: { private: true, ...(userId ? { presence: { key: userId } } : {}) },
     });
+    const meta = (): PresenceMeta => ({
+      user_id: userId ?? '',
+      name: name || 'Uživatel',
+      initials: initials || '?',
+      color: color || '#209dd7',
+      idle: typeof document !== 'undefined' && document.visibilityState === 'hidden',
+    });
+    channel
+      .on('broadcast', { event: 'change' }, ({ payload }) => handlers.current.onSignal?.(payload as ChangeSignal))
+      .on('broadcast', { event: 'activity' }, ({ payload }) => {
+        activityTarget?.dispatchEvent(new CustomEvent('activity', { detail: payload as DbActivityRow }));
+      })
+      .on('presence', { event: 'sync' }, () => {
+        setOthers(foldPresence(channel.presenceState<PresenceMeta>() as Record<string, PresenceMeta[]>, userId));
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          handlers.current.onStatus?.('live');
+          if (userId) void channel.track(meta());
+          if (wasLive && interrupted) {
+            handlers.current.onResync?.();
+            resyncTarget?.dispatchEvent(new CustomEvent('resync', { detail: projectId }));
+          }
+          wasLive = true;
+          interrupted = false;
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (wasLive) interrupted = true;
+          handlers.current.onStatus?.('reconnecting');
+        }
+      });
 
-    // Returning from sleep / a dead network: the socket may need a while to notice; re-read now.
     const onOnline = () => { if (wasLive) handlers.current.onResync?.(); };
+    const onVisibility = () => { if (userId) void channel.track(meta()); };
     window.addEventListener('online', onOnline);
-
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
       supabase.removeChannel(channel);
+      setOthers([]);
     };
-  }, [projectId, enabled, channelName]);
+  }, [projectId, realtimeKey, enabled, userId, name, initials, color]);
+
+  return enabled && realtimeKey ? others : [];
 }

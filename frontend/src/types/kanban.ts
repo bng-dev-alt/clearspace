@@ -48,6 +48,8 @@ export interface Comment {
   updatedAt?: string;
   /** Profile ids of mentioned project members (validated by the server). */
   mentions?: string[];
+  /** 'app' = verified author; 'import' = copied back by a board restore / tooling; 'legacy' = before RUN 01. */
+  origin?: 'app' | 'import' | 'legacy';
 }
 
 export interface ActivityLog {

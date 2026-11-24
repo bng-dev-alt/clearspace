@@ -21,6 +21,7 @@ export interface DbComment {
   author_id?: string | null;
   updated_at?: string | null;
   mentions?: string[] | null;
+  origin?: 'app' | 'import' | 'legacy' | null;
 }
 
 export interface DbActivity {
@@ -93,6 +94,7 @@ export function mapDbComment(c: DbComment): Comment {
     authorId: c.author_id ?? undefined,
     updatedAt: c.updated_at ?? undefined,
     mentions: c.mentions ?? undefined,
+    origin: c.origin ?? undefined,
   };
 }
 

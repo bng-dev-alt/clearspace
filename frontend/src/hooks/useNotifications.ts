@@ -4,9 +4,9 @@ import { collaborationService } from '../services/collaborationService';
 import type { AppNotification } from '../types/kanban';
 
 /**
- * The signed-in user's in-app notifications (RUN 01). Rows are created by the database only
- * (mentions, assignments, membership, invitations) and readable only by their recipient (RLS); the
- * realtime subscription is filtered to the recipient and authorized by the same policy.
+ * The signed-in user's in-app notifications. Rows are created by the database only and readable only by their
+ * recipient (RLS). Live updates: the database broadcasts a content-free signal on the PRIVATE topic
+ * `user:<uid>` (authorized for that user only); the list is then re-read under RLS.
  */
 export function useNotifications(userId: string | undefined) {
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -20,15 +20,15 @@ export function useNotifications(userId: string | undefined) {
   useEffect(() => {
     if (!enabled || !userId) return;
     let active = true;
-    collaborationService.fetchNotifications().then((rows) => { if (active) setItems(rows); });
+    const load = () => collaborationService.fetchNotifications().then((rows) => { if (active) setItems(rows); });
+    void load();
     let wasLive = false;
     const channel = supabase
-      .channel(`notifications:${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
-        () => { collaborationService.fetchNotifications().then((rows) => { if (active) setItems(rows); }); })
+      .channel(`user:${userId}`, { config: { private: true } })
+      .on('broadcast', { event: 'notification' }, () => { void load(); })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          if (wasLive) collaborationService.fetchNotifications().then((rows) => { if (active) setItems(rows); });
+          if (wasLive) void load();
           wasLive = true;
         }
       });

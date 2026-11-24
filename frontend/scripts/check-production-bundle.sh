@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [ -d .next/static ] || { echo "no .next/static -- run npm run build first"; exit 2; }
 bad=0
-for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_LOGIN' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'bjycwqfessddbfocrggt' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'AI_DEMO_USER_IDS' 'AI_OWNER_DAILY_TOKEN_BUDGET' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'SONIOX_BASE_URL' 'api.soniox.com' 'api.eu.soniox.com' 'stt-async-v' 'fake-soniox' 'fake-gemini'; do
+for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_LOGIN' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'bjycwqfessddbfocrggt' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'AI_DEMO_USER_IDS' 'AI_OWNER_DAILY_TOKEN_BUDGET' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'SONIOX_BASE_URL' 'api.soniox.com' 'api.eu.soniox.com' 'stt-async-v' 'fake-soniox' 'fake-gemini' 'EMAIL_SERVER_SECRET' 'SMTP_PASSWORD' 'SMTP_USER' 'SMTP_HOST' 'email_delivery_start' 'email_delivery_finish' 'AUTH PLAIN' 'STARTTLS'; do
   n=$(grep -rlF -- "$pat" .next/static 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" != 0 ]; then echo "FAIL: '$pat' found in $n client file(s)"; bad=1; else echo "ok - no '$pat' in the client bundle"; fi
 done

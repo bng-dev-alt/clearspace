@@ -240,7 +240,8 @@ describe('TaskDetailDrawer Component Unit Tests', () => {
     const itemInput = screen.getByTestId('checklist-input-check-1');
     fireEvent.change(itemInput, { target: { value: 'Změněný text položky' } });
     fireEvent.blur(itemInput);
-    expect(onUpdateChecklistItemText).toHaveBeenCalledWith('col-1', 'card-123', 'check-1', 'Změněný text položky');
+    // RUN 01B: the rename carries the text it started from (concurrent-edit detection)
+    expect(onUpdateChecklistItemText).toHaveBeenCalledWith('col-1', 'card-123', 'check-1', 'Změněný text položky', expect.any(String));
 
     // Delete item
     const deleteBtn = screen.getByTestId('checklist-delete-check-1');

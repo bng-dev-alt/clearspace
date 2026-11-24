@@ -35,7 +35,6 @@ import { kanbanService, Project } from '../../../services/kanbanService';
 import { computeProjectIntelligence } from '../../../lib/projectIntelligence';
 import ProjectMembersModal from '../../../components/board/ProjectMembersModal';
 import ProjectTeamModal, { ROLE_LABEL } from '../../../components/collab/ProjectTeamModal';
-import { usePresence } from '../../../hooks/usePresence';
 import { useAuth } from '../../../hooks/useAuth';
 import { hasSupabaseConfig } from '../../../lib/supabase';
 import { FIELD_LABELS } from '../../../lib/collab/conflicts';
@@ -105,17 +104,13 @@ export default function ProjectBoardPage() {
     conflict,
     resolveConflict,
     reloadBoard,
+    activeUsers,
+    notice,
+    dismissNotice,
   } = useKanbanBoard(projectId);
 
   // --- Collaboration (RUN 01) ---
-  const { user, profile } = useAuth();
-  // usePresence depends on the primitive fields only, so this object need not be memoized.
-  const meMember = user?.id ? roster.find((r) => r.member.profileId === user.id)?.member : undefined;
-  const meName = meMember?.fullName || profile?.display_name || user?.email?.split('@')[0] || 'Uživatel';
-  const presenceMe = user?.id
-    ? { userId: user.id, name: meName, initials: meMember?.initials || meName.slice(0, 2).toUpperCase(), color: meMember?.avatarColor || '#209dd7' }
-    : null;
-  const activeUsers = usePresence(projectId, presenceMe, hasSupabaseConfig && Boolean(myRole) && !accessRevoked);
+  const { user } = useAuth();
   const mentionables: Mentionable[] = useMemo(
     () => roster
       .filter((r) => r.member.profileId && r.member.profileId !== user?.id)
@@ -615,6 +610,15 @@ export default function ProjectBoardPage() {
         </div>
       )}
 
+      {notice && !isDrawerOpen && (
+        <div className="collab-notice collab-notice--warning" role="alert" data-testid="collab-notice">
+          <span>{notice}</span>
+          <div className="collab-notice-actions">
+            <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={dismissNotice} data-testid="collab-notice-dismiss">Rozumím</button>
+          </div>
+        </div>
+      )}
+
       {conflict && !(isDrawerOpen && selectedCard?.id === conflict.cardId) && (
         <div className="collab-notice collab-notice--warning" role="alert" data-testid="conflict-notice">
           <span>{conflictText}</span>
@@ -807,6 +811,8 @@ export default function ProjectBoardPage() {
           onDeleteComment={deleteComment}
           conflictText={conflict && conflict.cardId === selectedCard.id ? conflictText : null}
           onResolveConflict={resolveConflict}
+          notice={notice}
+          onDismissNotice={dismissNotice}
         />
       )}
 

@@ -44,6 +44,15 @@ export function describeActivity(log: ProjectActivityLog): { text: string; kind:
     case 'card_assigned': return { text: `přiřadil(a) úkol ${title} uživateli ${str(d.name, 'člen týmu')}`, kind: 'assign' };
     case 'card_unassigned': return { text: `odebral(a) ${str(d.name, 'člena týmu')} z úkolu ${title}`, kind: 'assign' };
     case 'comment_added': return { text: `okomentoval(a) úkol ${title}`, kind: 'comment' };
+    case 'comment_edited': return { text: `upravil(a) komentář u úkolu ${title}`, kind: 'comment' };
+    case 'comment_deleted': return { text: `smazal(a) komentář u úkolu ${title}`, kind: 'comment' };
+    case 'card_moved_out': return { text: `přesunul(a) úkol ${title} do jiného projektu`, kind: 'move' };
+    case 'card_moved_in': return { text: `přesunul(a) sem úkol ${title} z jiného projektu${d.to ? ` (sloupec ${str(d.to)})` : ''}`, kind: 'move' };
+    case 'checklist_item_added': return { text: `přidal(a) položku checklistu „${str(d.item)}"`, kind: 'edit' };
+    case 'checklist_item_completed': return { text: `splnil(a) položku checklistu „${str(d.item)}"`, kind: 'done' };
+    case 'checklist_item_reopened': return { text: `znovu otevřel(a) položku checklistu „${str(d.item)}"`, kind: 'edit' };
+    case 'checklist_item_renamed': return { text: `přejmenoval(a) položku checklistu „${str(d.from)}" na „${str(d.to)}"`, kind: 'edit' };
+    case 'checklist_item_removed': return { text: `odstranil(a) položku checklistu „${str(d.item)}"`, kind: 'edit' };
     case 'column_created': return { text: `vytvořil(a) sloupec „${str(d.name)}"`, kind: 'column' };
     case 'column_renamed': return { text: `přejmenoval(a) sloupec „${str(d.from, '?')}" na „${str(d.to, '?')}"`, kind: 'column' };
     case 'column_deleted': return { text: `smazal(a) sloupec „${str(d.name)}"`, kind: 'column' };

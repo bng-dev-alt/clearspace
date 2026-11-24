@@ -11,6 +11,9 @@ import { aiClient } from '../../services/ai/aiClient';
 import { aiHistoryService } from '../../services/ai/aiHistoryService';
 import TaskComments from '../collab/TaskComments';
 import type { Mentionable } from '../../lib/collab/mentions';
+import { kanbanService } from '../../services/kanbanService';
+import { hasSupabaseConfig } from '../../lib/supabase';
+import { describeActivity, formatRelativeTime } from '../../lib/collab/activityText';
 
 export type TaskDetailMode = 'right' | 'left' | 'focused' | 'fullscreen' | 'split' | 'detached';
 
@@ -28,7 +31,7 @@ interface TaskDetailDrawerProps {
   onDeleteCard: (columnId: string, cardId: string) => void;
   onAddChecklistItem: (columnId: string, cardId: string, text: string) => void;
   onToggleChecklistItem: (columnId: string, cardId: string, itemId: string) => void;
-  onUpdateChecklistItemText: (columnId: string, cardId: string, itemId: string, text: string) => void;
+  onUpdateChecklistItemText: (columnId: string, cardId: string, itemId: string, text: string, expectedText?: string) => void;
   onDeleteChecklistItem: (columnId: string, cardId: string, itemId: string) => void;
   onAddComment: (columnId: string, cardId: string, authorName: string, content: string, mentions?: string[]) => void;
   onAddActivity: (columnId: string, cardId: string, text: string) => void;
@@ -42,6 +45,9 @@ interface TaskDetailDrawerProps {
   /** A colleague changed these fields of THIS task concurrently; the drawer shows their version. */
   conflictText?: string | null;
   onResolveConflict?: (choice: 'theirs' | 'mine') => void;
+  /** A collaboration notice (e.g. a refused concurrent edit) shown while the drawer covers the page. */
+  notice?: string | null;
+  onDismissNotice?: () => void;
 }
 
 export default function TaskDetailDrawer({
@@ -69,6 +75,8 @@ export default function TaskDetailDrawer({
   onDeleteComment,
   conflictText = null,
   onResolveConflict,
+  notice = null,
+  onDismissNotice,
 }: TaskDetailDrawerProps) {
   const { profile } = useAuth();
   const params = useParams();
@@ -148,6 +156,7 @@ export default function TaskDetailDrawer({
   // Text fields being edited: their value when editing began (null = not focused). A colleague's
   // change arriving meanwhile is shown in unfocused fields and detected as a conflict on save.
   const titleBase = useRef<string | null>(null);
+  const checklistBase = useRef<Record<string, string>>({});
   const detailsBase = useRef<string | null>(null);
   const remoteTitle = card?.title ?? '';
   const remoteDetails = card?.details ?? '';
@@ -165,6 +174,16 @@ export default function TaskDetailDrawer({
 
   // Activity collapse state
   const [isActivityCollapsed, setIsActivityCollapsed] = useState(true);
+  // Trusted task history (RUN 01B): events recorded by the database; re-read whenever the task changes.
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof kanbanService.fetchCardHistory>> | null>(null);
+  const historyCardId = card?.id;
+  const historyStamp = `${card?.version ?? ''}:${card?.childRev ?? ''}:${card?.comments?.length ?? 0}`;
+  useEffect(() => {
+    if (!hasSupabaseConfig || !historyCardId || isActivityCollapsed) return;
+    let active = true;
+    kanbanService.fetchCardHistory(historyCardId).then((rows) => { if (active) setHistory(rows); });
+    return () => { active = false; };
+  }, [historyCardId, historyStamp, isActivityCollapsed]);
 
   // AI Assistant states
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -348,8 +367,10 @@ export default function TaskDetailDrawer({
   };
 
   const handleChecklistTextBlur = (itemId: string, currentText: string, newText: string) => {
-    if (newText.trim() && newText.trim() !== currentText) {
-      onUpdateChecklistItemText(columnId, card.id, itemId, newText.trim());
+    const base = checklistBase.current[itemId] ?? currentText;
+    delete checklistBase.current[itemId];
+    if (newText.trim() && newText.trim() !== base) {
+      onUpdateChecklistItemText(columnId, card.id, itemId, newText.trim(), base);
     }
   };
 
@@ -545,6 +566,14 @@ export default function TaskDetailDrawer({
 
         {/* Scrollable workspace area */}
         <fieldset disabled={readOnly} className="drawer-scroll-area" style={{ border: 0, margin: 0, minWidth: 0 }} data-readonly={readOnly ? 'true' : 'false'}>
+          {notice && onDismissNotice && (
+            <div className="collab-notice collab-notice--warning" style={{ margin: 0 }} role="alert" data-testid="collab-notice">
+              <span>{notice}</span>
+              <div className="collab-notice-actions">
+                <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={onDismissNotice} data-testid="collab-notice-dismiss">Rozumím</button>
+              </div>
+            </div>
+          )}
           {conflictText && onResolveConflict && (
             <div className="collab-notice collab-notice--warning" style={{ margin: 0 }} role="alert" data-testid="conflict-notice">
               <span>{conflictText}</span>
@@ -733,6 +762,7 @@ export default function TaskDetailDrawer({
                     type="text"
                     className={`checklist-text-input ${item.completed ? 'completed' : ''}`}
                     defaultValue={item.text}
+                    onFocus={() => { checklistBase.current[item.id] = item.text; }}
                     onBlur={(e) => handleChecklistTextBlur(item.id, item.text, e.target.value)}
                     data-testid={`checklist-input-${item.id}`}
                   />
@@ -851,7 +881,18 @@ export default function TaskDetailDrawer({
                 style={{ marginTop: '0.85rem' }}
                 data-testid="activity-timeline"
               >
-                {(card.activities || []).length === 0 ? (
+                {hasSupabaseConfig && (history === null ? (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', paddingLeft: '0.5rem' }}>Načítání…</p>
+                ) : history.map((h) => (
+                  <div key={h.id} className="activity-item" data-testid={`task-history-${h.id}`} data-action={h.actionType}>
+                    <span className="activity-text"><strong>{h.actorName}</strong> {describeActivity({ id: h.id, projectId: '', actorName: h.actorName, actionType: h.actionType, entityType: '', details: h.details, createdAt: h.createdAt }).text}</span>
+                    <span className="activity-time" title={new Date(h.createdAt).toLocaleString('cs-CZ')}>{formatRelativeTime(h.createdAt)}</span>
+                  </div>
+                )))}
+                {(card.activities || []).length > 0 && hasSupabaseConfig && (
+                  <p style={{ fontSize: '0.7rem', color: 'var(--gray-text)', margin: '0.6rem 0 0.2rem 0.5rem' }}>Starší záznamy (zapsané aplikací před ověřenou historií):</p>
+                )}
+                {(!hasSupabaseConfig && (card.activities || []).length === 0) || (hasSupabaseConfig && history !== null && history.length === 0 && (card.activities || []).length === 0) ? (
                   <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', fontStyle: 'italic', paddingLeft: '0.5rem' }}>
                     Žádná aktivita nebyla zaznamenána.
                   </p>
@@ -859,7 +900,7 @@ export default function TaskDetailDrawer({
                   [...(card.activities || [])]
                     .reverse() // Display newest first in UI for history timeline comfort
                     .map((act) => (
-                      <div key={act.id} className="activity-item">
+                      <div key={act.id} className="activity-item" data-legacy={hasSupabaseConfig ? 'true' : undefined}>
                         <span className="activity-text">{act.text}</span>
                         <span className="activity-time">
                           {new Date(act.createdAt).toLocaleString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}

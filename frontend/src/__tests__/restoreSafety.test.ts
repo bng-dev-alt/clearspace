@@ -53,7 +53,8 @@ describe('AI History restore safety', () => {
   test('board restore = ONE atomic RPC for that project; no project is read, written or deleted', async () => {
     await kanbanService.restoreProjectSnapshot('proj-A', board);
     expect(h.calls).toHaveLength(1);
-    expect(h.calls[0]).toMatchObject({ kind: 'rpc', table: 'restore_project_board' });
+    // RUN 01B: the import-context wrapper (comments/history copied from the snapshot are marked as imports)
+    expect(h.calls[0]).toMatchObject({ kind: 'rpc', table: 'restore_project_board_v2' });
     expect((h.calls[0].args as { p_project_id: string }).p_project_id).toBe('proj-A');
     expect(h.calls.filter((c) => c.table === 'projects')).toHaveLength(0);
   });

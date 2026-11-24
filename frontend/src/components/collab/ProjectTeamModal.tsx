@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Users, Mail, Copy, Check, Trash2, UserPlus, Settings2 } from 'lucide-react';
-import type { ProjectInvitation, ProjectRole, ProjectRosterEntry, TeamMember } from '../../types/kanban';
-import { collaborationService } from '../../services/collaborationService';
+import type { ProjectRole, ProjectRosterEntry, TeamMember } from '../../types/kanban';
+import { collaborationService, type InvitationRow, type DeliveryState } from '../../services/collaborationService';
 import { workspaceService } from '../../services/workspaceService';
 import { Button, Badge, EmptyState } from '../ui';
 
@@ -35,6 +35,36 @@ interface ProjectTeamModalProps {
   onManageWorkspace: () => void;
 }
 
+type InvitationState = 'pending' | 'expired' | 'accepted' | 'revoked';
+const STATE_LABEL: Record<InvitationState, string> = { pending: 'čeká na přijetí', expired: 'vypršela', accepted: 'přijata', revoked: 'zrušena' };
+
+function invitationState(inv: InvitationRow): InvitationState {
+  if (inv.status === 'accepted') return 'accepted';
+  if (inv.status === 'rejected') return 'revoked';
+  if (inv.status === 'expired' || new Date(inv.expiresAt).getTime() < Date.now()) return 'expired';
+  return 'pending';
+}
+
+/** Only what is actually known: SMTP acceptance is not inbox delivery. */
+function deliveryLabel(status?: DeliveryState): string {
+  switch (status) {
+    case 'accepted': return 'E-mail předán poštovnímu serveru (doručení do schránky nelze ověřit).';
+    case 'failed': return 'Odeslání e-mailu selhalo. Zkuste „Poslat znovu“ nebo předejte odkaz jinak.';
+    case 'suppressed': return 'E-mail se neodesílá (testovací adresa nebo vypnuté odesílání). Předejte odkaz jinak.';
+    case 'sending': return 'E-mail se odesílá…';
+    default: return 'E-mail nebyl odeslán; předejte odkaz jinak.';
+  }
+}
+
+function deliveryMessage(status: DeliveryState, email: string): string {
+  switch (status) {
+    case 'accepted': return `Pozvánka odeslána na ${email}.`;
+    case 'failed': return `Pozvánka je vytvořená, ale e-mail na ${email} se nepodařilo odeslat. Odkaz můžete zkopírovat.`;
+    case 'not_configured': return 'Pozvánka je vytvořená. Odesílání e-mailů není nastavené, odkaz prosím předejte sami.';
+    default: return `Pozvánka je vytvořená, e-mail na ${email} se neodesílá (testovací adresa). Odkaz můžete zkopírovat.`;
+  }
+}
+
 /** Roles a manager may hand out: the owner everything below owner, an admin only editor/viewer. */
 function grantable(myRole: ProjectRole | null): AssignableRole[] {
   if (myRole === 'owner') return ['admin', 'member', 'viewer'];
@@ -58,9 +88,10 @@ export default function ProjectTeamModal({
   const [addRole, setAddRole] = useState<AssignableRole>('member');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<AssignableRole>('member');
-  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
+  const [invitations, setInvitations] = useState<InvitationRow[]>([]);
   const [freshLink, setFreshLink] = useState<{ id: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
@@ -72,7 +103,7 @@ export default function ProjectTeamModal({
     if (!canManage) return;
     const [ws, inv] = await Promise.all([
       projectOwnerId ? workspaceService.fetchMembers(projectOwnerId).catch(() => []) : Promise.resolve([]),
-      collaborationService.fetchProjectInvitations(projectId),
+      collaborationService.fetchProjectInvitationList(projectId),
     ]);
     setCandidates(ws);
     setInvitations(inv);
@@ -90,6 +121,7 @@ export default function ProjectTeamModal({
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
     setError(null);
+    setInfo(null);
     try {
       await fn();
       onChanged();
@@ -112,10 +144,11 @@ export default function ProjectTeamModal({
     const email = inviteEmail.trim();
     if (!email) return;
     void run('invite', async () => {
-      const inv = await collaborationService.createProjectInvitation(projectId, email, inviteRole);
-      setFreshLink({ id: inv.id, url: `${window.location.origin}/accept-invite?token=${inv.token}` });
+      const r = await collaborationService.sendProjectInvitation(projectId, email, inviteRole);
+      setFreshLink({ id: r.id, url: r.link });
       setCopied(false);
       setInviteEmail('');
+      setInfo(deliveryMessage(r.delivery.status, email));
     });
   };
 
@@ -149,6 +182,9 @@ export default function ProjectTeamModal({
             </p>
           )}
 
+          {info && (
+            <p role="status" style={{ margin: 0, fontSize: '0.78rem', color: 'var(--dark-navy)' }} data-testid="project-team-info">{info}</p>
+          )}
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }} data-testid="project-team-list">
             {roster.length === 0 && (
               <li><EmptyState icon={<Users size={20} />} title="Zatím jen vy" description="Pozvěte kolegy e-mailem níže." /></li>
@@ -266,7 +302,7 @@ export default function ProjectTeamModal({
                   <Mail size={13} /> Pozvat
                 </Button>
               </div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--gray-text)' }}>{ROLE_LABEL[inviteRole]}: {ROLE_HINT[inviteRole]}. Odkaz platí 7 dní a jen pro tento e-mail.</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--gray-text)' }}>{ROLE_LABEL[inviteRole]}: {ROLE_HINT[inviteRole]}. Pozvánku pošleme e-mailem; odkaz platí 7 dní a jen pro tento e-mail.</span>
               {freshLink && (
                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }} data-testid="project-invite-link-box">
                   <input readOnly className="cs-input" style={{ fontSize: '0.72rem' }} value={freshLink.url} aria-label="Odkaz pozvánky" data-testid="project-invite-link" onFocus={(e) => e.currentTarget.select()} />
@@ -285,25 +321,53 @@ export default function ProjectTeamModal({
           )}
 
           {canManage && invitations.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }} data-testid="project-invite-pending">
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-text)' }}>Čekající pozvánky</span>
-              {invitations.map((inv) => (
-                <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', fontSize: '0.76rem' }} data-testid={`project-invite-${inv.id}`}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {inv.email} · {ROLE_LABEL[inv.projectRole ?? 'member']} · do {new Date(inv.expiresAt).toLocaleDateString('cs-CZ')}
-                  </span>
-                  <button
-                    type="button"
-                    className="cs-link-button"
-                    style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
-                    disabled={busy !== null}
-                    onClick={() => void run(`revoke-${inv.id}`, async () => { await collaborationService.rejectInvitation(inv.id); if (freshLink?.id === inv.id) setFreshLink(null); })}
-                    data-testid={`project-invite-revoke-${inv.id}`}
-                  >
-                    Zrušit
-                  </button>
-                </div>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }} data-testid="project-invite-pending">
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-text)' }}>Pozvánky</span>
+              {invitations.map((inv) => {
+                const st = invitationState(inv);
+                const live = st === 'pending' || st === 'expired';
+                return (
+                  <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', fontSize: '0.76rem', flexWrap: 'wrap' }}
+                    data-testid={`project-invite-${inv.id}`} data-state={st} data-delivery={inv.delivery?.status ?? 'none'}>
+                    <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 200px' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {inv.email} · {ROLE_LABEL[inv.projectRole ?? 'member']} · <strong>{STATE_LABEL[st]}</strong>
+                        {st === 'pending' ? ` do ${new Date(inv.expiresAt).toLocaleDateString('cs-CZ')}` : ''}
+                      </span>
+                      {live && <span style={{ color: inv.delivery?.status === 'failed' ? 'var(--danger)' : 'var(--gray-text)', fontSize: '0.7rem' }}>{deliveryLabel(inv.delivery?.status)}</span>}
+                    </span>
+                    {live && (
+                      <span style={{ display: 'flex', gap: '0.6rem' }}>
+                        {freshLink?.id === inv.id && (
+                          <button type="button" className="cs-link-button" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+                            onClick={async () => { try { await navigator.clipboard.writeText(freshLink.url); setCopied(true); } catch { /* clipboard blocked */ } }}
+                            data-testid={`project-invite-copy-${inv.id}`}>
+                            {copied ? 'Zkopírováno' : 'Kopírovat odkaz'}
+                          </button>
+                        )}
+                        <button type="button" className="cs-link-button" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+                          disabled={busy !== null}
+                          onClick={() => void run(`resend-${inv.id}`, async () => {
+                            const r = await collaborationService.resendInvitation(inv.id);
+                            setFreshLink({ id: r.id, url: r.link }); setCopied(false);
+                            setInfo(deliveryMessage(r.delivery.status, inv.email));
+                          })}
+                          data-testid={`project-invite-resend-${inv.id}`}>
+                          {busy === `resend-${inv.id}` ? 'Odesílám…' : 'Poslat znovu'}
+                        </button>
+                        {st === 'pending' && (
+                          <button type="button" className="cs-link-button" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+                            disabled={busy !== null}
+                            onClick={() => void run(`revoke-${inv.id}`, async () => { await collaborationService.rejectInvitation(inv.id); if (freshLink?.id === inv.id) setFreshLink(null); })}
+                            data-testid={`project-invite-revoke-${inv.id}`}>
+                            Zrušit
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

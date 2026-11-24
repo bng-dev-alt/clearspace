@@ -474,7 +474,11 @@ export const kanbanService = {
     return seeded;
   },
 
-  async updateColumnName(columnId: string, name: string, projectId?: string): Promise<void> {
+  /**
+   * Rename. With `expectedName` the write only happens if nobody renamed the column meanwhile
+   * (RUN 01B: no silent overwrite). Returns 'conflict' with the current name otherwise.
+   */
+  async updateColumnName(columnId: string, name: string, projectId?: string, expectedName?: string): Promise<{ status: 'ok' | 'conflict' | 'error'; current?: string }> {
     if (!hasSupabaseConfig) {
       if (projectId) {
         const board = localStore.getBoard(projectId);
@@ -483,20 +487,23 @@ export const kanbanService = {
           board.map((col) => (col.id === columnId ? { ...col, name } : col))
         );
       }
-      return;
+      return { status: 'ok' };
     }
-    const { error } = await supabase
-      .from('columns')
-      .update({ name })
-      .eq('id', columnId);
+    let q = supabase.from('columns').update({ name }).eq('id', columnId);
+    if (expectedName !== undefined) q = q.eq('name', expectedName);
+    const { data, error } = await q.select('id');
     if (error) {
       persistenceStatus.report('přejmenování sloupce', error);
-    } else {
-      persistenceStatus.clear();
+      return { status: 'error' };
     }
+    if (!data || data.length === 0) {
+      const { data: cur } = await supabase.from('columns').select('name').eq('id', columnId).maybeSingle();
+      return { status: cur ? 'conflict' : 'error', current: (cur as { name?: string } | null)?.name };
+    }
+    persistenceStatus.clear();
+    return { status: 'ok' };
   },
 
-  /** Explicitní role sloupce (null = zpět na odvození ze jména). Starší databáze bez sloupce `role` ji prostě neuloží. */
   async updateColumnRole(columnId: string, role: ColumnRole | null, projectId?: string): Promise<void> {
     if (!hasSupabaseConfig) {
       if (projectId) {
@@ -699,16 +706,29 @@ export const kanbanService = {
     if (error) persistenceStatus.report('uložení položky checklistu', error);
   },
 
-  async updateChecklistItem(item: ChecklistItem): Promise<void> {
-    if (!hasSupabaseConfig) return;
-    const { error } = await supabase
-      .from('task_checklists')
-      .update({
-        text: item.text,
-        completed: item.completed,
-      })
-      .eq('id', item.id);
-    if (error) persistenceStatus.report('uložení položky checklistu', error);
+  /**
+   * Field-level checklist write (RUN 01B): a toggle sends only `completed`, a rename only `text` and only if the
+   * text is still what the editor started from. 'gone' = deleted meanwhile, 'conflict' = renamed meanwhile.
+   */
+  async updateChecklistItem(
+    item: Pick<ChecklistItem, 'id'>,
+    change: { completed: boolean } | { text: string; expectedText: string }
+  ): Promise<{ status: 'ok' | 'conflict' | 'gone' | 'error'; current?: ChecklistItem }> {
+    if (!hasSupabaseConfig) return { status: 'ok' };
+    const q = 'completed' in change
+      ? supabase.from('task_checklists').update({ completed: change.completed }).eq('id', item.id)
+      : supabase.from('task_checklists').update({ text: change.text }).eq('id', item.id).eq('text', change.expectedText);
+    const { data, error } = await q.select('id');
+    if (error) {
+      persistenceStatus.report('uložení položky checklistu', error);
+      return { status: 'error' };
+    }
+    if (!data || data.length === 0) {
+      const { data: cur } = await supabase.from('task_checklists').select('id, text, completed').eq('id', item.id).maybeSingle();
+      return cur ? { status: 'conflict', current: cur as ChecklistItem } : { status: 'gone' };
+    }
+    persistenceStatus.clear();
+    return { status: 'ok' };
   },
 
   async deleteChecklistItem(itemId: string): Promise<void> {
@@ -759,6 +779,14 @@ export const kanbanService = {
     return mapDbComment(data as DbComment);
   },
 
+  /** Previous versions of an edited comment (newest first), readable by project members. */
+  async fetchCommentRevisions(commentId: string): Promise<{ content: string; editedBy?: string; editedAt: string }[]> {
+    if (!hasSupabaseConfig) return [];
+    const { data } = await supabase.from('task_comment_revisions').select('content, edited_by, edited_at')
+      .eq('comment_id', commentId).order('edited_at', { ascending: false });
+    return (data ?? []).map((r) => ({ content: r.content, editedBy: r.edited_by ?? undefined, editedAt: r.edited_at }));
+  },
+
   async deleteComment(commentId: string): Promise<boolean> {
     if (!hasSupabaseConfig) return true;
     const { data, error } = await supabase.from('task_comments').delete().eq('id', commentId).select('id');
@@ -770,15 +798,31 @@ export const kanbanService = {
     return true;
   },
 
-  async addActivity(cardId: string, activity: ActivityLog): Promise<void> {
-    if (!hasSupabaseConfig) return;
-    const { error } = await supabase.from('task_activities').insert({
-      id: activity.id,
-      card_id: cardId,
-      text: activity.text,
-      created_at: activity.createdAt,
-    });
-    if (error) persistenceStatus.report('uložení aktivity', error);
+  /**
+   * Per-task history is written by the DATABASE from the trusted operations (RUN 01B, activity_logs.card_id);
+   * the old client-written text (task_activities) is legacy and read-only. Demo mode keeps it locally.
+   */
+  async addActivity(_cardId: string, _activity: ActivityLog): Promise<void> {
+    return;
+  },
+
+  /** Trusted history of one task (newest first). */
+  async fetchCardHistory(cardId: string): Promise<{ id: string; actionType: string; actorName: string; details: Record<string, unknown>; createdAt: string; source?: string }[]> {
+    if (!hasSupabaseConfig) return [];
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .select('id, action_type, actor_name, details, created_at, source')
+      .eq('card_id', cardId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) return [];
+    return (data ?? []).map((r) => ({ id: r.id, actionType: r.action_type, actorName: r.actor_name, details: (r.details ?? {}) as Record<string, unknown>, createdAt: r.created_at, source: r.source ?? undefined }));
+  },
+
+  async fetchRealtimeKey(projectId: string): Promise<string | null> {
+    if (!hasSupabaseConfig) return null;
+    const { data } = await supabase.from('projects').select('realtime_key').eq('id', projectId).maybeSingle();
+    return ((data as { realtime_key?: string } | null)?.realtime_key) ?? null;
   },
 
   async createColumn(projectId: string, name: string, position: number): Promise<Column> {
@@ -828,27 +872,20 @@ export const kanbanService = {
     }
   },
 
-  async reorderColumns(projectId: string, columns: Column[]): Promise<void> {
+  /** Atomic reorder (RPC reorder_columns): refused with 'conflict' when the set of columns changed meanwhile. */
+  async reorderColumns(projectId: string, columns: Column[]): Promise<'ok' | 'conflict' | 'error'> {
     if (!hasSupabaseConfig) {
       localStore.saveBoard(projectId, columns);
-      return;
+      return 'ok';
     }
-
-    try {
-      const updates = columns.map((col, index) =>
-        supabase
-          .from('columns')
-          .update({ position: index })
-          .eq('id', col.id)
-      );
-      const results = await Promise.all(updates);
-      const failed = results.find((r) => r.error);
-      if (failed?.error) throw failed.error;
-      persistenceStatus.clear();
-    } catch (error) {
+    const { error } = await supabase.rpc('reorder_columns', { p_project_id: projectId, p_ordered_ids: columns.map((c) => c.id) });
+    if (error) {
+      if (error.code === 'PT409') return 'conflict';
       persistenceStatus.report('změna pořadí sloupců', error);
-      throw error;
+      return 'error';
     }
+    persistenceStatus.clear();
+    return 'ok';
   },
 
   /**
@@ -877,7 +914,7 @@ export const kanbanService = {
       return;
     }
 
-    const { error } = await supabase.rpc('restore_project_board', {
+    const { error } = await supabase.rpc('restore_project_board_v2', {
       p_project_id: projectId,
       p_board: boardToRestorePayload(boardData),
     });

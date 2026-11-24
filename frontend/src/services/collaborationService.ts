@@ -106,6 +106,35 @@ function mapInvitationRow(row: DbInvitationRow): ProjectInvitation {
   };
 }
 
+export type DeliveryState = 'sending' | 'accepted' | 'failed' | 'suppressed' | 'not_configured';
+
+export interface InvitationRow extends ProjectInvitation {
+  /** Latest e-mail delivery attempt, if any (what the mail server said -- not inbox delivery). */
+  delivery?: { status: DeliveryState; at: string; errorCode?: string; attempts: number };
+}
+
+export interface SendResult {
+  id: string;
+  expiresAt: string;
+  link: string;
+  delivery: { status: DeliveryState; detail?: string };
+}
+
+async function authHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Přihlaste se prosím znovu.');
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+async function postInvitation(path: string, body?: unknown): Promise<SendResult> {
+  const res = await fetch(path, { method: 'POST', headers: await authHeader(), body: body === undefined ? undefined : JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || 'Pozvánku se nepodařilo odeslat.');
+  const link = json.link ?? `${window.location.origin}/accept-invite?token=${encodeURIComponent(json.token)}`;
+  return { id: json.id, expiresAt: json.expiresAt, link, delivery: json.delivery };
+}
+
 export const collaborationService = {
   /**
    * 256-bit token (64 hex chars) from the Web Crypto CSPRNG. Used ONLY by the
@@ -177,6 +206,39 @@ export const collaborationService = {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error('Pozvánku se nepodařilo vytvořit.');
     return { id: row.id, token: row.token, expiresAt: row.expires_at };
+  },
+
+  /** Create + e-mail a project invitation through the server (owner/admin; the database decides). */
+  async sendProjectInvitation(projectId: string, email: string, role: Exclude<ProjectRole, 'owner'>): Promise<SendResult> {
+    return postInvitation('/api/collab/invitations', { projectId, email, role });
+  },
+
+  /** New link (the old one stops working) + e-mail again. Throttled by the database. */
+  async resendInvitation(invitationId: string): Promise<SendResult> {
+    return postInvitation(`/api/collab/invitations/${encodeURIComponent(invitationId)}/resend`);
+  },
+
+  /** All invitations of a project (any status) with their latest delivery state; owner/admin only (RLS). */
+  async fetchProjectInvitationList(projectId: string): Promise<InvitationRow[]> {
+    if (!hasSupabaseConfig) return [];
+    const { data, error } = await supabase
+      .from('invitations')
+      .select(INVITATION_COLUMNS)
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error || !data) return [];
+    const rows = (data as DbInvitationRow[]).map(mapInvitationRow) as InvitationRow[];
+    const { data: del } = await supabase
+      .from('invitation_deliveries')
+      .select('invitation_id, status, created_at, error_code, attempt_no')
+      .in('invitation_id', rows.map((r) => r.id))
+      .order('created_at', { ascending: false });
+    for (const r of rows) {
+      const mine = (del ?? []).filter((d) => d.invitation_id === r.id);
+      if (mine[0]) r.delivery = { status: mine[0].status, at: mine[0].created_at, errorCode: mine[0].error_code ?? undefined, attempts: mine.length };
+    }
+    return rows;
   },
 
   async fetchWorkspaceInvitations(workspaceOwnerId: string): Promise<ProjectInvitation[]> {

@@ -3,7 +3,7 @@ import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember
 import { kanbanService } from '../services/kanbanService';
 import { collaborationService } from '../services/collaborationService';
 import { detectConflicts, pickBase, isNewer, type EditableField } from '../lib/collab/conflicts';
-import type { SyncStatus, DbCardSignal, DbColumnRow } from './useRealtimeBoard';
+import type { SyncStatus, ChangeSignal } from './useRealtimeBoard';
 import { workspaceService, ownerMemberFromProfile } from '../services/workspaceService';
 import { persistenceStatus } from '../services/persistence';
 import { toPrimaryAssignee, legacyAssigneeToMember, resolveBoardAssignees } from '../utils/assignees';
@@ -64,6 +64,10 @@ export function useKanbanBoard(projectId?: string) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('off');
   const [accessRevoked, setAccessRevoked] = useState(false);
   const [conflict, setConflict] = useState<CardConflict | null>(null);
+  const [realtimeKey, setRealtimeKey] = useState<string | null>(null);
+  // Short Czech notice for a refused/conflicting collaborative edit (RUN 01B).
+  const [notice, setNotice] = useState<string | null>(null);
+  const dismissNotice = useCallback(() => setNotice(null), []);
   // Latest board for async callbacks (realtime merges, write results) without stale closures.
   const columnsRef = useRef<Column[]>([]);
   useEffect(() => { columnsRef.current = columns; }, [columns]);
@@ -104,6 +108,7 @@ export function useKanbanBoard(projectId?: string) {
           : Promise.resolve<ProjectRole | null>('owner'),
         hasSupabaseConfig ? collaborationService.fetchRoster(activeProjectId).catch(() => []) : Promise.resolve([]),
       ]);
+      const key = hasSupabaseConfig && role ? await kanbanService.fetchRealtimeKey(activeProjectId).catch(() => null) : null;
 
       // Release 23: přihlášený účet je členem svého workspace (owner).
       let workspace = wsMembers;
@@ -149,6 +154,7 @@ export function useKanbanBoard(projectId?: string) {
         setTeamMembers(projectMembers);
         setRoster(rosterRows);
         setMyRole(role);
+        setRealtimeKey(key);
         setAccessRevoked(hasSupabaseConfig && userId !== 'guest' && role === null && projectData === null);
         // Řešitele karet resolvujeme proti členům projektu -> úkol patří
         // jen členům projektu; identita (jméno/barva) je vždy aktuální.
@@ -254,6 +260,7 @@ export function useKanbanBoard(projectId?: string) {
   }, [activeProjectId, teamMembers, columns, reconcileCard]);
 
   const addActivity = useCallback((columnId: string, cardId: string, text: string) => {
+    if (hasSupabaseConfig) return; // trusted server-side history only
     const newActivity: ActivityLog = {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       text,
@@ -280,6 +287,7 @@ export function useKanbanBoard(projectId?: string) {
       })
     );
 
+    // Supabase: the database records trusted task history itself (RUN 01B); nothing is written from here.
     kanbanService.addActivity(cardId, newActivity);
   }, []);
 
@@ -437,39 +445,47 @@ export function useKanbanBoard(projectId?: string) {
     addActivity(columnId, cardId, `Přidána položka checklistu: ${text}`);
   }, [addActivity]);
 
+  const patchChecklist = useCallback((cardId: string, fn: (items: ChecklistItem[]) => ChecklistItem[]) => {
+    setColumns((prev) => prev.map((col) => ({
+      ...col,
+      cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: fn(c.checklist || []) } : c)),
+    })));
+  }, []);
+
   const toggleChecklistItem = useCallback((columnId: string, cardId: string, itemId: string) => {
     const current = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId);
     if (!current) return;
-    const itemToUpdate: ChecklistItem = { ...current, completed: !current.completed };
+    const completed = !current.completed;
+    patchChecklist(cardId, (items) => items.map((item) => (item.id === itemId ? { ...item, completed } : item)));
+    // field-level: only `completed` is written, a concurrent rename of the same item is kept
+    void Promise.resolve(kanbanService.updateChecklistItem({ id: itemId }, { completed })).then((r) => {
+      if (r?.status === 'gone') {
+        patchChecklist(cardId, (items) => items.filter((i) => i.id !== itemId));
+        setNotice('Položku checklistu mezitím někdo smazal.');
+      } else if (r?.status === 'error') void reconcileCard(cardId);
+    });
+    const statusText = completed ? 'splněna' : 'označena jako nesplněná';
+    addActivity(columnId, cardId, `Položka checklistu "${current.text}" byla ${statusText}`);
+  }, [addActivity, columns, patchChecklist, reconcileCard]);
 
-    setColumns((prev) =>
-      prev.map((col) =>
-        col.id === columnId
-          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: (c.checklist || []).map((item) => (item.id === itemId ? { ...item, completed: itemToUpdate.completed } : item)) } : c)) }
-          : col
-      )
-    );
-
-    kanbanService.updateChecklistItem(itemToUpdate);
-    const statusText = itemToUpdate.completed ? 'splněna' : 'označena jako nesplněná';
-    addActivity(columnId, cardId, `Položka checklistu "${itemToUpdate.text}" byla ${statusText}`);
-  }, [addActivity, columns]);
-
-  const updateChecklistItemText = useCallback((columnId: string, cardId: string, itemId: string, text: string) => {
-    const current = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId);
-    if (!current) return;
-    const itemToUpdate: ChecklistItem = { ...current, text };
-
-    setColumns((prev) =>
-      prev.map((col) =>
-        col.id === columnId
-          ? { ...col, cards: col.cards.map((c) => (c.id === cardId ? { ...c, checklist: (c.checklist || []).map((item) => (item.id === itemId ? { ...item, text } : item)) } : c)) }
-          : col
-      )
-    );
-
-    kanbanService.updateChecklistItem(itemToUpdate);
-  }, [columns]);
+  const updateChecklistItemText = useCallback((columnId: string, cardId: string, itemId: string, text: string, expectedText?: string) => {
+    const found = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId);
+    if (!found) return;
+    // base = the text when editing began (a colleague's rename that arrived meanwhile must not be overwritten)
+    const current = { ...found, text: expectedText ?? found.text };
+    patchChecklist(cardId, (items) => items.map((item) => (item.id === itemId ? { ...item, text } : item)));
+    // only if nobody renamed it meanwhile; otherwise keep theirs and say so
+    void Promise.resolve(kanbanService.updateChecklistItem({ id: itemId }, { text, expectedText: current.text })).then((r) => {
+      if (r?.status === 'conflict' && r.current) {
+        const theirs = r.current;
+        patchChecklist(cardId, (items) => items.map((i) => (i.id === itemId ? { ...i, text: theirs.text, completed: theirs.completed } : i)));
+        setNotice(`Položku checklistu mezitím přejmenoval kolega na „${theirs.text}“. Vaše úprava „${text}“ nebyla uložena.`);
+      } else if (r?.status === 'gone') {
+        patchChecklist(cardId, (items) => items.filter((i) => i.id !== itemId));
+        setNotice('Položku checklistu mezitím někdo smazal. Vaše úprava nebyla uložena.');
+      } else if (r?.status === 'error') void reconcileCard(cardId);
+    });
+  }, [columns, patchChecklist, reconcileCard]);
 
   const deleteChecklistItem = useCallback((columnId: string, cardId: string, itemId: string) => {
     const deletedItemText = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.checklist?.find((i) => i.id === itemId)?.text ?? '';
@@ -580,15 +596,18 @@ export function useKanbanBoard(projectId?: string) {
     });
   }, [activeProjectId, columns, reconcileCard]);
 
-  const renameColumn = useCallback((columnId: string, newName: string) => {
-    // Optimistická aktualizace lokálního stavu
-    setColumns((prev) =>
-      prev.map((col) => (col.id === columnId ? { ...col, name: newName } : col))
-    );
-
-    // Asynchronní uložení do databáze
-    kanbanService.updateColumnName(columnId, newName, activeProjectId);
-  }, [activeProjectId]);
+  const renameColumn = useCallback((columnId: string, newName: string, expectedName?: string) => {
+    const before = expectedName ?? columnsRef.current.find((c) => c.id === columnId)?.name;
+    setColumns((prev) => prev.map((col) => (col.id === columnId ? { ...col, name: newName } : col)));
+    void Promise.resolve(kanbanService.updateColumnName(columnId, newName, activeProjectId, before)).then((r) => {
+      if (r?.status === 'conflict') {
+        setColumns((prev) => prev.map((col) => (col.id === columnId ? { ...col, name: r.current ?? col.name } : col)));
+        setNotice(`Sloupec mezitím přejmenoval kolega na „${r.current}“. Vaše změna „${newName}“ nebyla uložena.`);
+      } else if (r?.status === 'error') {
+        void reloadBoard({ silent: true });
+      }
+    });
+  }, [activeProjectId, reloadBoard]);
 
   const setColumnRole = useCallback((columnId: string, role: ColumnRole | null) => {
     setColumns((prev) => prev.map((col) => (col.id === columnId ? { ...col, role } : col)));
@@ -656,17 +675,17 @@ export function useKanbanBoard(projectId?: string) {
     updated.splice(newIndex, 0, moved);
 
     setColumns(updated);
-    await kanbanService.reorderColumns(activeProjectId, updated).catch((err) => {
-      console.error('Failed to reorder columns:', err);
-    });
-  }, [activeProjectId, columns]);
+    const r = await kanbanService.reorderColumns(activeProjectId, updated);
+    if (r === 'conflict') setNotice('Sloupce se mezitím změnily. Board jsme načetli znovu, upravte pořadí prosím ještě jednou.');
+    if (r !== 'ok') void reloadBoard({ silent: true });
+  }, [activeProjectId, columns, reloadBoard]);
 
   const reorderColumns = useCallback(async (newOrder: Column[]) => {
     setColumns(newOrder);
-    await kanbanService.reorderColumns(activeProjectId, newOrder).catch((err) => {
-      console.error('Failed to reorder columns:', err);
-    });
-  }, [activeProjectId]);
+    const r = await kanbanService.reorderColumns(activeProjectId, newOrder);
+    if (r === 'conflict') setNotice('Sloupce se mezitím změnily. Board jsme načetli znovu, upravte pořadí prosím ještě jednou.');
+    if (r !== 'ok') void reloadBoard({ silent: true });
+  }, [activeProjectId, reloadBoard]);
 
   // Statistiky
   const totalTasks = columns.reduce((acc, col) => acc + col.cards.length, 0);
@@ -904,66 +923,61 @@ export function useKanbanBoard(projectId?: string) {
     });
   }, [activeProjectId, workspaceMembers]);
 
-  // --- Realtime sync (RUN 01) ---
-  // An event is a signal "entity X changed": the card is re-read from the database (with its
-  // children) and merged only if it is newer than what we show (version / child_rev), so echoes of
-  // our own writes, duplicates and out-of-order deliveries are harmless.
-  const onRealtimeCardChange = useCallback((event: 'INSERT' | 'UPDATE' | 'DELETE', row: DbCardSignal) => {
-    if (event === 'DELETE') {
-      setColumns((prev) => prev.some((col) => col.cards.some((c) => c.id === row.id))
-        ? prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== row.id) }))
+  // --- Realtime sync (RUN 01B: server broadcasts on the private, keyed project topic) ---
+  // A signal names an entity; the card is re-read from the database under RLS and merged only if it is newer
+  // than what we show (version / child_rev): echoes, duplicates and out-of-order deliveries are harmless.
+  const positionsRefLocal = positionsRef;
+  const onCardSignal = useCallback((id: string, removed: boolean, v?: number, r?: number) => {
+    if (removed) {
+      // deleted, or moved to another project (whose data this board must not show)
+      setColumns((prev) => prev.some((col) => col.cards.some((c) => c.id === id))
+        ? prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== id) }))
         : prev);
       return;
     }
-    const local = columnsRef.current.flatMap((col) => col.cards).find((c) => c.id === row.id);
-    if (local && row.version !== undefined && !isNewer(local, { version: row.version, childRev: row.child_rev })) return;
-    if (pendingWrites.current.has(row.id)) return; // our own write is in flight; its result reconciles
-    void kanbanService.fetchCard(row.id).then((fetched) => {
-      if (pendingWrites.current.has(row.id)) return;
-      applyServerCard(row.id, fetched);
+    const local = columnsRef.current.flatMap((col) => col.cards).find((c) => c.id === id);
+    if (local && v !== undefined && !isNewer(local, { version: v, childRev: r })) return;
+    if (pendingWrites.current.has(id)) return; // our own write is in flight; its result reconciles
+    void kanbanService.fetchCard(id).then((fetched) => {
+      if (pendingWrites.current.has(id)) return;
+      applyServerCard(id, fetched);
     });
   }, [applyServerCard]);
 
-  const onRealtimeColumnChange = useCallback((
-    event: 'INSERT' | 'UPDATE' | 'DELETE',
-    newRow: DbColumnRow | null,
-    oldRow: Partial<DbColumnRow> | null
-  ) => {
-    if (event === 'DELETE') {
-      const deletedId = oldRow?.id;
-      if (!deletedId) return;
-      setColumns((prev) => prev.filter((col) => col.id !== deletedId));
+  const onColumnSignal = useCallback((sig: Extract<ChangeSignal, { t: 'column' }>) => {
+    if (sig.op === 'removed') {
+      setColumns((prev) => prev.filter((col) => col.id !== sig.id));
       return;
     }
-    if (!newRow) return;
-    positionsRef.current.set(newRow.id, newRow.position);
+    positionsRefLocal.current.set(sig.id, sig.position);
     setColumns((prev) => {
-      const exists = prev.some((col) => col.id === newRow.id);
+      const exists = prev.some((col) => col.id === sig.id);
       const next = exists
-        ? prev.map((col) => (col.id === newRow.id ? { ...col, name: newRow.name, role: (newRow.role as ColumnRole | null | undefined) ?? col.role } : col))
-        : [...prev, { id: newRow.id, name: newRow.name, role: (newRow.role as ColumnRole | null | undefined) ?? null, cards: [] }];
-      // keep the server's column order when positions are known for every column
-      const pos = positionsRef.current;
-      return next.every((col) => pos.has(col.id))
-        ? [...next].sort((a, b) => pos.get(a.id)! - pos.get(b.id)!)
-        : next;
+        ? prev.map((col) => (col.id === sig.id ? { ...col, name: sig.name, role: (sig.role as ColumnRole | null | undefined) ?? col.role } : col))
+        : [...prev, { id: sig.id, name: sig.name, role: (sig.role as ColumnRole | null | undefined) ?? null, cards: [] }];
+      const pos = positionsRefLocal.current;
+      return next.every((col) => pos.has(col.id)) ? [...next].sort((a, b) => pos.get(a.id)! - pos.get(b.id)!) : next;
     });
-  }, []);
+  }, [positionsRefLocal]);
+
   const onMembershipChange = useCallback(() => {
     if (!hasSupabaseConfig) return;
     void Promise.all([
       collaborationService.fetchMyRole(activeProjectId).catch(() => null),
       collaborationService.fetchRoster(activeProjectId).catch(() => null),
-    ]).then(([role, rows]) => {
+      kanbanService.fetchRealtimeKey(activeProjectId).catch(() => null),
+    ]).then(([role, rows, key]) => {
       setMyRole(role);
       if (role === null) {
-        // removed from the project: stop showing its data at once
+        // removed from the project: stop showing its data at once and leave the channel
         setAccessRevoked(true);
+        setRealtimeKey(null);
         setColumns([]);
         setRoster([]);
         setTeamMembers([]);
         return;
       }
+      setRealtimeKey(key); // a departure rotates the key: rejoin on the new topic
       if (rows) {
         setRoster(rows);
         setTeamMembers(rows.map((r) => r.member));
@@ -971,14 +985,23 @@ export function useKanbanBoard(projectId?: string) {
     });
   }, [activeProjectId]);
 
+  const onSignal = useCallback((sig: ChangeSignal) => {
+    if (sig.t === 'card') onCardSignal(sig.id, sig.op === 'removed', sig.op === 'upsert' ? sig.v : undefined, sig.op === 'upsert' ? sig.r : undefined);
+    else if (sig.t === 'column') onColumnSignal(sig);
+    else if (sig.t === 'membership') onMembershipChange();
+  }, [onCardSignal, onColumnSignal, onMembershipChange]);
+
   const onResync = useCallback(() => { void reloadBoard({ silent: true }); }, [reloadBoard]);
 
-  useRealtimeBoard({
+  // Presence identity: the name/colour teammates know from the roster.
+  const meMember = user?.id ? roster.find((r) => r.member.profileId === user.id)?.member : undefined;
+  const meName = meMember?.fullName || profile?.display_name || user?.email?.split('@')[0] || 'Uživatel';
+  const activeUsers = useRealtimeBoard({
     projectId: activeProjectId,
-    enabled: hasSupabaseConfig && Boolean(activeProjectId) && userId !== 'guest' && !accessRevoked,
-    onCardChange: onRealtimeCardChange,
-    onColumnChange: onRealtimeColumnChange,
-    onMembershipChange,
+    realtimeKey,
+    enabled: hasSupabaseConfig && Boolean(activeProjectId) && userId !== 'guest' && !accessRevoked && Boolean(myRole),
+    presence: user?.id ? { userId: user.id, name: meName, initials: meMember?.initials || meName.slice(0, 2).toUpperCase(), color: meMember?.avatarColor || '#209dd7' } : null,
+    onSignal,
     onResync,
     onStatus: setSyncStatus,
   });
@@ -1030,6 +1053,9 @@ export function useKanbanBoard(projectId?: string) {
     conflict,
     resolveConflict,
     reloadBoard,
+    activeUsers,
+    notice,
+    dismissNotice,
   };
 }
 

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
+import NotificationBell from '../collab/NotificationBell';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useTheme, ThemeChoice } from '../../contexts/ThemeContext';
 import { deriveInitials } from '../../services/workspaceService';
@@ -372,6 +373,9 @@ export default function Navbar({ boardActions }: NavbarProps) {
           </div>
         )}
       </div>
+
+      {/* Oznámení (RUN 01): viditelné na všech šířkách, mimo .navbar-right, které se na mobilu skrývá. */}
+      <NotificationBell />
 
       {/* --- Mobil: hamburger (viditelný jen pod 768px, řeší CSS) --- */}
       <button

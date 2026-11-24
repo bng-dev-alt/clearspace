@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History } from 'lucide-react';
 import { Column, TeamMember } from '../../types/kanban';
 import TagDropdown from './TagDropdown';
+import { PresenceStack, SyncIndicator } from '../collab/PresenceStack';
+import type { PresenceUser } from '../../hooks/usePresence';
+import type { SyncStatus } from '../../hooks/useRealtimeBoard';
 
 interface ToolbarProps {
   searchQuery: string;
@@ -36,6 +39,9 @@ interface ToolbarProps {
   teamMembers: TeamMember[];
   onManageTeam: () => void;
   onOpenActivityFeed: () => void;
+  /** Other people currently on this project (realtime presence). */
+  activeUsers?: PresenceUser[];
+  syncStatus?: SyncStatus;
 }
 
 export default function Toolbar({
@@ -58,6 +64,8 @@ export default function Toolbar({
   teamMembers,
   onManageTeam,
   onOpenActivityFeed,
+  activeUsers = [],
+  syncStatus = 'off',
 }: ToolbarProps) {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -227,6 +235,9 @@ export default function Toolbar({
               Členové projektu
             </button>
           </div>
+          {activeUsers.length > 0 && <div className="toolbar-divider" />}
+          <PresenceStack users={activeUsers} />
+          <SyncIndicator status={syncStatus} />
         </div>
 
         <div className="toolbar-right">

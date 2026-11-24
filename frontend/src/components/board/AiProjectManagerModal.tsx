@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, ShieldAlert, Check, RefreshCw, ArrowRight, FileDiff } from 'lucide-react';
 import { Card, Column } from '../../types/kanban';
 import { aiClient } from '../../services/ai/aiClient';
-import { collaborationService } from '../../services/collaborationService';
 
 export interface SuggestedChange {
   id: string;
@@ -42,7 +41,7 @@ export default function AiProjectManagerModal({
   isOpen,
   onClose,
   columns,
-  projectId,
+  projectId: _projectId,
   projectName: _projectName,
   onMoveCard,
   onUpdateCard,
@@ -157,13 +156,7 @@ export default function AiProjectManagerModal({
       }
 
       applied += 1;
-      await collaborationService.logActivity({
-        projectId,
-        actorName: 'AI Project Manager',
-        actionType: change.actionType.toLowerCase(),
-        entityType: 'task',
-        details: { change },
-      });
+      // The resulting card changes are recorded by the database (trusted activity events, RUN 01).
     }
 
     if (applied === 0) {

@@ -2,116 +2,141 @@ import { useEffect, useRef } from 'react';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
-interface DbCardRow {
+export type PgEvent = 'INSERT' | 'UPDATE' | 'DELETE';
+export type SyncStatus = 'off' | 'connecting' | 'live' | 'reconnecting';
+
+export interface DbCardSignal {
   id: string;
-  column_id: string;
-  title: string;
-  details: string | null;
-  tag: string | null;
-  priority: 'Low' | 'Medium' | 'High' | null;
-  due_date: string | null;
-  position: number;
-  archived: boolean;
-  created_at: string;
-  updated_at: string;
+  column_id?: string;
+  project_id?: string;
+  version?: number;
+  child_rev?: number;
 }
 
-interface DbColumnRow {
+export interface DbColumnRow {
   id: string;
   name: string;
   project_id: string;
   position: number;
+  role?: string | null;
 }
 
-interface DbActivityRow {
+export interface DbActivityRow {
   id: string;
   project_id: string;
   card_id: string | null;
   actor_id: string | null;
   actor_name: string;
   action_type: string;
-  entity_type: 'task' | 'column' | 'project' | 'member';
+  entity_type: string;
+  entity_id?: string | null;
+  source?: string | null;
   details: Record<string, unknown> | null;
   created_at: string;
 }
 
-type PgEvent = 'INSERT' | 'UPDATE' | 'DELETE';
-
 interface UseRealtimeBoardParams {
   projectId: string;
   enabled: boolean;
-  onCardChange: (event: PgEvent, newRow: DbCardRow | null, oldRow: DbCardRow | null) => void;
-  onColumnChange: (event: PgEvent, newRow: DbColumnRow | null, oldRow: DbColumnRow | null) => void;
-  onActivityInsert: (row: DbActivityRow) => void;
+  /** Distinguishes several subscribers of the same project in one tab (board vs. activity drawer). */
+  channelName?: string;
+  onCardChange?: (event: PgEvent, row: DbCardSignal) => void;
+  onColumnChange?: (event: PgEvent, newRow: DbColumnRow | null, oldRow: Partial<DbColumnRow> | null) => void;
+  onActivityInsert?: (row: DbActivityRow) => void;
+  /** Roster / role of somebody changed (or the caller lost access). */
+  onMembershipChange?: () => void;
+  /** Called after the channel came back from an interruption: re-read the authoritative state. */
+  onResync?: () => void;
+  onStatus?: (status: SyncStatus) => void;
 }
 
 /**
- * Live sync (Team Collaboration v1.3, Fáze 6): odebírá Supabase Realtime
- * změny na columns/cards/activity_logs a předává je volajícímu přes
- * callbacky. Sama neudržuje žádný stav boardu -- merge do Column[] dělá
- * useKanbanBoard, který má aktuální přehled o vztazích karta -> sloupec.
+ * Realtime for one project (RUN 01). Realtime is only a SIGNAL: the database stays the source of
+ * truth. Every change event names an entity; the caller re-reads it (or merges the row) and drops
+ * stale/out-of-order data by `version`. Authorization: postgres_changes are filtered by the table's
+ * RLS for each subscriber, so a non-member (or a member who was just removed) receives nothing.
  *
- * cards nemá project_id sloupec (jen column_id), takže Realtime filtr
- * nejde postavit na projekt přímo -- odebíráme bez filtru a rozhodnutí,
- * zda karta patří do tohoto projektu, dělá volající (zná aktuální sadu
- * column id).
+ * Filters: cards / columns / activity_logs / project_members carry project_id, so only this
+ * project's rows are evaluated. Exactly one channel per (project, purpose); it is removed on
+ * unmount / project switch. After CHANNEL_ERROR / TIMED_OUT / CLOSED the client library rejoins on
+ * its own; the next SUBSCRIBED triggers `onResync` so events missed while offline are reconciled.
  */
 export function useRealtimeBoard({
   projectId,
   enabled,
+  channelName = 'board',
   onCardChange,
   onColumnChange,
   onActivityInsert,
+  onMembershipChange,
+  onResync,
+  onStatus,
 }: UseRealtimeBoardParams) {
-  // Callbacky se mění při každém renderu (nové closures) -- držíme je v refu,
-  // aby efekt níže nemusel channel pořád rušit a zakládat znovu.
-  const onCardChangeRef = useRef(onCardChange);
-  const onColumnChangeRef = useRef(onColumnChange);
-  const onActivityInsertRef = useRef(onActivityInsert);
+  const handlers = useRef({ onCardChange, onColumnChange, onActivityInsert, onMembershipChange, onResync, onStatus });
   useEffect(() => {
-    onCardChangeRef.current = onCardChange;
-    onColumnChangeRef.current = onColumnChange;
-    onActivityInsertRef.current = onActivityInsert;
+    handlers.current = { onCardChange, onColumnChange, onActivityInsert, onMembershipChange, onResync, onStatus };
   });
 
-  useEffect(() => {
-    if (!enabled || !hasSupabaseConfig || !projectId) return;
+  const wants = useRef({ cards: Boolean(onCardChange), columns: Boolean(onColumnChange), activity: Boolean(onActivityInsert), members: Boolean(onMembershipChange) });
 
-    const channel = supabase
-      .channel(`board:${projectId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cards' },
-        (payload: RealtimePostgresChangesPayload<DbCardRow>) => {
-          onCardChangeRef.current(
-            payload.eventType as PgEvent,
-            (payload.new as DbCardRow) ?? null,
-            (payload.old as DbCardRow) ?? null
-          );
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'columns', filter: `project_id=eq.${projectId}` },
+  useEffect(() => {
+    if (!enabled || !hasSupabaseConfig || !projectId) {
+      handlers.current.onStatus?.('off');
+      return;
+    }
+    const filter = `project_id=eq.${projectId}`;
+    let wasLive = false;
+    let interrupted = false;
+    handlers.current.onStatus?.('connecting');
+
+    let channel = supabase.channel(`${channelName}:${projectId}`);
+    if (wants.current.cards) {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter },
+        (payload: RealtimePostgresChangesPayload<DbCardSignal>) => {
+          const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as DbCardSignal;
+          if (row?.id) handlers.current.onCardChange?.(payload.eventType as PgEvent, row);
+        });
+    }
+    if (wants.current.columns) {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'columns', filter },
         (payload: RealtimePostgresChangesPayload<DbColumnRow>) => {
-          onColumnChangeRef.current(
+          handlers.current.onColumnChange?.(
             payload.eventType as PgEvent,
-            (payload.new as DbColumnRow) ?? null,
-            (payload.old as DbColumnRow) ?? null
+            payload.eventType === 'DELETE' ? null : (payload.new as DbColumnRow),
+            (payload.old as Partial<DbColumnRow>) ?? null
           );
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'activity_logs', filter: `project_id=eq.${projectId}` },
+        });
+    }
+    if (wants.current.activity) {
+      channel = channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs', filter },
         (payload: RealtimePostgresChangesPayload<DbActivityRow>) => {
-          if (payload.new) onActivityInsertRef.current(payload.new as DbActivityRow);
-        }
-      )
-      .subscribe();
+          if (payload.new) handlers.current.onActivityInsert?.(payload.new as DbActivityRow);
+        });
+    }
+    if (wants.current.members) {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'project_members', filter },
+        () => handlers.current.onMembershipChange?.());
+    }
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        handlers.current.onStatus?.('live');
+        if (wasLive && interrupted) handlers.current.onResync?.();
+        wasLive = true;
+        interrupted = false;
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (wasLive) interrupted = true;
+        handlers.current.onStatus?.('reconnecting');
+      }
+    });
+
+    // Returning from sleep / a dead network: the socket may need a while to notice; re-read now.
+    const onOnline = () => { if (wasLive) handlers.current.onResync?.(); };
+    window.addEventListener('online', onOnline);
 
     return () => {
+      window.removeEventListener('online', onOnline);
       supabase.removeChannel(channel);
     };
-  }, [projectId, enabled]);
+  }, [projectId, enabled, channelName]);
 }

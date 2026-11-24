@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember, ColumnRole } from '../types/kanban';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Column, Card, Assignee, ChecklistItem, Comment, ActivityLog, TeamMember, ColumnRole, ProjectRole, ProjectRosterEntry } from '../types/kanban';
 import { kanbanService } from '../services/kanbanService';
 import { collaborationService } from '../services/collaborationService';
+import { detectConflicts, pickBase, isNewer, type EditableField } from '../lib/collab/conflicts';
+import type { SyncStatus, DbCardSignal, DbColumnRow } from './useRealtimeBoard';
 import { workspaceService, ownerMemberFromProfile } from '../services/workspaceService';
 import { persistenceStatus } from '../services/persistence';
 import { toPrimaryAssignee, legacyAssigneeToMember, resolveBoardAssignees } from '../utils/assignees';
@@ -56,6 +58,17 @@ export function useKanbanBoard(projectId?: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  // Collaboration (RUN 01): the caller's role decides what the UI offers; the database enforces it.
+  const [myRole, setMyRole] = useState<ProjectRole | null>(hasSupabaseConfig ? null : 'owner');
+  const [roster, setRoster] = useState<ProjectRosterEntry[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('off');
+  const [accessRevoked, setAccessRevoked] = useState(false);
+  const [conflict, setConflict] = useState<CardConflict | null>(null);
+  // Latest board for async callbacks (realtime merges, write results) without stale closures.
+  const columnsRef = useRef<Column[]>([]);
+  useEffect(() => { columnsRef.current = columns; }, [columns]);
+  // Cards with a write in flight: a refetch must not paint an older server copy over the optimistic one.
+  const pendingWrites = useRef(new Map<string, number>());
 
   // Transparentní hlášení selhání zápisů do databáze (Release 21)
   useEffect(() => persistenceStatus.subscribe(setSyncError), []);
@@ -65,93 +78,130 @@ export function useKanbanBoard(projectId?: string) {
     setPrevProjectId(activeProjectId);
     setColumns(getInitialColumns());
     setTeamMembers([]);
+    setRoster([]);
+    setMyRole(hasSupabaseConfig ? null : 'owner');
+    setAccessRevoked(false);
+    setConflict(null);
   }
 
-  // Načíst data z databáze při startu projektu
-  useEffect(() => {
-    let active = true;
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const ownerIdArg = userId === 'guest' ? undefined : userId;
-        const [board, projectData, wsMembers] = await Promise.all([
-          kanbanService.fetchBoardData(activeProjectId),
-          kanbanService.fetchProjectById(activeProjectId),
-          workspaceService.fetchMembers(ownerIdArg),
-        ]);
+  // Načíst data z databáze při startu projektu (a znovu po výpadku realtime spojení)
+  const loadSeq = useRef(0);
+  const reloadBoard = useCallback(async (opts: { silent?: boolean } = {}) => {
+    const seq = ++loadSeq.current;
+    const isCurrent = () => seq === loadSeq.current;
+    if (!opts.silent) setIsLoading(true);
+    try {
+      const ownerIdArg = userId === 'guest' ? undefined : userId;
+      const [board, projectData, wsMembers, role, rosterRows] = await Promise.all([
+        kanbanService.fetchBoardData(activeProjectId),
+        kanbanService.fetchProjectById(activeProjectId),
+        workspaceService.fetchMembers(ownerIdArg),
+        hasSupabaseConfig && userId !== 'guest'
+          ? collaborationService.fetchMyRole(activeProjectId).catch(() => null)
+          : Promise.resolve<ProjectRole | null>('owner'),
+        hasSupabaseConfig ? collaborationService.fetchRoster(activeProjectId).catch(() => []) : Promise.resolve([]),
+      ]);
 
-        // Release 23: přihlášený účet je členem svého workspace (owner).
-        let workspace = wsMembers;
-        if (profile) {
-          const owner = ownerMemberFromProfile(profile);
-          if (!workspace.some((m) => m.id === owner.id)) {
-            workspace = await workspaceService.ensureMembers(ownerIdArg, [owner]);
-          }
-        }
-
-        // Určení členství projektu + jednorázová migrace z R21 (team_members -> member_ids)
-        let memberIds = projectData?.memberIds;
-
-        if (!memberIds) {
-          if (projectData?.teamMembers && projectData.teamMembers.length > 0) {
-            // Starší projekt: převezmi jeho členy do workspace a odvoď member_ids
-            workspace = await workspaceService.ensureMembers(
-              userId === 'guest' ? undefined : userId,
-              projectData.teamMembers
-            );
-            memberIds = projectData.teamMembers.map((m) => m.id);
-          } else {
-            // Nový/výchozí projekt bez členství: všichni členové workspace
-            memberIds = workspace.map((m) => m.id);
-          }
-          // Perzistuj migraci (fire-and-forget, chyby hlásí persistenceStatus)
-          kanbanService.setProjectMembers(activeProjectId, memberIds).catch(() => {});
-        }
-
-        const projectMembers = workspace.filter((m) => memberIds!.includes(m.id));
-
-        if (active) {
-          setWorkspaceMembers(workspace);
-          setTeamMembers(projectMembers);
-          // Řešitele karet resolvujeme proti členům projektu -> úkol patří
-          // jen členům projektu; identita (jméno/barva) je vždy aktuální.
-          setColumns(resolveBoardAssignees(board, projectMembers));
-          setError(null);
-        }
-      } catch (err: unknown) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Nepodařilo se načíst data z databáze.');
-        }
-      } finally {
-        if (active) {
-          setIsLoading(false);
+      // Release 23: přihlášený účet je členem svého workspace (owner).
+      let workspace = wsMembers;
+      if (profile) {
+        const owner = ownerMemberFromProfile(profile);
+        if (!workspace.some((m) => m.id === owner.id)) {
+          workspace = await workspaceService.ensureMembers(ownerIdArg, [owner]);
         }
       }
+
+      // Určení členství projektu + jednorázová migrace z R21 (team_members -> member_ids)
+      let memberIds = projectData?.memberIds;
+      const isProjectOwner = !hasSupabaseConfig || !projectData?.user_id || projectData.user_id === userId;
+
+      if (!memberIds && isProjectOwner) {
+        if (projectData?.teamMembers && projectData.teamMembers.length > 0) {
+          // Starší projekt: převezmi jeho členy do workspace a odvoď member_ids
+          workspace = await workspaceService.ensureMembers(
+            userId === 'guest' ? undefined : userId,
+            projectData.teamMembers
+          );
+          memberIds = projectData.teamMembers.map((m) => m.id);
+        } else if (hasSupabaseConfig) {
+          // RUN 01 (least privilege): a new project is shared with nobody until its owner adds
+          // people. It used to grant every linked collaborator of the workspace access silently.
+          memberIds = workspace.filter((m) => m.profileId && m.profileId === userId).map((m) => m.id);
+        } else {
+          // Demo: jeden lokální uživatel, všichni (fiktivní) členové workspace
+          memberIds = workspace.map((m) => m.id);
+        }
+        // Perzistuj migraci (fire-and-forget, chyby hlásí persistenceStatus)
+        kanbanService.setProjectMembers(activeProjectId, memberIds).catch(() => {});
+      }
+
+      // Supabase: the roster (project_members + identities of the OWNER's workspace) is authoritative --
+      // an invited collaborator's own workspace does not contain the project's people.
+      const projectMembers = hasSupabaseConfig && rosterRows.length > 0
+        ? rosterRows.map((r) => r.member)
+        : workspace.filter((m) => (memberIds ?? []).includes(m.id));
+
+      if (isCurrent()) {
+        setWorkspaceMembers(workspace);
+        setTeamMembers(projectMembers);
+        setRoster(rosterRows);
+        setMyRole(role);
+        setAccessRevoked(hasSupabaseConfig && userId !== 'guest' && role === null && projectData === null);
+        // Řešitele karet resolvujeme proti členům projektu -> úkol patří
+        // jen členům projektu; identita (jméno/barva) je vždy aktuální.
+        setColumns(resolveBoardAssignees(board, projectMembers));
+        setError(null);
+      }
+    } catch (err: unknown) {
+      if (isCurrent()) {
+        setError(err instanceof Error ? err.message : 'Nepodařilo se načíst data z databáze.');
+      }
+    } finally {
+      if (isCurrent() && !opts.silent) {
+        setIsLoading(false);
+      }
     }
-    loadData();
-    return () => {
-      active = false;
-    };
   }, [activeProjectId, userId, profile]);
 
-  // Zápis do projektového activity feedu (Team Collaboration v1.3, Fáze 5).
-  // Fire-and-forget: chyba se nesmí propsat uživateli ani zpomalit hlavní
-  // operaci -- collaborationService.logActivity() už sama chybu jen logguje.
-  const logProjectActivity = useCallback((
-    actionType: string,
-    entityType: 'task' | 'column' | 'project' | 'member',
-    details?: Record<string, unknown>,
-    cardId?: string
-  ) => {
-    collaborationService.logActivity({
-      projectId: activeProjectId,
-      cardId,
-      actorName: profile?.display_name || user?.email || 'Uživatel',
-      actionType,
-      entityType,
-      details,
-    }).catch(() => {});
-  }, [activeProjectId, profile?.display_name, user?.email]);
+  useEffect(() => {
+    // Initial load of this project; reloadBoard sets state only after its awaits resolve.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void reloadBoard();
+    return () => {
+      loadSeq.current += 1; // results of a superseded load are dropped
+    };
+  }, [reloadBoard]);
+
+  // Project activity (timeline) is written by the DATABASE from the trusted operations themselves
+  // (RUN 01, migration 20261124001000) -- the client no longer logs events of its own.
+
+  const teamMembersRef = useRef<TeamMember[]>([]);
+  useEffect(() => { teamMembersRef.current = teamMembers; }, [teamMembers]);
+
+  /** Replace one card with the authoritative server copy (after a failed write or a realtime signal). */
+  const applyServerCard = useCallback((cardId: string, fetched: { card: Card; columnId: string } | null, force = false) => {
+    setColumns((prev) => {
+      const without = prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== cardId) }));
+      if (!fetched) {
+        return prev.some((col) => col.cards.some((c) => c.id === cardId)) ? without : prev;
+      }
+      const local = prev.flatMap((col) => col.cards).find((c) => c.id === cardId);
+      if (!force && !isNewer(local, fetched.card)) return prev;
+      if (!prev.some((col) => col.id === fetched.columnId)) return without; // column not loaded (yet)
+      const [resolved] = resolveBoardAssignees([{ id: fetched.columnId, name: '', cards: [fetched.card] }], teamMembersRef.current)[0].cards;
+      const sameColumn = prev.find((col) => col.cards.some((c) => c.id === cardId))?.id === fetched.columnId;
+      return prev.map((col) => {
+        if (col.id !== fetched.columnId) return { ...col, cards: col.cards.filter((c) => c.id !== cardId) };
+        if (sameColumn) return { ...col, cards: col.cards.map((c) => (c.id === cardId ? resolved : c)) };
+        return { ...col, cards: [...col.cards.filter((c) => c.id !== cardId), resolved] };
+      });
+    });
+  }, []);
+
+  const reconcileCard = useCallback(async (cardId: string) => {
+    if (!hasSupabaseConfig) return;
+    applyServerCard(cardId, await kanbanService.fetchCard(cardId), true);
+  }, [applyServerCard]);
 
   const addCard = useCallback((
     columnId: string,
@@ -189,11 +239,15 @@ export function useKanbanBoard(projectId?: string) {
       prev.map((col) => (col.id === columnId ? { ...col, cards: [...col.cards, newCard] } : col))
     );
 
-    // Asynchronní uložení do databáze (s kontextem projektu)
-    kanbanService.createCard(columnId, newCard, finalPosition, activeProjectId);
-    logProjectActivity('card_created', 'task', { title }, newCard.id);
+    // Asynchronní uložení do databáze (s kontextem projektu); failed optimistic insert is rolled back
+    pendingWrites.current.set(newCard.id, (pendingWrites.current.get(newCard.id) ?? 0) + 1);
+    Promise.resolve(kanbanService.createCard(columnId, newCard, finalPosition, activeProjectId)).then((ok) => {
+      const left = (pendingWrites.current.get(newCard.id) ?? 1) - 1;
+      if (left <= 0) pendingWrites.current.delete(newCard.id); else pendingWrites.current.set(newCard.id, left);
+      if (ok === false) void reconcileCard(newCard.id);
+    });
     return newCard;
-  }, [activeProjectId, teamMembers, logProjectActivity, columns]);
+  }, [activeProjectId, teamMembers, columns, reconcileCard]);
 
   const addActivity = useCallback((columnId: string, cardId: string, text: string) => {
     const newActivity: ActivityLog = {
@@ -225,10 +279,55 @@ export function useKanbanBoard(projectId?: string) {
     kanbanService.addActivity(cardId, newActivity);
   }, []);
 
+  /** Write `finalCard` with a version check; on a stale version merge field by field (see lib/collab/conflicts). */
+  const persistCardEdit = useCallback((
+    firstColumnId: string,
+    firstCard: Card,
+    updates: Partial<Card>,
+    firstBase: Partial<Card>,
+    firstVersion: number | undefined
+  ): Promise<void> => {
+   const attemptWrite = async (columnId: string, finalCard: Card, base: Partial<Card>, expectedVersion: number | undefined, attempt: number): Promise<void> => {
+    pendingWrites.current.set(finalCard.id, (pendingWrites.current.get(finalCard.id) ?? 0) + 1);
+    const result = (await kanbanService.updateCard(columnId, finalCard, activeProjectId, expectedVersion)) ?? { status: 'ok' as const };
+    const left = (pendingWrites.current.get(finalCard.id) ?? 1) - 1;
+    if (left <= 0) pendingWrites.current.delete(finalCard.id); else pendingWrites.current.set(finalCard.id, left);
+
+    if (result.status === 'ok') {
+      if (result.version !== undefined) {
+        setColumns((prev) => prev.map((col) => ({
+          ...col,
+          cards: col.cards.map((c) => (c.id === finalCard.id && (c.version ?? 0) < result.version! ? { ...c, version: result.version } : c)),
+        })));
+      }
+      return;
+    }
+    if (result.status === 'error') {
+      void reconcileCard(finalCard.id); // optimistic change failed -> show the authoritative state
+      return;
+    }
+    // Conflict: somebody saved in between.
+    const theirs = result.current;
+    if (!theirs || !result.columnId) { void reconcileCard(finalCard.id); return; }
+    const fields = detectConflicts(base, updates, theirs);
+    if (fields.length === 0 && attempt < 2) {
+      // They changed other fields only: keep theirs, re-apply mine on top, retry with their version.
+      const rebased: Card = { ...theirs, ...updates };
+      setColumns((prev) => prev.map((col) => ({ ...col, cards: col.cards.map((c) => (c.id === theirs.id ? { ...rebased, assignee: toPrimaryAssignee(rebased.assignees ?? []) } : c)) })));
+      await attemptWrite(result.columnId, { ...rebased, assignee: toPrimaryAssignee(rebased.assignees ?? []) }, pickBase(theirs, updates), theirs.version, attempt + 1);
+      return;
+    }
+    applyServerCard(theirs.id, { card: theirs, columnId: result.columnId }, true);
+    setConflict({ cardId: theirs.id, columnId: result.columnId, fields, mine: updates, theirs });
+   };
+   return attemptWrite(firstColumnId, firstCard, firstBase, firstVersion, 0);
+  }, [activeProjectId, applyServerCard, reconcileCard]);
+
   const editCard = useCallback((
     columnId: string,
     cardId: string,
-    updates: Partial<Card>
+    updates: Partial<Card>,
+    baseSnapshot?: Partial<Card>
   ) => {
     // Persisted values come from the CURRENT state, not from inside the setColumns updater (React runs an
     // updater lazily; a variable assigned there is still null when checked, so the DB write was skipped --
@@ -243,6 +342,15 @@ export function useKanbanBoard(projectId?: string) {
         ? [legacyAssigneeToMember(updates.assignee)]
         : [];
     }
+
+    // The editor started from `baseSnapshot` (e.g. the drawer field when focused). If a colleague's
+    // change already arrived in the meantime and touches the same field, do not overwrite it blindly.
+    const base = baseSnapshot ?? pickBase(originalCard, syncedUpdates);
+    const early = hasSupabaseConfig ? detectConflicts(base, syncedUpdates, originalCard) : [];
+    if (early.length > 0) {
+      setConflict({ cardId, columnId, fields: early, mine: syncedUpdates, theirs: originalCard });
+      return;
+    }
     const finalCard: Card = { ...originalCard, ...syncedUpdates };
 
     setColumns((prev) =>
@@ -253,40 +361,46 @@ export function useKanbanBoard(projectId?: string) {
       )
     );
 
-    if (finalCard) {
-      kanbanService.updateCard(columnId, finalCard, activeProjectId);
+    void persistCardEdit(columnId, finalCard, syncedUpdates, pickBase(originalCard, syncedUpdates), originalCard.version);
 
-      // Log activities dynamically
-      if (updates.title !== undefined && originalCard && (originalCard as Card).title !== updates.title) {
-        addActivity(columnId, cardId, `Název změněn na: ${updates.title}`);
-      }
-      if (updates.priority !== undefined && originalCard && (originalCard as Card).priority !== updates.priority) {
-        addActivity(columnId, cardId, `Priorita změněna na: ${updates.priority || 'Žádná'}`);
-      }
-      if (updates.dueDate !== undefined && originalCard && (originalCard as Card).dueDate !== updates.dueDate) {
-        if (updates.dueDate) {
-          addActivity(columnId, cardId, `Termín změněn na: ${updates.dueDate}`);
-        } else {
-          addActivity(columnId, cardId, 'Termín splnění byl odstraněn');
-        }
-      }
-      if (updates.details !== undefined && originalCard && (originalCard as Card).details !== updates.details) {
-        addActivity(columnId, cardId, 'Popis úkolu byl aktualizován');
-      }
-      if (updates.tag !== undefined && originalCard && (originalCard as Card).tag !== updates.tag) {
-        addActivity(columnId, cardId, `Štítek změněn na: ${updates.tag || 'Žádný'}`);
-      }
-      if (updates.assignees !== undefined && originalCard) {
-        const origNames = ((originalCard as Card).assignees || []).map(a => a.fullName).join(', ') || 'Nepřiřazeno';
-        const newNames = updates.assignees.map(a => a.fullName).join(', ') || 'Nepřiřazeno';
-        if (origNames !== newNames) {
-          addActivity(columnId, cardId, `Přiřazení změněno na: ${newNames}`);
-        }
-      } else if (updates.assignee !== undefined && originalCard && (originalCard as Card).assignee?.name !== updates.assignee?.name) {
-        addActivity(columnId, cardId, `Řešitel změněn na: ${updates.assignee?.name || 'Nepřiřazeno'}`);
-      }
+    // Per-card history (task_activities, shown in the task drawer)
+    if (updates.title !== undefined && originalCard.title !== updates.title) {
+      addActivity(columnId, cardId, `Název změněn na: ${updates.title}`);
     }
-  }, [activeProjectId, addActivity, columns]);
+    if (updates.priority !== undefined && originalCard.priority !== updates.priority) {
+      addActivity(columnId, cardId, `Priorita změněna na: ${updates.priority || 'Žádná'}`);
+    }
+    if (updates.dueDate !== undefined && originalCard.dueDate !== updates.dueDate) {
+      addActivity(columnId, cardId, updates.dueDate ? `Termín změněn na: ${updates.dueDate}` : 'Termín splnění byl odstraněn');
+    }
+    if (updates.details !== undefined && originalCard.details !== updates.details) {
+      addActivity(columnId, cardId, 'Popis úkolu byl aktualizován');
+    }
+    if (updates.tag !== undefined && originalCard.tag !== updates.tag) {
+      addActivity(columnId, cardId, `Štítek změněn na: ${updates.tag || 'Žádný'}`);
+    }
+    if (updates.assignees !== undefined) {
+      const origNames = (originalCard.assignees || []).map(a => a.fullName).join(', ') || 'Nepřiřazeno';
+      const newNames = updates.assignees.map(a => a.fullName).join(', ') || 'Nepřiřazeno';
+      if (origNames !== newNames) {
+        addActivity(columnId, cardId, `Přiřazení změněno na: ${newNames}`);
+      }
+    } else if (updates.assignee !== undefined && originalCard.assignee?.name !== updates.assignee?.name) {
+      addActivity(columnId, cardId, `Řešitel změněn na: ${updates.assignee?.name || 'Nepřiřazeno'}`);
+    }
+  }, [addActivity, columns, persistCardEdit]);
+
+  /** Conflict dialog: keep the colleague's version (already shown) or write mine over it. */
+  const resolveConflict = useCallback((choice: 'theirs' | 'mine') => {
+    const c = conflict;
+    setConflict(null);
+    if (!c || choice === 'theirs') return;
+    const current = columnsRef.current.flatMap((col) => col.cards.map((card) => ({ card, columnId: col.id }))).find((x) => x.card.id === c.cardId);
+    if (!current) return;
+    const forced: Card = { ...current.card, ...c.mine };
+    setColumns((prev) => prev.map((col) => ({ ...col, cards: col.cards.map((card) => (card.id === c.cardId ? forced : card)) })));
+    void persistCardEdit(current.columnId, forced, c.mine, pickBase(current.card, c.mine), current.card.version);
+  }, [conflict, persistCardEdit]);
 
   const addChecklistItem = useCallback((columnId: string, cardId: string, text: string) => {
     const newItem: ChecklistItem = {
@@ -370,41 +484,48 @@ export function useKanbanBoard(projectId?: string) {
     }
   }, [addActivity, columns]);
 
-  const addComment = useCallback((columnId: string, cardId: string, authorName: string, content: string) => {
+  const patchComments = useCallback((cardId: string, fn: (comments: Comment[]) => Comment[]) => {
+    setColumns((prev) => prev.map((col) => ({
+      ...col,
+      cards: col.cards.map((c) => (c.id === cardId ? { ...c, comments: fn(c.comments || []) } : c)),
+    })));
+  }, []);
+
+  /** New comment; `mentions` = profile ids of mentioned project members. Author/time are set by the server. */
+  const addComment = useCallback((columnId: string, cardId: string, authorName: string, content: string, mentions: string[] = []) => {
     const newComment: Comment = {
       id: `comment-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       authorName,
+      authorId: user?.id,
       content,
+      mentions,
       createdAt: new Date().toISOString(),
     };
+    patchComments(cardId, (list) => [...list, newComment]);
+    Promise.resolve(kanbanService.addComment(cardId, newComment)).then((saved) => {
+      if (saved) patchComments(cardId, (list) => list.map((c) => (c.id === saved.id ? saved : c)));
+      else if (saved === null) patchComments(cardId, (list) => list.filter((c) => c.id !== newComment.id)); // refused -> roll back
+    });
+    if (!hasSupabaseConfig) addActivity(columnId, cardId, `Přidán komentář od: ${authorName}`);
+  }, [addActivity, patchComments, user?.id]);
 
-    setColumns((prev) =>
-      prev.map((col) => {
-        if (col.id === columnId) {
-          return {
-            ...col,
-            cards: col.cards.map((c) => {
-              if (c.id === cardId) {
-                return {
-                  ...c,
-                  comments: [...(c.comments || []), newComment],
-                };
-              }
-              return c;
-            }),
-          };
-        }
-        return col;
-      })
-    );
+  const editComment = useCallback(async (cardId: string, commentId: string, content: string, mentions: string[] = []) => {
+    if (!hasSupabaseConfig) {
+      patchComments(cardId, (list) => list.map((c) => (c.id === commentId ? { ...c, content, mentions, updatedAt: new Date().toISOString() } : c)));
+      return true;
+    }
+    const saved = await kanbanService.editComment(commentId, content, mentions);
+    if (saved) patchComments(cardId, (list) => list.map((c) => (c.id === commentId ? saved : c)));
+    return Boolean(saved);
+  }, [patchComments]);
 
-    kanbanService.addComment(cardId, newComment);
-    addActivity(columnId, cardId, `Přidán komentář od: ${authorName}`);
-  }, [addActivity]);
+  const deleteComment = useCallback(async (cardId: string, commentId: string) => {
+    const ok = await kanbanService.deleteComment(commentId);
+    if (ok) patchComments(cardId, (list) => list.filter((c) => c.id !== commentId));
+    return ok;
+  }, [patchComments]);
 
   const deleteCard = useCallback((columnId: string, cardId: string) => {
-    const cardTitle = columns.find((col) => col.id === columnId)?.cards.find((c) => c.id === cardId)?.title;
-
     // Optimistická aktualizace - označení jako archivovaný
     setColumns((prev) =>
       prev.map((col) => {
@@ -421,16 +542,13 @@ export function useKanbanBoard(projectId?: string) {
     // Asynchronní archivace v databázi/lokálně
     kanbanService.archiveCard(cardId, true);
     addActivity(columnId, cardId, 'Úkol byl archivován');
-    logProjectActivity('card_archived', 'task', { title: cardTitle }, cardId);
-  }, [addActivity, columns, logProjectActivity]);
+  }, [addActivity]);
 
   const moveCard = useCallback((cardId: string, sourceColumnId: string, destinationColumnId: string) => {
     if (sourceColumnId === destinationColumnId) return;
 
     const sourceCol = columns.find((c) => c.id === sourceColumnId);
     const destCol = columns.find((c) => c.id === destinationColumnId);
-    const sourceColName = sourceCol?.name;
-    const destColName = destCol?.name;
 
     // Everything the persistence call needs is derived from the CURRENT state here, not from inside the
     // setColumns updater: React runs an updater lazily (during render), so a variable assigned there was
@@ -449,14 +567,14 @@ export function useKanbanBoard(projectId?: string) {
       })
     );
 
-    // Asynchronní přesun v databázi
-    kanbanService.moveCard(cardId, sourceColumnId, destinationColumnId, finalPosition, activeProjectId);
-    logProjectActivity('card_moved', 'task', {
-      title: targetCard.title,
-      from: sourceColName,
-      to: destColName,
-    }, cardId);
-  }, [activeProjectId, columns, logProjectActivity]);
+    // Asynchronní přesun v databázi; failed move -> back to the server's truth
+    pendingWrites.current.set(cardId, (pendingWrites.current.get(cardId) ?? 0) + 1);
+    Promise.resolve(kanbanService.moveCard(cardId, sourceColumnId, destinationColumnId, finalPosition, activeProjectId)).then((ok) => {
+      const left = (pendingWrites.current.get(cardId) ?? 1) - 1;
+      if (left <= 0) pendingWrites.current.delete(cardId); else pendingWrites.current.set(cardId, left);
+      if (ok === false) void reconcileCard(cardId);
+    });
+  }, [activeProjectId, columns, reconcileCard]);
 
   const renameColumn = useCallback((columnId: string, newName: string) => {
     // Optimistická aktualizace lokálního stavu
@@ -477,13 +595,12 @@ export function useKanbanBoard(projectId?: string) {
     const position = columns.length;
     try {
       const newCol = await kanbanService.createColumn(activeProjectId, name, position);
-      setColumns((prev) => [...prev, newCol]);
-      logProjectActivity('column_created', 'column', { name });
+      setColumns((prev) => (prev.some((c) => c.id === newCol.id) ? prev : [...prev, newCol]));
     } catch (err) {
       // Selhání je uživateli nahlášeno přes persistenceStatus (syncError)
       console.error('Failed to add column:', err);
     }
-  }, [activeProjectId, columns.length, logProjectActivity]);
+  }, [activeProjectId, columns.length]);
 
   const deleteColumn = useCallback(async (columnId: string, transferColumnId?: string) => {
     const colToDelete = columns.find((c) => c.id === columnId);
@@ -520,8 +637,7 @@ export function useKanbanBoard(projectId?: string) {
       }
       return updated;
     });
-    logProjectActivity('column_deleted', 'column', { name: colToDelete.name });
-  }, [activeProjectId, columns, logProjectActivity]);
+  }, [activeProjectId, columns]);
 
   const moveColumn = useCallback(async (columnId: string, direction: 'left' | 'right') => {
     const index = columns.findIndex((c) => c.id === columnId);
@@ -774,10 +890,7 @@ export function useKanbanBoard(projectId?: string) {
   // --- Členství projektu (výběr z workspace) ---
 
   const setProjectMembers = useCallback(async (memberIds: string[]) => {
-    const prevIds = teamMembers.map((m) => m.id);
     const nextMembers = workspaceMembers.filter((m) => memberIds.includes(m.id));
-    const added = nextMembers.filter((m) => !prevIds.includes(m.id));
-    const removed = teamMembers.filter((m) => !memberIds.includes(m.id));
 
     setTeamMembers(nextMembers);
     // Karty resolvuj proti nové množině členů projektu (odebraní zmizí z úkolů)
@@ -785,86 +898,32 @@ export function useKanbanBoard(projectId?: string) {
     await kanbanService.setProjectMembers(activeProjectId, memberIds).catch((err) => {
       console.error('Failed to save project members:', err);
     });
-    added.forEach((m) => logProjectActivity('member_added', 'member', { name: m.fullName }));
-    removed.forEach((m) => logProjectActivity('member_removed', 'member', { name: m.fullName }));
-  }, [activeProjectId, workspaceMembers, teamMembers, logProjectActivity]);
+  }, [activeProjectId, workspaceMembers]);
 
-  // --- Realtime sync (Team Collaboration v1.3, Fáze 6) ---
-  // Cílené immutable aktualizace do Column[] -- ne plný refetch. Merge je
-  // idempotentní (nahrazení podle id), takže echo vlastní optimistické
-  // změny je neškodné (přepíše stejnými daty).
-  //
-  // Známé omezení: realtime payload z holé `cards` řady neobsahuje
-  // checklist/komentáře/aktivity/řešitele (ty žijí v join tabulkách bez
-  // odběru) -- update proto slučuje jen základní pole a zachovává, co má
-  // klient už lokálně načtené. Nová karta od někoho jiného se tedy objeví
-  // bez řešitelů, dokud se stránka znovu nenačte.
-  const onRealtimeCardChange = useCallback((
-    event: 'INSERT' | 'UPDATE' | 'DELETE',
-    newRow: { id: string; column_id: string; title: string; details: string | null; tag: string | null; priority: 'Low' | 'Medium' | 'High' | null; due_date: string | null; position: number; archived: boolean; created_at: string; updated_at: string } | null,
-    oldRow: { id: string } | null
-  ) => {
+  // --- Realtime sync (RUN 01) ---
+  // An event is a signal "entity X changed": the card is re-read from the database (with its
+  // children) and merged only if it is newer than what we show (version / child_rev), so echoes of
+  // our own writes, duplicates and out-of-order deliveries are harmless.
+  const onRealtimeCardChange = useCallback((event: 'INSERT' | 'UPDATE' | 'DELETE', row: DbCardSignal) => {
     if (event === 'DELETE') {
-      const deletedId = oldRow?.id;
-      if (!deletedId) return;
-      setColumns((prev) => prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== deletedId) })));
+      setColumns((prev) => prev.some((col) => col.cards.some((c) => c.id === row.id))
+        ? prev.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== row.id) }))
+        : prev);
       return;
     }
-    if (!newRow) return;
-
-    setColumns((prev) => {
-      // Karta už existuje lokálně -> jen sloučit základní pole (echo vlastní
-      // změny nebo update od kolegy), případně přesunout do jiného sloupce.
-      const existingColIndex = prev.findIndex((col) => col.cards.some((c) => c.id === newRow.id));
-      if (existingColIndex !== -1) {
-        const existingCard = prev[existingColIndex].cards.find((c) => c.id === newRow.id)!;
-        const merged: Card = {
-          ...existingCard,
-          title: newRow.title,
-          details: newRow.details || '',
-          tag: newRow.tag || undefined,
-          priority: newRow.priority || undefined,
-          dueDate: newRow.due_date || undefined,
-          archived: newRow.archived,
-          updatedAt: newRow.updated_at,
-        };
-        if (prev[existingColIndex].id === newRow.column_id) {
-          return prev.map((col, i) => (i === existingColIndex ? { ...col, cards: col.cards.map((c) => (c.id === newRow.id ? merged : c)) } : col));
-        }
-        // Přesunuto do jiného sloupce (kolega přetáhl kartu)
-        return prev.map((col) => {
-          if (col.id === prev[existingColIndex].id) {
-            return { ...col, cards: col.cards.filter((c) => c.id !== newRow.id) };
-          }
-          if (col.id === newRow.column_id) {
-            return { ...col, cards: [...col.cards, merged] };
-          }
-          return col;
-        });
-      }
-
-      // Nová karta od někoho jiného -- vlož do cílového sloupce, pokud existuje.
-      if (!prev.some((col) => col.id === newRow.column_id)) return prev;
-      const newCard: Card = {
-        id: newRow.id,
-        title: newRow.title,
-        details: newRow.details || '',
-        tag: newRow.tag || undefined,
-        priority: newRow.priority || undefined,
-        dueDate: newRow.due_date || undefined,
-        archived: newRow.archived,
-        createdAt: newRow.created_at,
-        updatedAt: newRow.updated_at,
-        assignees: [],
-      };
-      return prev.map((col) => (col.id === newRow.column_id ? { ...col, cards: [...col.cards, newCard] } : col));
+    const local = columnsRef.current.flatMap((col) => col.cards).find((c) => c.id === row.id);
+    if (local && row.version !== undefined && !isNewer(local, { version: row.version, childRev: row.child_rev })) return;
+    if (pendingWrites.current.has(row.id)) return; // our own write is in flight; its result reconciles
+    void kanbanService.fetchCard(row.id).then((fetched) => {
+      if (pendingWrites.current.has(row.id)) return;
+      applyServerCard(row.id, fetched);
     });
-  }, []);
+  }, [applyServerCard]);
 
   const onRealtimeColumnChange = useCallback((
     event: 'INSERT' | 'UPDATE' | 'DELETE',
-    newRow: { id: string; name: string; project_id: string; position: number } | null,
-    oldRow: { id: string } | null
+    newRow: DbColumnRow | null,
+    oldRow: Partial<DbColumnRow> | null
   ) => {
     if (event === 'DELETE') {
       const deletedId = oldRow?.id;
@@ -873,24 +932,57 @@ export function useKanbanBoard(projectId?: string) {
       return;
     }
     if (!newRow) return;
-
+    positionsRef.current.set(newRow.id, newRow.position);
     setColumns((prev) => {
       const exists = prev.some((col) => col.id === newRow.id);
-      if (exists) {
-        return prev.map((col) => (col.id === newRow.id ? { ...col, name: newRow.name } : col));
-      }
-      // Nový sloupec od někoho jiného
-      return [...prev, { id: newRow.id, name: newRow.name, cards: [] }];
+      const next = exists
+        ? prev.map((col) => (col.id === newRow.id ? { ...col, name: newRow.name, role: (newRow.role as ColumnRole | null | undefined) ?? col.role } : col))
+        : [...prev, { id: newRow.id, name: newRow.name, role: (newRow.role as ColumnRole | null | undefined) ?? null, cards: [] }];
+      // keep the server's column order when positions are known for every column
+      const pos = positionsRef.current;
+      return next.every((col) => pos.has(col.id))
+        ? [...next].sort((a, b) => pos.get(a.id)! - pos.get(b.id)!)
+        : next;
     });
   }, []);
+  const positionsRef = useRef(new Map<string, number>());
+
+  const onMembershipChange = useCallback(() => {
+    if (!hasSupabaseConfig) return;
+    void Promise.all([
+      collaborationService.fetchMyRole(activeProjectId).catch(() => null),
+      collaborationService.fetchRoster(activeProjectId).catch(() => null),
+    ]).then(([role, rows]) => {
+      setMyRole(role);
+      if (role === null) {
+        // removed from the project: stop showing its data at once
+        setAccessRevoked(true);
+        setColumns([]);
+        setRoster([]);
+        setTeamMembers([]);
+        return;
+      }
+      if (rows) {
+        setRoster(rows);
+        setTeamMembers(rows.map((r) => r.member));
+      }
+    });
+  }, [activeProjectId]);
+
+  const onResync = useCallback(() => { void reloadBoard({ silent: true }); }, [reloadBoard]);
 
   useRealtimeBoard({
     projectId: activeProjectId,
-    enabled: hasSupabaseConfig && Boolean(activeProjectId),
+    enabled: hasSupabaseConfig && Boolean(activeProjectId) && userId !== 'guest' && !accessRevoked,
     onCardChange: onRealtimeCardChange,
     onColumnChange: onRealtimeColumnChange,
-    onActivityInsert: () => {}, // ActivityFeedDrawer se odebírá samostatně, jen když je otevřený
+    onMembershipChange,
+    onResync,
+    onStatus: setSyncStatus,
   });
+
+  const canEdit = myRole === 'owner' || myRole === 'admin' || myRole === 'member';
+  const canManage = myRole === 'owner' || myRole === 'admin';
 
   return {
     columns,
@@ -914,6 +1006,8 @@ export function useKanbanBoard(projectId?: string) {
     updateChecklistItemText,
     deleteChecklistItem,
     addComment,
+    editComment,
+    deleteComment,
     addActivity,
     totalTasks,
     inProgressCount,
@@ -924,5 +1018,23 @@ export function useKanbanBoard(projectId?: string) {
     editWorkspaceMember,
     deleteWorkspaceMember,
     setProjectMembers,
+    // collaboration (RUN 01)
+    myRole,
+    canEdit,
+    canManage,
+    roster,
+    syncStatus,
+    accessRevoked,
+    conflict,
+    resolveConflict,
+    reloadBoard,
   };
+}
+
+export interface CardConflict {
+  cardId: string;
+  columnId: string;
+  fields: EditableField[];
+  mine: Partial<Card>;
+  theirs: Card;
 }

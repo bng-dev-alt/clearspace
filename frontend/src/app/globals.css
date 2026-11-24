@@ -3565,3 +3565,72 @@ body {
 
 /* Přepínač vzhledu (jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=1): textová tlačítka ve stejném segmentovaném ovladači jako motiv. */
 .style-toggle .theme-toggle-btn { width: auto; padding: 0 0.6rem; font-size: 0.7rem; font-weight: 600; font-family: var(--font-sans); }
+
+/* ============================================================
+   Collaboration (RUN 01): notifications bell, comment mentions,
+   read-only + conflict notices. Tokens only, so light/dark and the
+   Monograph style apply automatically.
+   ============================================================ */
+.navbar-notifications { position: relative; display: flex; align-items: center; margin-left: 0.5rem; }
+.navbar-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text); cursor: pointer; transition: var(--transition-base);
+}
+.navbar-bell:hover { border-color: var(--accent); color: var(--accent); }
+.navbar-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.navbar-bell-count {
+  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.62rem; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg-page);
+}
+.notifications-panel {
+  position: absolute; right: 0; top: calc(100% + 0.5rem); width: min(360px, calc(100vw - 1.5rem));
+  max-height: min(70vh, 480px); overflow-y: auto; z-index: 120;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); font-family: var(--font-sans);
+}
+.notifications-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.82rem; font-weight: 700; color: var(--dark-navy);
+}
+.notifications-mark-all { background: none; border: none; color: var(--accent); font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 0; }
+.notifications-empty, .notifications-error { margin: 0; padding: 0.9rem; font-size: 0.78rem; color: var(--gray-text); }
+.notifications-error { color: var(--danger); }
+.notifications-list { list-style: none; margin: 0; padding: 0.25rem 0; }
+.notifications-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0.6rem 0.15rem 0; }
+.notifications-item.is-unread { box-shadow: inset 3px 0 0 var(--accent); }
+.notifications-item-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; text-align: left;
+  background: none; border: none; padding: 0.5rem 0.9rem; cursor: pointer; color: var(--dark-navy); border-radius: var(--radius-sm);
+}
+.notifications-item-main:hover { background: var(--surface-2); }
+.notifications-text { font-size: 0.78rem; overflow-wrap: anywhere; }
+.notifications-item.is-unread .notifications-text { font-weight: 600; }
+.notifications-time { font-size: 0.68rem; color: var(--gray-text); }
+
+.collab-notice {
+  margin: 0 3rem 1rem 3rem; padding: 0.7rem 1.1rem; border-radius: var(--radius-md);
+  font-size: 0.8rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+  background: var(--surface-2); color: var(--dark-navy); border: 1px solid var(--border);
+}
+.collab-notice--warning { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.collab-notice-actions { display: flex; gap: 0.5rem; }
+@media (max-width: 767px) {
+  .collab-notice { margin: 0 1rem 0.75rem 1rem; }
+}
+
+.comment-mention { color: var(--accent); font-weight: 700; }
+.comment-edited { font-size: 0.68rem; color: var(--gray-text); margin-left: 0.35rem; }
+.comment-actions { display: inline-flex; gap: 0.5rem; margin-left: auto; }
+.comment-actions button { background: none; border: none; padding: 0; font-size: 0.7rem; color: var(--gray-text); cursor: pointer; }
+.comment-actions button:hover { color: var(--accent); }
+.mention-suggestions {
+  list-style: none; margin: 0.25rem 0 0 0; padding: 0.25rem; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-lg); max-height: 160px; overflow-y: auto;
+}
+.mention-suggestions li button {
+  width: 100%; text-align: left; background: none; border: none; padding: 0.35rem 0.5rem; border-radius: var(--radius-sm);
+  font-size: 0.78rem; color: var(--dark-navy); cursor: pointer; display: flex; gap: 0.4rem; align-items: center;
+}
+.mention-suggestions li button[aria-selected="true"], .mention-suggestions li button:hover { background: var(--accent-soft); }

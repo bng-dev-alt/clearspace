@@ -42,6 +42,12 @@ export interface Comment {
   authorName: string;
   content: string;
   createdAt: string;
+  /** Verified author account (server-set). Missing = legacy / restored comment. */
+  authorId?: string;
+  /** Set when the author edited the comment. */
+  updatedAt?: string;
+  /** Profile ids of mentioned project members (validated by the server). */
+  mentions?: string[];
 }
 
 export interface ActivityLog {
@@ -65,6 +71,10 @@ export interface Card {
   archived?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  /** Server row version (optimistic concurrency); bumps on every content change. */
+  version?: number;
+  /** Bumps whenever something under the card changes (checklist, comments, assignees, files). */
+  childRev?: number;
 }
 
 /** Sémantická role sloupce (R6). Chybí-li, odvodí se ze jména (viz projectIntelligence.columnRole). */
@@ -84,6 +94,9 @@ export interface ProjectInvitation {
   token: string;
   role: 'owner' | 'member';
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  /** Project invitations carry the project and the role granted on acceptance. */
+  projectRole?: Exclude<ProjectRole, 'owner'>;
+  targetProjectId?: string;
   invitedBy?: string;
   expiresAt: string;
   createdAt: string;
@@ -96,8 +109,33 @@ export interface ProjectActivityLog {
   actorId?: string;
   actorName: string;
   actionType: string;
-  entityType: 'task' | 'column' | 'project' | 'member';
+  entityType: 'task' | 'column' | 'project' | 'member' | 'comment' | 'invitation' | string;
+  entityId?: string;
+  /** 'app' = written by the database from a trusted operation; 'client' = self-attested by the actor. */
+  source?: string;
   details?: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** A person on a project with their role (authorization lives in project_members). */
+export interface ProjectRosterEntry {
+  member: TeamMember;
+  role: ProjectRole;
+}
+
+export type NotificationType =
+  | 'mention' | 'comment' | 'assignment' | 'project_added' | 'project_role_changed'
+  | 'project_removed' | 'invitation' | 'invitation_accepted';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  projectId?: string;
+  cardId?: string;
+  entityId?: string;
+  actorName: string;
+  title: string;
+  readAt?: string;
   createdAt: string;
 }
 

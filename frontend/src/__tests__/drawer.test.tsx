@@ -137,7 +137,8 @@ describe('TaskDetailDrawer Component Unit Tests', () => {
     fireEvent.change(titleInput, { target: { value: 'Nový název úkolu' } });
     fireEvent.blur(titleInput);
 
-    expect(onUpdateCard).toHaveBeenCalledWith('col-1', 'card-123', { title: 'Nový název úkolu' });
+    // RUN 01: the edit carries the value it started from (concurrent-edit detection)
+    expect(onUpdateCard).toHaveBeenCalledWith('col-1', 'card-123', { title: 'Nový název úkolu' }, { title: 'Testovací Task' });
   });
 
   test('triggers inline update for description on blur', () => {
@@ -166,7 +167,7 @@ describe('TaskDetailDrawer Component Unit Tests', () => {
     fireEvent.change(descInput, { target: { value: 'Nový popis' } });
     fireEvent.blur(descInput);
 
-    expect(onUpdateCard).toHaveBeenCalledWith('col-1', 'card-123', { details: 'Nový popis' });
+    expect(onUpdateCard).toHaveBeenCalledWith('col-1', 'card-123', { details: 'Nový popis' }, { details: 'Tohle je popis úkolu' });
   });
 
   test('triggers due date changes and clear operations', () => {
@@ -273,7 +274,7 @@ describe('TaskDetailDrawer Component Unit Tests', () => {
     fireEvent.change(commentInput, { target: { value: 'Tohle je testovací komentář' } });
     fireEvent.submit(screen.getByTestId('comment-add-submit'));
 
-    expect(onAddComment).toHaveBeenCalledWith('col-1', 'card-123', 'Testovací Uživatel', 'Tohle je testovací komentář');
+    expect(onAddComment).toHaveBeenCalledWith('col-1', 'card-123', 'Testovací Uživatel', 'Tohle je testovací komentář', []);
   });
 
   test('AI Assistant section shows improve button, triggers loading, shows preview, and accepts suggestion', async () => {

@@ -4,8 +4,8 @@ import { DEFAULT_MEMBERS } from '../data/dummyData';
 import { localStore, isDefaultProject } from './storage/localStore';
 import { buildSeedBoard } from './storage/seedBoard';
 import { persistenceStatus } from './persistence';
-import { mapDbCard, boardToRestorePayload } from './boardMapping';
-import type { DbCard } from './boardMapping';
+import { mapDbCard, mapDbComment, boardToRestorePayload } from './boardMapping';
+import type { DbCard, DbComment } from './boardMapping';
 
 // Výchozí členství nového projektu = všichni výchozí členové workspace.
 const DEMO_MEMBER_IDS = DEFAULT_MEMBERS.map((m) => m.id);
@@ -141,21 +141,46 @@ async function setDbProjectMembers(projectId: string, memberIds: string[]): Prom
 
 /**
  * Synchronizuje řešitele karty do relační tabulky card_assignees (Release 23).
- * Jednoduše smaže a znovu vloží (řešitelů je málo). JSONB mirror na kartě
- * spravuje cardToDbFields kvůli zpětné kompatibilitě a AI promptům.
+ * RUN 01: rozdíl (přidat/odebrat/přeřadit), ne smazat-a-vložit -- každé vložení je pro
+ * databázi nové přiřazení (událost + notifikace řešiteli), takže se zapisuje jen skutečná změna.
  */
 async function syncDbCardAssignees(cardId: string, assignees?: TeamMember[]): Promise<void> {
-  const { error: delErr } = await supabase.from('card_assignees').delete().eq('card_id', cardId);
-  if (delErr) throw delErr;
-
   const valid = (assignees ?? []).filter((m) => m.id && m.id !== 'member-fallback');
-  if (valid.length === 0) return;
+  const { data: existing, error: exErr } = await supabase
+    .from('card_assignees')
+    .select('member_id, position')
+    .eq('card_id', cardId);
+  if (exErr) throw exErr;
+  const current = new Map((existing ?? []).map((r) => [r.member_id as string, r.position as number]));
+  const next = new Map(valid.map((m, index) => [m.id, index]));
 
-  const { error: insErr } = await supabase.from('card_assignees').insert(
-    valid.map((m, index) => ({ card_id: cardId, member_id: m.id, position: index }))
-  );
-  if (insErr) throw insErr;
+  const toRemove = [...current.keys()].filter((id) => !next.has(id));
+  if (toRemove.length > 0) {
+    const { error } = await supabase.from('card_assignees').delete().eq('card_id', cardId).in('member_id', toRemove);
+    if (error) throw error;
+  }
+  const toAdd = valid.filter((m) => !current.has(m.id));
+  if (toAdd.length > 0) {
+    const { error } = await supabase
+      .from('card_assignees')
+      .insert(toAdd.map((m) => ({ card_id: cardId, member_id: m.id, position: next.get(m.id)! })));
+    if (error) throw error;
+  }
+  for (const [memberId, position] of next) {
+    if (current.has(memberId) && current.get(memberId) !== position) {
+      const { error } = await supabase.from('card_assignees').update({ position }).eq('card_id', cardId).eq('member_id', memberId);
+      if (error) throw error;
+    }
+  }
 }
+
+const CARD_SELECT = '*, task_checklists(*), task_comments(*), task_activities(*), card_assignees(position, member:workspace_members(*))';
+
+/** Result of a version-checked card write (optimistic concurrency, RUN 01). */
+export type CardWriteResult =
+  | { status: 'ok'; version?: number }
+  | { status: 'conflict'; current: Card | null; columnId: string | null }
+  | { status: 'error'; message: string };
 
 /** Postgres unique_violation: for seed inserts it means a concurrent run already created the same rows. */
 const isDuplicateKey = (error: { code?: string } | null | undefined) => error?.code === '23505';
@@ -379,7 +404,7 @@ export const kanbanService = {
       const colIds = (dbColumns as DbColumn[]).map((col) => col.id);
       const { data: dbCards, error: cardError } = await supabase
         .from('cards')
-        .select('*, task_checklists(*), task_comments(*), task_activities(*), card_assignees(position, member:workspace_members(*))')
+        .select(CARD_SELECT)
         .in('column_id', colIds)
         .order('position', { ascending: true });
 
@@ -486,7 +511,7 @@ export const kanbanService = {
     else persistenceStatus.clear();
   },
 
-  async createCard(columnId: string, card: Card, position: number, projectId?: string): Promise<void> {
+  async createCard(columnId: string, card: Card, position: number, projectId?: string): Promise<boolean> {
     if (!hasSupabaseConfig) {
       if (projectId) {
         const board = localStore.getBoard(projectId);
@@ -503,7 +528,7 @@ export const kanbanService = {
           )
         );
       }
-      return;
+      return true;
     }
     const { error } = await supabase.from('cards').insert({
       id: card.id,
@@ -513,7 +538,7 @@ export const kanbanService = {
     });
     if (error) {
       persistenceStatus.report('vytvoření karty', error);
-      return;
+      return false;
     }
     try {
       await syncDbCardAssignees(card.id, card.assignees);
@@ -521,9 +546,23 @@ export const kanbanService = {
     } catch (err) {
       persistenceStatus.report('uložení řešitelů karty', err);
     }
+    return true;
   },
 
-  async updateCard(columnId: string, card: Card, projectId?: string): Promise<void> {
+  /** One card, fully loaded (children + assignees), as the board shows it. Null = gone or no access. */
+  async fetchCard(cardId: string): Promise<{ card: Card; columnId: string } | null> {
+    if (!hasSupabaseConfig) return null;
+    const { data, error } = await supabase.from('cards').select(CARD_SELECT).eq('id', cardId).maybeSingle();
+    if (error || !data) return null;
+    return { card: mapDbCard(data as DbCard), columnId: (data as DbCard).column_id };
+  },
+
+  /**
+   * Saves the card's fields. With `expectedVersion` the write only happens if nobody else changed
+   * the card since that version (otherwise: status 'conflict' + the current server state), so a
+   * concurrent edit is never silently overwritten. Without it: last writer wins (moves, archive).
+   */
+  async updateCard(columnId: string, card: Card, projectId?: string, expectedVersion?: number): Promise<CardWriteResult> {
     if (!hasSupabaseConfig) {
       if (projectId) {
         const board = localStore.getBoard(projectId);
@@ -541,25 +580,32 @@ export const kanbanService = {
           )
         );
       }
-      return;
+      return { status: 'ok' };
     }
-    const { error } = await supabase
-      .from('cards')
-      .update({
-        ...cardToDbFields(card),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', card.id);
+    let query = supabase.from('cards').update(cardToDbFields(card)).eq('id', card.id);
+    if (expectedVersion !== undefined) query = query.eq('version', expectedVersion);
+    const { data, error } = await query.select('id, version');
     if (error) {
       persistenceStatus.report('uložení karty', error);
-      return;
+      return { status: 'error', message: error.message };
+    }
+    if (!data || data.length === 0) {
+      const current = await this.fetchCard(card.id);
+      if (expectedVersion !== undefined && current) {
+        return { status: 'conflict', current: current.card, columnId: current.columnId };
+      }
+      const message = current ? 'Kartu se nepodařilo uložit.' : 'Karta už neexistuje nebo k ní nemáte přístup.';
+      persistenceStatus.report('uložení karty', new Error(message));
+      return { status: 'error', message };
     }
     try {
       await syncDbCardAssignees(card.id, card.assignees);
       persistenceStatus.clear();
     } catch (err) {
       persistenceStatus.report('uložení řešitelů karty', err);
+      return { status: 'error', message: err instanceof Error ? err.message : 'Řešitele se nepodařilo uložit.' };
     }
+    return { status: 'ok', version: (data[0] as { version?: number }).version };
   },
 
   async archiveCard(cardId: string, archived: boolean): Promise<void> {
@@ -602,7 +648,7 @@ export const kanbanService = {
     destinationColumnId: string,
     newPosition: number,
     projectId?: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!hasSupabaseConfig) {
       if (projectId) {
         const board = localStore.getBoard(projectId);
@@ -623,21 +669,23 @@ export const kanbanService = {
           );
         }
       }
-      return;
+      return true;
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('cards')
       .update({
         column_id: destinationColumnId,
         position: newPosition,
       })
-      .eq('id', cardId);
+      .eq('id', cardId)
+      .select('id');
 
-    if (error) {
-      persistenceStatus.report('přesun karty', error);
-    } else {
-      persistenceStatus.clear();
+    if (error || !data || data.length === 0) {
+      persistenceStatus.report('přesun karty', error ?? new Error('Karta už neexistuje nebo ji nelze přesunout.'));
+      return false;
     }
+    persistenceStatus.clear();
+    return true;
   },
 
   async addChecklistItem(cardId: string, item: ChecklistItem): Promise<void> {
@@ -669,16 +717,57 @@ export const kanbanService = {
     if (error) persistenceStatus.report('smazání položky checklistu', error);
   },
 
-  async addComment(cardId: string, comment: Comment): Promise<void> {
-    if (!hasSupabaseConfig) return;
-    const { error } = await supabase.from('task_comments').insert({
-      id: comment.id,
-      card_id: cardId,
-      author_name: comment.authorName,
-      content: comment.content,
-      created_at: comment.createdAt,
-    });
-    if (error) persistenceStatus.report('uložení komentáře', error);
+  /**
+   * New comment. Author, author name and time are set by the database (the client cannot claim to
+   * be someone else); mentions are profile ids and are filtered to project members server-side.
+   * Returns the stored comment, or null on failure (reported through persistenceStatus).
+   */
+  async addComment(cardId: string, comment: Comment): Promise<Comment | null> {
+    if (!hasSupabaseConfig) return comment;
+    const { data, error } = await supabase
+      .from('task_comments')
+      .insert({
+        id: comment.id,
+        card_id: cardId,
+        author_name: comment.authorName,
+        content: comment.content,
+        mentions: comment.mentions ?? [],
+      })
+      .select('*')
+      .single();
+    if (error || !data) {
+      persistenceStatus.report('uložení komentáře', error);
+      return null;
+    }
+    persistenceStatus.clear();
+    return mapDbComment(data as DbComment);
+  },
+
+  async editComment(commentId: string, content: string, mentions: string[]): Promise<Comment | null> {
+    if (!hasSupabaseConfig) return null;
+    const { data, error } = await supabase
+      .from('task_comments')
+      .update({ content, mentions })
+      .eq('id', commentId)
+      .select('*')
+      .single();
+    if (error || !data) {
+      persistenceStatus.report('úprava komentáře', error);
+      return null;
+    }
+    persistenceStatus.clear();
+    return mapDbComment(data as DbComment);
+  },
+
+  async deleteComment(commentId: string): Promise<boolean> {
+    if (!hasSupabaseConfig) return true;
+    const { data, error } = await supabase.from('task_comments').delete().eq('id', commentId).select('id');
+    if (error || !data || data.length === 0) {
+      persistenceStatus.report('smazání komentáře', error ?? new Error('Komentář nelze smazat.'));
+      return false;
+    }
+    persistenceStatus.clear();
+    return true;
   },
 
   async addActivity(cardId: string, activity: ActivityLog): Promise<void> {

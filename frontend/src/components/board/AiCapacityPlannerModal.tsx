@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Users, Scale, Check, ArrowRight, RefreshCw } from 'lucide-react';
 import { Card, Column, TeamMember } from '../../types/kanban';
 import { aiClient } from '../../services/ai/aiClient';
-import { collaborationService } from '../../services/collaborationService';
 
 export interface WorkloadMember {
   memberId: string;
@@ -44,7 +43,7 @@ export default function AiCapacityPlannerModal({
   onClose,
   columns,
   members,
-  projectId,
+  projectId: _projectId,
   projectName: _projectName,
   onUpdateCard,
 }: AiCapacityPlannerModalProps) {
@@ -132,14 +131,7 @@ export default function AiCapacityPlannerModal({
         assignee: { name: targetMember.fullName, initials: targetMember.initials, color: targetMember.avatarColor },
       });
       applied += 1;
-
-      await collaborationService.logActivity({
-        projectId,
-        actorName: 'AI Capacity Planner',
-        actionType: 'reassign_task',
-        entityType: 'task',
-        details: { sug },
-      });
+      // The resulting card changes are recorded by the database (trusted activity events, RUN 01).
     }
 
     if (applied === 0) {

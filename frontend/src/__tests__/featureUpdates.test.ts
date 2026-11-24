@@ -32,19 +32,8 @@ describe('Feature Updates Integration Tests', () => {
       expect(res.success).toBe(true);
     });
 
-    it('logs project activity events correctly', async () => {
-      const log = await collaborationService.logActivity({
-        projectId: 'proj-1',
-        actorName: 'Jan Novák',
-        actionType: 'task_moved',
-        entityType: 'task',
-        details: { from: 'col-1', to: 'col-2' },
-      });
-
-      expect(log).toBeDefined();
-      expect(log.projectId).toBe('proj-1');
-      expect(log.actorName).toBe('Jan Novák');
-      expect(log.actionType).toBe('task_moved');
+    it('has no client-side activity logging (events are written by the database, RUN 01)', () => {
+      expect((collaborationService as Record<string, unknown>).logActivity).toBeUndefined();
     });
   });
 

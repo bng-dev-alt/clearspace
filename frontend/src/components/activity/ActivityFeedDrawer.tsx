@@ -1,82 +1,57 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, History, PlusCircle, ArrowRightLeft, Archive, Columns3, Trash2, UserPlus, UserMinus, Sparkles } from 'lucide-react';
+import {
+  X, History, PlusCircle, ArrowRightLeft, Archive, Columns3, UserPlus, Sparkles,
+  CheckCircle2, PencilLine, UserCheck, MessageSquare, FolderKanban,
+} from 'lucide-react';
 import type { ProjectActivityLog } from '../../types/kanban';
-import { collaborationService } from '../../services/collaborationService';
-import { useRealtimeBoard } from '../../hooks/useRealtimeBoard';
+import { collaborationService, mapActivityRow } from '../../services/collaborationService';
+import { useRealtimeBoard, type DbActivityRow } from '../../hooks/useRealtimeBoard';
+import { describeActivity, formatRelativeTime, type ActivityKind } from '../../lib/collab/activityText';
 
 interface ActivityFeedDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
+  /** Opens the task an event refers to (only offered while the task still exists on the board). */
+  onOpenCard?: (cardId: string) => void;
+  /** Ids of tasks currently on the board. */
+  existingCardIds?: Set<string>;
 }
 
-const ACTION_META: Record<string, { verb: (log: ProjectActivityLog) => string; Icon: React.ComponentType<{ size?: number }> }> = {
-  card_created: {
-    verb: (log) => `přidal(a) úkol „${log.details?.title ?? ''}"`,
-    Icon: PlusCircle,
-  },
-  card_archived: {
-    verb: (log) => `archivoval(a) úkol „${log.details?.title ?? ''}"`,
-    Icon: Archive,
-  },
-  card_moved: {
-    verb: (log) => `přesunul(a) úkol „${log.details?.title ?? ''}" z ${log.details?.from ?? '?'} do ${log.details?.to ?? '?'}`,
-    Icon: ArrowRightLeft,
-  },
-  column_created: {
-    verb: (log) => `vytvořil(a) sloupec „${log.details?.name ?? ''}"`,
-    Icon: Columns3,
-  },
-  column_deleted: {
-    verb: (log) => `smazal(a) sloupec „${log.details?.name ?? ''}"`,
-    Icon: Trash2,
-  },
-  member_added: {
-    verb: (log) => `přidal(a) do projektu ${log.details?.name ?? 'člena'}`,
-    Icon: UserPlus,
-  },
-  member_removed: {
-    verb: (log) => `odebral(a) z projektu ${log.details?.name ?? 'člena'}`,
-    Icon: UserMinus,
-  },
+const ICONS: Record<ActivityKind, React.ComponentType<{ size?: number }>> = {
+  create: PlusCircle,
+  move: ArrowRightLeft,
+  done: CheckCircle2,
+  archive: Archive,
+  edit: PencilLine,
+  assign: UserCheck,
+  comment: MessageSquare,
+  column: Columns3,
+  member: UserPlus,
+  project: FolderKanban,
+  other: Sparkles,
 };
 
-const DEFAULT_META = { verb: () => 'provedl(a) akci', Icon: Sparkles };
-
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.round(diffMs / 60000);
-  if (diffMin < 1) return 'právě teď';
-  if (diffMin < 60) return `před ${diffMin} min`;
-  const diffHours = Math.round(diffMin / 60);
-  if (diffHours < 24) return `před ${diffHours} h`;
-  const diffDays = Math.round(diffHours / 24);
-  if (diffDays === 1) return 'včera';
-  if (diffDays < 7) return `před ${diffDays} dny`;
-  return new Date(iso).toLocaleDateString('cs-CZ');
-}
-
-export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: ActivityFeedDrawerProps) {
+export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenCard, existingCardIds }: ActivityFeedDrawerProps) {
   // null = ještě nenačteno (loading); [] = načteno, prázdné.
   const [activities, setActivities] = useState<ProjectActivityLog[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen || !projectId) return;
+  const load = useCallback(() => {
     let active = true;
     collaborationService
       .fetchActivities(projectId)
-      .then((rows) => {
-        if (active) setActivities(rows);
-      })
-      .catch(() => {
-        if (active) setActivities([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isOpen, projectId]);
+      .then((rows) => { if (active) { setActivities(rows); setFailed(false); } })
+      .catch(() => { if (active) { setActivities([]); setFailed(true); } });
+    return () => { active = false; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!isOpen || !projectId) return;
+    return load();
+  }, [isOpen, projectId, load]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -86,36 +61,21 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: Activ
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Živě doplňovat nové záznamy, dokud je panel otevřený (Fáze 6).
-  const handleActivityInsert = useCallback((row: {
-    id: string; project_id: string; card_id: string | null; actor_id: string | null;
-    actor_name: string; action_type: string; entity_type: 'task' | 'column' | 'project' | 'member';
-    details: Record<string, unknown> | null; created_at: string;
-  }) => {
+  // Živě doplňovat nové záznamy, dokud je panel otevřený (deduplikace podle id).
+  const handleActivityInsert = useCallback((row: DbActivityRow) => {
     setActivities((prev) => {
       const next = prev ?? [];
       if (next.some((a) => a.id === row.id)) return next;
-      const mapped: ProjectActivityLog = {
-        id: row.id,
-        projectId: row.project_id,
-        cardId: row.card_id ?? undefined,
-        actorId: row.actor_id ?? undefined,
-        actorName: row.actor_name,
-        actionType: row.action_type,
-        entityType: row.entity_type,
-        details: row.details ?? undefined,
-        createdAt: row.created_at,
-      };
-      return [mapped, ...next];
+      return [mapActivityRow(row), ...next];
     });
   }, []);
 
   useRealtimeBoard({
     projectId,
     enabled: isOpen && Boolean(projectId),
-    onCardChange: () => {},
-    onColumnChange: () => {},
+    channelName: 'activity',
     onActivityInsert: handleActivityInsert,
+    onResync: load,
   });
 
   if (!isOpen) return null;
@@ -127,6 +87,7 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: Activ
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label="Aktivita projektu"
         data-testid="activity-feed-drawer"
       >
         <div className="drawer-header">
@@ -148,22 +109,29 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: Activ
         <div className="drawer-scroll-area">
           {activities === null ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)' }}>Načítání…</p>
+          ) : failed ? (
+            <p style={{ fontSize: '0.8rem', color: 'var(--danger)' }} role="alert">
+              Aktivitu se nepodařilo načíst. Zkuste panel otevřít znovu.
+            </p>
           ) : activities.length === 0 ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)' }}>
               Zatím žádná aktivita. Události se objeví, jakmile někdo upraví board.
             </p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }} data-testid="activity-feed-list">
+            <ol style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', listStyle: 'none', margin: 0, padding: 0 }} data-testid="activity-feed-list">
               {activities.map((log) => {
-                const meta = ACTION_META[log.actionType] || DEFAULT_META;
-                const { Icon } = meta;
+                const { text, kind } = describeActivity(log);
+                const Icon = ICONS[kind];
+                const canOpen = Boolean(onOpenCard && log.cardId && (!existingCardIds || existingCardIds.has(log.cardId)));
                 return (
-                  <div
+                  <li
                     key={log.id}
                     style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start' }}
                     data-testid={`activity-item-${log.id}`}
+                    data-action={log.actionType}
                   >
                     <div
+                      aria-hidden
                       style={{
                         width: '28px',
                         height: '28px',
@@ -173,23 +141,36 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId }: Activ
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        color: 'var(--blue-primary)',
+                        color: kind === 'done' ? 'var(--success, var(--blue-primary))' : 'var(--blue-primary)',
                       }}
                     >
                       <Icon size={14} />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--dark-navy)' }}>
-                        <strong>{log.actorName}</strong> {meta.verb(log)}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--dark-navy)', overflowWrap: 'anywhere' }}>
+                        <strong>{log.actorName}</strong> {text}
                       </span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--gray-text)' }}>
-                        {formatRelativeTime(log.createdAt)}
+                      <span style={{ fontSize: '0.7rem', color: 'var(--gray-text)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <time dateTime={log.createdAt} title={new Date(log.createdAt).toLocaleString('cs-CZ')}>
+                          {formatRelativeTime(log.createdAt)}
+                        </time>
+                        {canOpen && (
+                          <button
+                            type="button"
+                            onClick={() => { onOpenCard!(log.cardId!); onClose(); }}
+                            className="cs-link-button"
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontSize: '0.7rem', fontWeight: 600 }}
+                            data-testid={`activity-open-card-${log.id}`}
+                          >
+                            Otevřít úkol
+                          </button>
+                        )}
                       </span>
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           )}
         </div>
       </div>

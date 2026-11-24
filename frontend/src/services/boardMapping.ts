@@ -1,4 +1,4 @@
-import { Card, Column, TeamMember } from '../types/kanban';
+import { Card, Column, Comment, TeamMember } from '../types/kanban';
 
 /**
  * Mapování řádků DB -> aplikační model karty (čistý modul bez závislosti na
@@ -18,6 +18,9 @@ export interface DbComment {
   author_name: string;
   content: string;
   created_at: string;
+  author_id?: string | null;
+  updated_at?: string | null;
+  mentions?: string[] | null;
 }
 
 export interface DbActivity {
@@ -63,6 +66,9 @@ export interface DbCard {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  project_id?: string | null;
+  version?: number | null;
+  child_rev?: number | null;
 }
 
 function mapDbMemberLite(row: DbWorkspaceMemberLite): TeamMember {
@@ -75,6 +81,18 @@ function mapDbMemberLite(row: DbWorkspaceMemberLite): TeamMember {
     profileId: row.profile_id ?? undefined,
     workspaceRole: row.workspace_role ?? 'member',
     createdAt: row.created_at,
+  };
+}
+
+export function mapDbComment(c: DbComment): Comment {
+  return {
+    id: c.id,
+    authorName: c.author_name,
+    content: c.content,
+    createdAt: c.created_at,
+    authorId: c.author_id ?? undefined,
+    updatedAt: c.updated_at ?? undefined,
+    mentions: c.mentions ?? undefined,
   };
 }
 
@@ -115,12 +133,7 @@ export function mapDbCard(card: DbCard): Card {
       completed: item.completed,
     })),
     comments: (card.task_comments || [])
-      .map((c) => ({
-        id: c.id,
-        authorName: c.author_name,
-        content: c.content,
-        createdAt: c.created_at,
-      }))
+      .map(mapDbComment)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     activities: (card.task_activities || [])
       .map((a) => ({
@@ -132,6 +145,8 @@ export function mapDbCard(card: DbCard): Card {
     archived: card.archived || false,
     createdAt: card.created_at,
     updatedAt: card.updated_at,
+    version: card.version ?? undefined,
+    childRev: card.child_rev ?? undefined,
   };
 }
 

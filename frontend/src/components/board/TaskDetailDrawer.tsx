@@ -9,6 +9,8 @@ import type { Card, Column, TeamMember } from '../../types/kanban';
 import { useAuth } from '../../hooks/useAuth';
 import { aiClient } from '../../services/ai/aiClient';
 import { aiHistoryService } from '../../services/ai/aiHistoryService';
+import TaskComments from '../collab/TaskComments';
+import type { Mentionable } from '../../lib/collab/mentions';
 
 export type TaskDetailMode = 'right' | 'left' | 'focused' | 'fullscreen' | 'split' | 'detached';
 
@@ -20,15 +22,23 @@ interface TaskDetailDrawerProps {
   columns: Column[];
   availableTags: string[];
   teamMembers: TeamMember[];
-  onUpdateCard: (columnId: string, cardId: string, updates: Partial<Card>) => void;
+  /** `base` = the field values the edit started from (concurrent-edit detection, RUN 01). */
+  onUpdateCard: (columnId: string, cardId: string, updates: Partial<Card>, base?: Partial<Card>) => void;
   onMoveCard: (cardId: string, sourceColumnId: string, destinationColumnId: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   onAddChecklistItem: (columnId: string, cardId: string, text: string) => void;
   onToggleChecklistItem: (columnId: string, cardId: string, itemId: string) => void;
   onUpdateChecklistItemText: (columnId: string, cardId: string, itemId: string, text: string) => void;
   onDeleteChecklistItem: (columnId: string, cardId: string, itemId: string) => void;
-  onAddComment: (columnId: string, cardId: string, authorName: string, content: string) => void;
+  onAddComment: (columnId: string, cardId: string, authorName: string, content: string, mentions?: string[]) => void;
   onAddActivity: (columnId: string, cardId: string, text: string) => void;
+  // Collaboration (RUN 01)
+  readOnly?: boolean;
+  currentUserId?: string;
+  canModerate?: boolean;
+  mentionables?: Mentionable[];
+  onEditComment?: (cardId: string, commentId: string, content: string, mentions: string[]) => Promise<boolean>;
+  onDeleteComment?: (cardId: string, commentId: string) => Promise<boolean>;
 }
 
 export default function TaskDetailDrawer({
@@ -48,6 +58,12 @@ export default function TaskDetailDrawer({
   onDeleteChecklistItem,
   onAddComment,
   onAddActivity,
+  readOnly = false,
+  currentUserId,
+  canModerate = false,
+  mentionables = [],
+  onEditComment,
+  onDeleteComment,
 }: TaskDetailDrawerProps) {
   const { profile } = useAuth();
   const params = useParams();
@@ -119,9 +135,18 @@ export default function TaskDetailDrawer({
   // Checklist states
   const [newChecklistText, setNewChecklistText] = useState('');
   
-  // Comments states
-  const [newCommentText, setNewCommentText] = useState('');
-  
+  // Text fields being edited: their value when editing began (null = not focused). A colleague's
+  // change arriving meanwhile is shown in unfocused fields and detected as a conflict on save.
+  const titleBase = useRef<string | null>(null);
+  const detailsBase = useRef<string | null>(null);
+  const remoteTitle = card?.title ?? '';
+  const remoteDetails = card?.details ?? '';
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { if (titleBase.current === null) setTitle(remoteTitle); }, [remoteTitle]);
+  useEffect(() => { if (detailsBase.current === null) setDetails(remoteDetails); }, [remoteDetails]);
+  useEffect(() => { setTag(card?.tag || ''); setPriority(card?.priority || ''); setDueDate(card?.dueDate || ''); }, [card?.tag, card?.priority, card?.dueDate]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // Activity collapse state
   const [isActivityCollapsed, setIsActivityCollapsed] = useState(true);
 
@@ -246,16 +271,20 @@ export default function TaskDetailDrawer({
 
   // Inline edit change savers
   const handleTitleBlur = () => {
+    const base = titleBase.current ?? card.title;
+    titleBase.current = null;
     if (title.trim() && title.trim() !== card.title) {
-      onUpdateCard(columnId, card.id, { title: title.trim() });
+      onUpdateCard(columnId, card.id, { title: title.trim() }, { title: base });
     } else {
       setTitle(card.title); // Reset on empty title
     }
   };
 
   const handleDetailsBlur = () => {
+    const base = detailsBase.current ?? card.details;
+    detailsBase.current = null;
     if (details.trim() !== card.details) {
-      onUpdateCard(columnId, card.id, { details: details.trim() });
+      onUpdateCard(columnId, card.id, { details: details.trim() }, { details: base });
     }
   };
 
@@ -306,15 +335,6 @@ export default function TaskDetailDrawer({
     if (newText.trim() && newText.trim() !== currentText) {
       onUpdateChecklistItemText(columnId, card.id, itemId, newText.trim());
     }
-  };
-
-  // Comment actions
-  const handleAddComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCommentText.trim()) return;
-    const author = profile?.display_name || profile?.email || 'Uživatel';
-    onAddComment(columnId, card.id, author, newCommentText.trim());
-    setNewCommentText('');
   };
 
   const handleDeleteCard = () => {
@@ -508,8 +528,13 @@ export default function TaskDetailDrawer({
         </div>
 
         {/* Scrollable workspace area */}
-        <div className="drawer-scroll-area">
-          
+        <fieldset disabled={readOnly} className="drawer-scroll-area" style={{ border: 0, margin: 0, minWidth: 0 }} data-readonly={readOnly ? 'true' : 'false'}>
+          {readOnly && (
+            <p className="collab-notice" style={{ margin: 0 }} data-testid="drawer-readonly-note">
+              Máte roli Čtenář: úkol můžete číst, ale ne upravovat.
+            </p>
+          )}
+
           {/* Title Area */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
             <input
@@ -517,6 +542,7 @@ export default function TaskDetailDrawer({
               className="drawer-title-input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onFocus={() => { titleBase.current = card.title; }}
               onBlur={handleTitleBlur}
               placeholder="Zadejte název úkolu"
               data-testid="drawer-title-input"
@@ -631,6 +657,7 @@ export default function TaskDetailDrawer({
               className="drawer-desc-textarea"
               value={details}
               onChange={(e) => setDetails(e.target.value)}
+              onFocus={() => { detailsBase.current = card.details; }}
               onBlur={handleDetailsBlur}
               placeholder="Napište podrobnosti nebo popis úkolu..."
               data-testid="drawer-desc-input"
@@ -749,55 +776,19 @@ export default function TaskDetailDrawer({
               <MessageSquare size={14} /> Komentáře
             </h3>
             
-            <div className="drawer-comments-list" data-testid="comments-list">
-              {(card.comments || []).length === 0 ? (
-                <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', fontStyle: 'italic', padding: '0.5rem 0' }}>
-                  Zatím žádné komentáře. Napište první!
-                </p>
-              ) : (
-                (card.comments || []).map((c) => (
-                  <div key={c.id} className="comment-item" data-testid={`comment-item-${c.id}`}>
-                    <div className="comment-meta">
-                      <span className="comment-author">{c.authorName}</span>
-                      <span className="comment-date">
-                        {new Date(c.createdAt).toLocaleString('cs-CZ', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
-                      </span>
-                    </div>
-                    <p className="comment-content">{c.content}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <form onSubmit={handleAddComment} className="comment-input-container">
-              <textarea
-                className="comment-textarea"
-                placeholder="Napište komentář k úkolu..."
-                value={newCommentText}
-                onChange={(e) => setNewCommentText(e.target.value)}
-                data-testid="comment-add-input"
-              />
-              <button
-                type="submit"
-                disabled={!newCommentText.trim()}
-                style={{
-                  alignSelf: 'flex-end',
-                  padding: '0.4rem 0.85rem',
-                  backgroundColor: newCommentText.trim() ? 'var(--purple-secondary)' : 'var(--bg-column)',
-                  color: newCommentText.trim() ? '#ffffff' : 'var(--gray-text)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  cursor: newCommentText.trim() ? 'pointer' : 'not-allowed',
-                  transition: 'var(--spring-transition)',
-                }}
-                className="comment-add-submit"
-              data-testid="comment-add-submit"
-              >
-                Odeslat
-              </button>
-            </form>
+            <TaskComments
+              comments={card.comments || []}
+              mentionables={mentionables}
+              currentUserId={currentUserId}
+              canModerate={canModerate}
+              readOnly={readOnly}
+              onAdd={(content, mentions) => {
+                const author = profile?.display_name || profile?.email || 'Uživatel';
+                onAddComment(columnId, card.id, author, content, mentions);
+              }}
+              onEdit={onEditComment ? (commentId, content, mentions) => onEditComment(card.id, commentId, content, mentions) : undefined}
+              onDelete={onDeleteComment ? (commentId) => onDeleteComment(card.id, commentId) : undefined}
+            />
           </div>
 
           <div className="drawer-divider" />
@@ -973,7 +964,7 @@ export default function TaskDetailDrawer({
             )}
           </div>
 
-        </div>
+        </fieldset>
       </div>
     </>
   );

@@ -34,6 +34,12 @@ import { Card, Assignee, Column as ColumnType, TeamMember } from '../../../types
 import { kanbanService, Project } from '../../../services/kanbanService';
 import { computeProjectIntelligence } from '../../../lib/projectIntelligence';
 import ProjectMembersModal from '../../../components/board/ProjectMembersModal';
+import ProjectTeamModal, { ROLE_LABEL } from '../../../components/collab/ProjectTeamModal';
+import { usePresence } from '../../../hooks/usePresence';
+import { useAuth } from '../../../hooks/useAuth';
+import { hasSupabaseConfig } from '../../../lib/supabase';
+import { FIELD_LABELS } from '../../../lib/collab/conflicts';
+import type { Mentionable } from '../../../lib/collab/mentions';
 import Link from 'next/link';
 import { Plus, X, LayoutGrid, CalendarDays, LayoutDashboard, CalendarClock } from 'lucide-react';
 
@@ -81,6 +87,8 @@ export default function ProjectBoardPage() {
     updateChecklistItemText,
     deleteChecklistItem,
     addComment,
+    editComment,
+    deleteComment,
     addActivity,
     totalTasks,
     inProgressCount,
@@ -88,7 +96,37 @@ export default function ProjectBoardPage() {
     blockedCount,
     getProcessedColumns,
     setProjectMembers,
+    myRole,
+    canEdit,
+    canManage,
+    roster,
+    syncStatus,
+    accessRevoked,
+    conflict,
+    resolveConflict,
+    reloadBoard,
   } = useKanbanBoard(projectId);
+
+  // --- Collaboration (RUN 01) ---
+  const { user, profile } = useAuth();
+  // usePresence depends on the primitive fields only, so this object need not be memoized.
+  const meMember = user?.id ? roster.find((r) => r.member.profileId === user.id)?.member : undefined;
+  const meName = meMember?.fullName || profile?.display_name || user?.email?.split('@')[0] || 'Uživatel';
+  const presenceMe = user?.id
+    ? { userId: user.id, name: meName, initials: meMember?.initials || meName.slice(0, 2).toUpperCase(), color: meMember?.avatarColor || '#209dd7' }
+    : null;
+  const activeUsers = usePresence(projectId, presenceMe, hasSupabaseConfig && Boolean(myRole) && !accessRevoked);
+  const mentionables: Mentionable[] = useMemo(
+    () => roster
+      .filter((r) => r.member.profileId && r.member.profileId !== user?.id)
+      .map((r) => ({ profileId: r.member.profileId!, name: r.member.fullName, initials: r.member.initials, color: r.member.avatarColor })),
+    [roster, user?.id]
+  );
+  const readOnly = hasSupabaseConfig && !canEdit;
+  // Viewer: board actions are no-ops (the database refuses them anyway; this just avoids dead clicks).
+  const editOnly = <T extends unknown[]>(fn: (...args: T) => unknown) => (...args: T) => {
+    if (!readOnly) fn(...args);
+  };
 
   const {
     draggingCardId,
@@ -97,7 +135,7 @@ export default function ProjectBoardPage() {
     handleDragEnd,
     handleDragOverColumn,
     handleDrop,
-  } = useDragAndDrop(moveCard);
+  } = useDragAndDrop(readOnly ? () => {} : moveCard);
 
   const {
     editingColumnId,
@@ -106,7 +144,7 @@ export default function ProjectBoardPage() {
     handleStartEdit,
     handleSave,
     handleKeyDown,
-  } = useColumnRename(renameColumn);
+  } = useColumnRename(readOnly ? () => {} : renameColumn);
 
   // Modály
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -340,10 +378,11 @@ export default function ProjectBoardPage() {
   };
 
   const handleOpenGeneralAddModal = useCallback(() => {
+    if (readOnly) return;
     const toDoCol = columns[0]?.id || `${projectId}-column-1`;
     setTargetColumnId(toDoCol);
     setIsModalOpen(true);
-  }, [columns, projectId]);
+  }, [columns, projectId, readOnly]);
 
   const handleAddCardSubmit = (
     title: string,
@@ -375,6 +414,46 @@ export default function ProjectBoardPage() {
     moveCard(cardId, sourceColId, destColId);
     setSelectedCardColumnId(destColId);
   };
+
+  // Deep link from a notification / activity: /projects/<id>?task=<cardId> opens that task once loaded.
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = new URLSearchParams(window.location.search).get('task');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (id) setPendingTaskId(id);
+  }, [projectId]);
+  useEffect(() => {
+    if (!pendingTaskId) return;
+    const col = columns.find((c) => c.cards.some((card) => card.id === pendingTaskId));
+    const card = col?.cards.find((c) => c.id === pendingTaskId);
+    if (col && card) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCardColumnId(col.id);
+      setSelectedCard(card);
+      setIsDrawerOpen(true);
+      setPendingTaskId(null);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [pendingTaskId, columns]);
+
+  const openCardById = useCallback((cardId: string) => {
+    const col = columns.find((c) => c.cards.some((card) => card.id === cardId));
+    const card = col?.cards.find((c) => c.id === cardId);
+    if (col && card) {
+      setSelectedCardColumnId(col.id);
+      setSelectedCard(card);
+      setIsDrawerOpen(true);
+    }
+  }, [columns]);
+
+  // The open task moved to another column (a colleague dragged it): follow it.
+  useEffect(() => {
+    if (!selectedCard || !selectedCardColumnId) return;
+    const col = columns.find((c) => c.cards.some((card) => card.id === selectedCard.id));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (col && col.id !== selectedCardColumnId) setSelectedCardColumnId(col.id);
+  }, [columns, selectedCard, selectedCardColumnId]);
 
   const getSelectedCardFromColumns = () => {
     if (!selectedCard || !selectedCardColumnId) return null;
@@ -514,7 +593,37 @@ export default function ProjectBoardPage() {
         teamMembers={teamMembers}
         onManageTeam={() => setIsProjectMembersModalOpen(true)}
         onOpenActivityFeed={() => setIsActivityFeedOpen(true)}
+        activeUsers={activeUsers}
+        syncStatus={syncStatus}
       />
+
+      {accessRevoked && (
+        <div className="collab-notice collab-notice--warning" role="alert" data-testid="access-revoked">
+          <span>K tomuto projektu už nemáte přístup. Vlastník vás mohl z projektu odebrat.</span>
+          <div className="collab-notice-actions">
+            <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => router.push('/')}>Zpět na projekty</button>
+          </div>
+        </div>
+      )}
+
+      {!accessRevoked && readOnly && myRole && (
+        <div className="collab-notice" data-testid="readonly-notice">
+          <span>Máte roli <strong>{ROLE_LABEL[myRole]}</strong>: projekt můžete číst, ale ne upravovat.</span>
+        </div>
+      )}
+
+      {conflict && (
+        <div className="collab-notice collab-notice--warning" role="alert" data-testid="conflict-notice">
+          <span>
+            Kolega mezitím změnil {conflict.fields.map((f) => FIELD_LABELS[f]).join(', ')} úkolu „{conflict.theirs.title}“.
+            Zobrazujeme jeho verzi. Vaše změna zatím uložena nebyla.
+          </span>
+          <div className="collab-notice-actions">
+            <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => resolveConflict('theirs')} data-testid="conflict-keep-theirs">Ponechat jejich verzi</button>
+            <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => resolveConflict('mine')} data-testid="conflict-use-mine">Přepsat mou verzí</button>
+          </div>
+        </div>
+      )}
 
       {(error || syncError) && (
         <div style={{ margin: '0 3rem 1rem 3rem', padding: '0.75rem 1.25rem', backgroundColor: 'var(--danger-soft)', color: 'var(--danger)', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
@@ -602,28 +711,28 @@ export default function ProjectBoardPage() {
             editingColumnId={editingColumnId}
             editNameText={editNameText}
             onEditNameTextChange={setEditNameText}
-            onStartEditColumn={handleStartEdit}
+            onStartEditColumn={editOnly(handleStartEdit)}
             onSaveColumnName={handleSave}
             onKeyDownColumnName={handleKeyDown}
-            onOpenAddModal={handleOpenAddModal}
+            onOpenAddModal={editOnly(handleOpenAddModal)}
             onOpenEditModal={handleOpenDrawer}
-            onDeleteCard={deleteCard}
+            onDeleteCard={editOnly(deleteCard)}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragOverColumn={handleDragOverColumn}
             onDrop={handleDrop}
-            onDeleteColumn={handleInitiateDeleteColumn}
-            onMoveColumn={moveColumn}
-            onSetColumnRole={setColumnRole}
+            onDeleteColumn={editOnly(handleInitiateDeleteColumn)}
+            onMoveColumn={editOnly(moveColumn)}
+            onSetColumnRole={editOnly(setColumnRole)}
             isFirst={index === 0}
             isLast={index === processedColumns.length - 1}
             onColumnDragStart={handleColumnDragStart}
             onColumnDragOver={handleColumnDragOver}
-            onColumnDrop={handleColumnDrop}
+            onColumnDrop={editOnly(handleColumnDrop)}
           />
         ))}
 
-        <div
+        {!readOnly && (<div
           onClick={() => setIsAddColumnModalOpen(true)}
           style={{
             minWidth: '280px',
@@ -656,7 +765,7 @@ export default function ProjectBoardPage() {
         >
           <Plus size={16} />
           Přidat sloupec
-        </div>
+        </div>)}
       </BoardPanel>
       )}
 
@@ -690,6 +799,12 @@ export default function ProjectBoardPage() {
           onDeleteChecklistItem={deleteChecklistItem}
           onAddComment={addComment}
           onAddActivity={addActivity}
+          readOnly={readOnly}
+          currentUserId={user?.id}
+          canModerate={canManage}
+          mentionables={mentionables}
+          onEditComment={editComment}
+          onDeleteComment={deleteComment}
         />
       )}
 
@@ -910,7 +1025,21 @@ export default function ProjectBoardPage() {
         />
       )}
 
-      {isProjectMembersModalOpen && (
+      {isProjectMembersModalOpen && hasSupabaseConfig && (
+        <ProjectTeamModal
+          isOpen={isProjectMembersModalOpen}
+          onClose={() => setIsProjectMembersModalOpen(false)}
+          projectId={projectId}
+          projectOwnerId={project?.user_id}
+          myRole={myRole}
+          myUserId={user?.id}
+          roster={roster}
+          onChanged={() => void reloadBoard({ silent: true })}
+          onManageWorkspace={() => router.push('/team')}
+        />
+      )}
+
+      {isProjectMembersModalOpen && !hasSupabaseConfig && (
         <ProjectMembersModal
           isOpen={isProjectMembersModalOpen}
           onClose={() => setIsProjectMembersModalOpen(false)}
@@ -926,6 +1055,8 @@ export default function ProjectBoardPage() {
           isOpen={isActivityFeedOpen}
           onClose={() => setIsActivityFeedOpen(false)}
           projectId={projectId}
+          onOpenCard={openCardById}
+          existingCardIds={new Set(columns.flatMap((c) => c.cards.map((card) => card.id)))}
         />
       )}
 

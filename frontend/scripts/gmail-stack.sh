@@ -18,4 +18,6 @@ export PORT=${PORT:-3451} GOOGLE_MOCK_PORT=${GOOGLE_MOCK_PORT:-55591}
 export COLLAB_STACK_NAME_OVERRIDE=cs-gmail-sb COLLAB_STACK_SOCK_OVERRIDE=/tmp/cs-gmail-docker.sock COLLAB_SMTP_PORT_OVERRIDE=55565 COLLAB_MAIL_UI_OVERRIDE=55564
 # Gmail feature switch (independent of Drive): on for this local stack only.
 export GMAIL_INTEGRATION_ENABLED=${GMAIL_INTEGRATION_ENABLED:-1}
+# Monograph style selectable like in production (Classic stays the default; MONOGRAPH=0 to build without it).
+[ "${MONOGRAPH:-1}" = 1 ] && export NEXT_PUBLIC_ENABLE_MONOGRAPH=1
 exec "$HERE/scripts/drive-stack.sh" "$@"

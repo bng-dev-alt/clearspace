@@ -111,7 +111,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
             <li className="settings-service" data-testid="drive-service">
               <div>
                 <strong><HardDrive size={13} aria-hidden="true" /> Google Disk</strong>
-                <p data-testid="drive-service-state">{driveOn ? 'Povoleno – jen soubory, které vyberete.' : 'Nepovoleno.'} Přístup <strong>jen k souborům, které vyberete</strong> v okně Google Disku – ne k celému Disku.</p>
+                <p data-testid="drive-service-state">{driveOn ? 'Povoleno.' : 'Nepovoleno.'} Přístup <strong>jen k souborům, které vyberete</strong> v okně Google Disku – ne k celému Disku.</p>
               </div>
               {!driveOn && (!c || active) && (
                 <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => connect('drive')} disabled={busy} data-testid={c ? 'drive-connect-settings' : 'google-connect'}>

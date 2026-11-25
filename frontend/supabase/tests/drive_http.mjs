@@ -293,10 +293,13 @@ ok('refresh: rename and trash picked up for an editor with access; a teammate wi
 // ---------------------------------------------------------------- token lifecycle
 let s0 = (await ctl('stats')).json.refreshes;
 await expire(O);
-const grants = await Promise.all(Array.from({ length: 5 }, () => app('/api/google/picker-token', O.token, { method: 'POST', body: {} })));
-assert.ok(grants.every((g) => g.status === 200), grants.map((g) => g.status).join());
+// RUN 03: the Picker now always gets its OWN freshly minted, Drive-only token (never the stored one), so the stored-token
+// lease is exercised through a server route that uses the stored token (metadata refresh).
+const conc = await Promise.all(Array.from({ length: 5 }, () => app('/api/drive/links/refresh', O.token, { method: 'POST', body: { projectId: P } })));
+assert.ok(conc.every((g) => g.status === 200), conc.map((g) => g.status).join());
 assert.equal((await ctl('stats')).json.refreshes - s0, 1, 'exactly one refresh for 5 concurrent requests');
-assert.equal(new Set(grants.map((g) => g.json.accessToken)).size, 1);
+const grants = [await app('/api/google/picker-token', O.token, { method: 'POST', body: {} })];
+assert.equal(grants[0].status, 200);
 assert.ok(!('refreshToken' in grants[0].json) && !TOKEN_RE.test(JSON.stringify(Object.values(grants[0].json).filter((v) => typeof v === 'string' && v.startsWith('mock-rt')))));
 ok('expired access token refreshed once under concurrency (database lease); the browser gets only a short-lived access token');
 

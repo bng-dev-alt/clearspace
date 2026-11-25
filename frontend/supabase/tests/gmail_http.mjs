@@ -78,7 +78,7 @@ const bobIds = (await ctl('gmail-ids', { email: 'bohdan.mock@example.test' })).j
 const id = (subj) => annaIds.find((m) => m.subject === subj);
 const T_OFFER = id('Nabídka na redesign portálu – Corvane').threadId, M_INVOICE = id('Faktura 2026-118 za listopad').id,
   M_NEWS = id('Newsletter: novinky listopadu').id, M_1250 = id('Objednávka – kódování windows-1250').id, M_BROKEN = id('Chybné kódování').id,
-  M_LONG = id('Dlouhá zpráva – specifikace').id, M_EMPTY = id('Bez obsahu').id, M_DELETED = id('Smazaná zpráva').id,
+  M_LONG = id('Dlouhá zpráva – specifikace').id, M_EMPTY = id('Bez obsahu').id,
   M_XSS = annaIds.find((m) => m.subject.startsWith('<script>')).id, B_THREAD = bobIds[0].threadId;
 
 // ---------------------------------------------------------------- fixture

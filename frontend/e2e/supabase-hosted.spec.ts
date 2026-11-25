@@ -349,6 +349,44 @@ test('AI routes on the hosted DB: local = fail closed without a key (401/503 + l
   expect(ledger.json[0]).toMatchObject({ feature: 'improve', status: 'failed', error_code: 'ai_unavailable' });
 });
 
+// RUN 03C: a build that contains the Gmail code but runs with GMAIL_INTEGRATION_ENABLED off (public production). Proves, as a real
+// signed-in (disposable) user and without the UI, that nothing Gmail-capable can be started or reached. Node fetch (no header logging).
+test('Gmail containment (E2E_EXPECT_GMAIL=off): no Gmail consent, no Gmail scope, every Gmail route closed, no browser token', async () => {
+  test.skip(process.env.E2E_EXPECT_GMAIL !== 'off', 'only for a build with the Gmail code and the switch off');
+  const base = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://127.0.0.1:3410';
+  const call = async (method: string, path: string, body?: unknown, auth = true) => {
+    const res = await fetch(new URL(path, base), { method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...(auth ? { Authorization: `Bearer ${tokenA}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, json, text };
+  };
+  const gmailStart = await call('POST', '/api/google/oauth/start', { returnTo: '/settings', service: 'gmail' });
+  expect([gmailStart.status, gmailStart.json?.error]).toEqual([503, 'gmail_disabled']);
+  expect(gmailStart.text).not.toContain('accounts.google.com');
+  const driveStart = await call('POST', '/api/google/oauth/start', { returnTo: '/settings' });
+  expect(driveStart.status).toBe(200);
+  const scope = new URL(driveStart.json.url).searchParams.get('scope') ?? '';
+  expect(scope.split(' ').sort()).toEqual(['email', 'https://www.googleapis.com/auth/drive.file', 'openid']);
+  expect(scope).not.toMatch(/gmail|mail\.google/);
+  const id = '11111111-1111-4111-8111-111111111111';
+  for (const [m, p, b] of [['GET', '/api/gmail/search?kind=thread&text=x'], ['POST', '/api/gmail/links', { projectId: 'x', items: [] }],
+    ['GET', `/api/gmail/links/${id}/preview`], ['POST', `/api/gmail/links/${id}/refresh`]] as [string, string, unknown?][]) {
+    const r = await call(m, p, b);
+    expect([r.status, r.json?.error], `${m} ${p}`).toEqual([503, 'gmail_disabled']);
+    expect((await call(m, p, b, false)).status, `anonymous ${m} ${p}`).toBe(503);
+  }
+  const picker = await call('POST', '/api/google/picker-token');
+  expect(picker.status).toBe(409);                       // no Google connection -> never a token
+  expect(picker.text).not.toMatch(/ya29\.|accessToken/);
+  const status = await call('GET', '/api/google/connection');
+  expect(status.json?.gmailAvailable).toBe(false);
+  const privacy = await call('GET', '/privacy', undefined, false);
+  expect(privacy.text).toContain('privacy-gmail-off');
+  expect(privacy.text).not.toContain('data-testid="privacy-gmail"');
+});
+
 test('every browser request to Supabase went to the NEW project only', async () => {
   expect([...supabaseHosts]).toEqual([`${EXPECTED_REF}.supabase.co`]);
 });

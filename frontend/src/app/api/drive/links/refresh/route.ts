@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const cardId = body.cardId == null ? null : typeof body.cardId === 'string' && ENTITY_ID_RE.test(body.cardId) ? body.cardId : undefined;
     if (!projectId || cardId === undefined) throw new HttpError(400, MSG.invalid, 'invalid');
 
-    let q = db.from('external_resource_links').select('id, external_id').eq('project_id', projectId)
+    let q = db.from('external_resource_links').select('id, external_id').eq('project_id', projectId).eq('provider', 'google_drive')
       .order('metadata_checked_at', { ascending: true }).limit(MAX_LINKS);
     if (cardId) q = q.eq('card_id', cardId);
     const { data: rows, error } = await q;
@@ -30,10 +30,10 @@ export async function POST(req: NextRequest) {
     const { data: canEdit } = await db.rpc('can_edit_project', { p_project_id: projectId });
     let token: string;
     try {
-      token = (await getAccessToken(db, cfg, { cost: rows.length })).token;
+      token = (await getAccessToken(db, cfg, { cost: rows.length, service: 'drive' })).token;
     } catch (err) {
-      if (err instanceof HttpError && (err.code === 'not_connected' || err.code === 'revoked')) {
-        const state = err.code as AccessState;
+      if (err instanceof HttpError && (err.code === 'not_connected' || err.code === 'revoked' || err.code === 'drive_not_granted')) {
+        const state: AccessState = err.code === 'revoked' ? 'revoked' : 'not_connected';
         return NextResponse.json({ statuses: Object.fromEntries(rows.map((r) => [r.id, state])), updated: 0 }, { headers: NO_STORE });
       }
       throw err;

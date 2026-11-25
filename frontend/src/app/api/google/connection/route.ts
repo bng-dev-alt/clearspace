@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { googleConfig } from '../../../../lib/google/config';
+import { gmailFeatureEnabled, googleConfig } from '../../../../lib/google/config';
 import { open, tokenAad } from '../../../../lib/google/crypto';
-import { revokeToken } from '../../../../lib/google/oauth';
+import { hasService, revokeToken } from '../../../../lib/google/oauth';
 import { caller, dbError, errorResponse, MSG, NO_STORE, requireGoogle } from '../../../../lib/google/server';
 
 /** GET /api/google/connection -- is the integration configured, and the caller's connection (never a token). */
@@ -16,8 +16,13 @@ export async function GET(req: NextRequest) {
       configured: cfg.enabled,
       message: cfg.enabled ? undefined : MSG.not_configured,
       simulated: cfg.enabled && cfg.mock,           // local test provider, never presented as real Google
+      // RUN 03: one Google grant, per-service state (what ClearSpace uses) + the Gmail feature switch
+      gmailAvailable: cfg.enabled && gmailFeatureEnabled(),
       pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
-      connection: row ? { email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at } : null,
+      connection: row ? {
+        email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at,
+        services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail') },
+      } : null,
     }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'google-connection');
@@ -27,6 +32,8 @@ export async function GET(req: NextRequest) {
 /**
  * DELETE /api/google/connection -- disconnect: revoke the grant at Google (best effort), then delete the stored
  * credentials. Linked files stay in the projects; nobody gains or loses access to them in Google Drive.
+ * RUN 03: Google revokes the WHOLE grant -- Drive and Gmail end together. Linked e-mails keep their shared metadata;
+ * only their owner can preview them again after reconnecting the same Google account.
  */
 export async function DELETE(req: NextRequest) {
   try {

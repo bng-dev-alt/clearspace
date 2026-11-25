@@ -11,14 +11,25 @@ export interface GoogleConnection {
   scopes: string[];
   status: 'active' | 'revoked' | 'error';
   connectedAt: string;
+  /** RUN 03: services ClearSpace uses from this one Google grant (absent from an older server = Drive only). */
+  services?: { drive: boolean; gmail: boolean };
 }
 export interface GoogleStatus {
   configured: boolean;
   message?: string;
   simulated?: boolean;
+  /** RUN 03: Gmail feature switch on the server. */
+  gmailAvailable?: boolean;
   /** Google consent screen in Testing mode: only approved test users can connect */
   pilot?: boolean;
   connection: GoogleConnection | null;
+}
+export type GoogleServiceName = 'drive' | 'gmail';
+/** Whether the caller's connection is active AND has this service. */
+export function serviceActive(s: GoogleStatus | null | undefined, service: GoogleServiceName): boolean {
+  const c = s?.connection;
+  if (!c || c.status !== 'active') return false;
+  return c.services ? c.services[service] : service === 'drive';
 }
 export interface DriveLink {
   id: string;
@@ -60,7 +71,7 @@ export class DriveError extends Error {
   constructor(public code: string, message: string, public status = 0) { super(message); this.name = 'DriveError'; }
 }
 
-async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new DriveError('unauthenticated', 'Přihlaste se prosím.', 401);
@@ -103,8 +114,8 @@ export const driveService = {
   },
 
   /** Leaves the page for Google's consent screen; comes back to `returnTo` (validated on the server). */
-  async connect(returnTo: string): Promise<void> {
-    const { url } = await api<{ url: string }>('/api/google/oauth/start', { method: 'POST', body: { returnTo } });
+  async connect(returnTo: string, service: GoogleServiceName = 'drive'): Promise<void> {
+    const { url } = await api<{ url: string }>('/api/google/oauth/start', { method: 'POST', body: { returnTo, service } });
     window.location.assign(url);
   },
 
@@ -134,7 +145,7 @@ export const driveService = {
     if (!hasSupabaseConfig) return [];
     let q = supabase.from('external_resource_links')
       .select('id, project_id, card_id, external_id, name, mime_type, web_url, size_bytes, modified_at, provider_state, metadata_checked_at, linked_by_name, created_at')
-      .eq('project_id', projectId).order('created_at', { ascending: false }).limit(200);
+      .eq('project_id', projectId).eq('provider', 'google_drive').order('created_at', { ascending: false }).limit(200);
     if (cardId) q = q.eq('card_id', cardId);
     const { data, error } = await q;
     if (error) throw new DriveError('db', 'Soubory se nepodařilo načíst.');

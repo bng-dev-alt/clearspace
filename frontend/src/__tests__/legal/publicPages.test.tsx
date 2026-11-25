@@ -21,6 +21,20 @@ describe('RUN 02C public pages (Google OAuth homepage + privacy policy)', () => 
     expect(document.querySelector('a[href="https://myaccount.google.com/permissions"]')).toBeTruthy();
   });
 
+  it('RUN 03: Gmail section is truthful per server switch (off: no mailbox access; on: read-only, owner-only preview, no AI, Limited Use)', () => {
+    const off = render(<PrivacyPage />);
+    expect(screen.getByTestId('privacy-gmail-off')).toBeTruthy();
+    expect(screen.queryByTestId('privacy-gmail')).toBeNull();
+    off.unmount();
+    process.env.GMAIL_INTEGRATION_ENABLED = '1';
+    try {
+      render(<PrivacyPage />);
+      const t = screen.getByTestId('privacy-gmail').textContent ?? '';
+      for (const must of ['gmail.readonly', 'neodesílá, nemaže', 'Obsah e-mailů, adresy a přílohy neukládáme', 'vidí jen ten, kdo e-mail připojil',
+        'neposílá obsah e-mailů žádnému poskytovateli umělé inteligence', 'Limited Use']) expect(t, must).toContain(must);
+    } finally { delete process.env.GMAIL_INTEGRATION_ENABLED; }
+  });
+
   it('never invents the controller: without server env it says contact details are missing (rollout blocker)', () => {
     render(<PrivacyPage />);
     expect(screen.getByTestId('privacy-contact-missing')).toBeTruthy();

@@ -59,7 +59,7 @@ Migrace 1200 **beze změny** (checksum `8c0b4b06…` = nacvičený soubor).
 ## 4. Google Cloud – produkční projekt (dělá vlastník; ověřeno proti kódu a oficiální dokumentaci)
 Scopes v kódu (`src/lib/google/config.ts`): `openid`, `email` (Google vrací `https://www.googleapis.com/auth/userinfo.email`),
 `https://www.googleapis.com/auth/drive.file`. Redirect URI se staví **jen** z `APP_BASE_URL` + `/api/google/oauth/callback`; Picker:
-`setAppId(GOOGLE_CLOUD_PROJECT_NUMBER)`, API key v prohlížeči. DEV projekt `clearspace-dev-515810` a jeho klíče se **nemění**.
+`setAppId(GOOGLE_CLOUD_PROJECT_NUMBER)`, API key v prohlížeči. DEV projekt `clearspace-dev` a jeho klíče se **nemění**.
 
 1. Nový projekt **`clearspace-prod`**: https://console.cloud.google.com/projectcreate (Project ID přidělí Google; dále `<PROD_ID>`).
 2. Zapnout jen **Google Drive API** a **Google Picker API**:

@@ -6,6 +6,7 @@ import { X, Trash2, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, Alig
 import MultiAssigneeSelect from './MultiAssigneeSelect';
 import TaskResourcesSection from './TaskResourcesSection';
 import DriveLinksPanel from '../drive/DriveLinksPanel';
+import GmailLinksPanel from '../gmail/GmailLinksPanel';
 import type { Card, Column, TeamMember } from '../../types/kanban';
 import { useAuth } from '../../hooks/useAuth';
 import { aiClient } from '../../services/ai/aiClient';
@@ -828,6 +829,7 @@ export default function TaskDetailDrawer({
             <>
               <div className="drawer-divider" />
               <DriveLinksPanel projectId={projectId} cardId={card.id} canEdit={!readOnly} returnTo={`/projects/${projectId}`} />
+              <GmailLinksPanel projectId={projectId} cardId={card.id} canEdit={!readOnly} returnTo={`/projects/${projectId}`} />
             </>
           )}
 

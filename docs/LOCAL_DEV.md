@@ -75,3 +75,9 @@ real session + RLS + Realtime, spoofed host / tunnel header / missing marker -> 
 **E2E suites against a stack app:** run them against an app started with `DEV_AUTO_LOGIN=0` (the button stays). Specs that register or accept an invitation in a FRESH browser context (`collaboration-01b`, `collaboration-01c-*`, `supabase-runtime`) expect no session, and the auto-login would sign that context in as alice (found in RUN 02B: `collaboration-01b` failed with auto-login on, passes with it off). Hand-testing keeps the default (auto).
 
 **Production builds:** never build with these flags in the environment; `scripts/check-production-bundle.sh` fails on the dev-login strings.
+
+## RUN 03 Gmail stack
+`frontend/scripts/gmail-stack.sh up|seed|mock|app|env|down` – izolovaný stack `cs-gmail-sb` (55550-55559, Mailpit 55564/55565), Google + Gmail mock
+na `127.0.0.1:55591`, aplikace `http://127.0.0.1:3451/?login=auto` (deep link `/settings?login=auto`), `GMAIL_INTEGRATION_ENABLED=1` a Monograph jen pro
+tento proces. Je to tenký wrapper nad `drive-stack.sh` (`*_OVERRIDE` proměnné), stejný DEV LOGIN STANDARD. Skutečný Google: `gmail-live.sh verify|app`.
+Next 16 dovolí jen jeden `next dev` na adresář – demo sadu Playwrightu a produkční build pouštějte se zastavenou aplikací. Po změně migrace: `gmail-stack.sh up`.

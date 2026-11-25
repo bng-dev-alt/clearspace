@@ -13,7 +13,9 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 export COLLAB_STACK_DIR=${DRIVE_STACK_DIR:-${TMPDIR:-/tmp}/cs-drive-sb}
-export COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+# RUN 03: gmail-stack.sh reuses this launcher for its own isolated stack (cs-gmail-sb) through the *_OVERRIDE values.
+export COLLAB_STACK_NAME=${COLLAB_STACK_NAME_OVERRIDE:-cs-drive-sb} COLLAB_STACK_SOCK=${COLLAB_STACK_SOCK_OVERRIDE:-/tmp/cs-drive-docker.sock} \
+  COLLAB_SMTP_PORT=${COLLAB_SMTP_PORT_OVERRIDE:-55545} COLLAB_MAIL_UI=${COLLAB_MAIL_UI_OVERRIDE:-55544}
 export PORT=${PORT:-3441}
 MOCK_PORT=${GOOGLE_MOCK_PORT:-55590}
 DIR=$COLLAB_STACK_DIR; ACC=$DIR/collab-accounts.env

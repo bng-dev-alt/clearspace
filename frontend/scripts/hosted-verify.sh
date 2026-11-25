@@ -41,7 +41,7 @@ cleanup() {
   for id in "${IDS[@]:-}"; do [ -n "$id" ] && printf '  delete %s -> %s\n' "${id:0:8}" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$URL/auth/v1/admin/users/$id" -H "apikey: $SRK" -H "Authorization: Bearer $SRK")"; done
   PGPASSWORD=$(security find-generic-password -s "ClearSpace V1 – Supabase Database" -a "postgres.$REF" -w 2>/dev/null) \
   docker run --rm -e PGPASSWORD public.ecr.aws/supabase/postgres:17.6.1.147 psql "host=aws-0-eu-west-1.pooler.supabase.com port=5432 user=postgres.$REF dbname=postgres sslmode=require" -X -At -c \
-   "select 'leftovers: run-users='||(select count(*) from auth.users where email like 'cs-p5-%@example.test')||' projects='||(select count(*) from public.projects)||' cards='||(select count(*) from public.cards)||' invitations='||(select count(*) from public.invitations)||' workspace_members='||(select count(*) from public.workspace_members where email like 'cs-p5-%')||' ai_requests='||(select count(*) from public.ai_requests)"
+   "select 'leftovers: run-users='||(select count(*) from auth.users where email like 'cs-p5-%@example.test')||' projects='||(select count(*) from public.projects)||' cards='||(select count(*) from public.cards)||' invitations='||(select count(*) from public.invitations)||' workspace_members='||(select count(*) from public.workspace_members where email like 'cs-p5-%')||' ai_requests='||(select count(*) from public.ai_requests)||' gmail_links='||(select count(*) from public.external_resource_links where provider like 'gmail%')"
 }
 trap cleanup EXIT
 A=cs-p5-a-$RUN@example.test; B=cs-p5-b-$RUN@example.test; D=cs-p5-d-$RUN@example.test

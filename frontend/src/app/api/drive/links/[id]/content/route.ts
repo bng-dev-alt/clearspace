@@ -18,10 +18,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const { id } = await ctx.params;
     if (!UUID.test(id)) throw new HttpError(404, 'Soubor nebyl nalezen.', 'not_found');
     const { db } = await caller(req);
-    const { data: link, error } = await db.from('external_resource_links').select('id, external_id').eq('id', id).maybeSingle();
+    const { data: link, error } = await db.from('external_resource_links').select('id, external_id').eq('id', id).eq('provider', 'google_drive').maybeSingle();
     if (error) throw dbError(error);
     if (!link) throw new HttpError(404, 'Soubor nebyl nalezen.', 'not_found');
-    const { token } = await getAccessToken(db, cfg, { cost: 2 });
+    const { token } = await getAccessToken(db, cfg, { cost: 2, service: 'drive' });
     const r = await getTextContent(cfg, token, link.external_id);
     if (!r.ok) throw new HttpError(STATUS[r.reason] ?? 503, ACCESS_TEXT[r.reason], r.reason);
     return NextResponse.json({ content: r.value }, { headers: NO_STORE });

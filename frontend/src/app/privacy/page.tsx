@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
+import { gmailFeatureEnabled } from '../../lib/google/config';
 
 export const metadata: Metadata = { title: 'Ochrana osobních údajů – ClearSpace' };
 // The controller's identity and contact come from SERVER env (PRIVACY_CONTROLLER, PRIVACY_CONTACT_EMAIL): never hard-coded in the
@@ -12,6 +13,7 @@ const VERSION = '25. listopadu 2026';
 export default function PrivacyPage() {
   const controller = process.env.PRIVACY_CONTROLLER?.trim();
   const email = process.env.PRIVACY_CONTACT_EMAIL?.trim();
+  const gmail = gmailFeatureEnabled();
   const contact = email && /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(email) ? email : null;
 
   return (
@@ -46,6 +48,23 @@ export default function PrivacyPage() {
         </ul>
       </section>
 
+      <section className="settings-card" id="gmail">
+        <h2>3a. Gmail (volitelné propojení)</h2>
+        {!gmail ? (
+          <p data-testid="privacy-gmail-off">Propojení s Gmailem není na tomto serveru zapnuté. ClearSpace zde k vaší e-mailové schránce nepřistupuje a o povolení přístupu ke Gmailu nežádá.</p>
+        ) : (
+          <ul data-testid="privacy-gmail">
+            <li><strong>Oprávnění:</strong> jen čtení (<code>gmail.readonly</code>), o které žádáte zvlášť tlačítkem „Připojit Gmail“. ClearSpace e-maily neodesílá, nemaže, nepřesouvá ani neoznačuje a schránku nesynchronizuje.</li>
+            <li><strong>Co se čte:</strong> jen výsledky hledání, které sami zadáte, a e-maily nebo konverzace, které sami připojíte k projektu nebo úkolu.</li>
+            <li><strong>Co ukládáme:</strong> u připojeného e-mailu předmět, jméno odesílatele (nebo jen doménu), datum, počet zpráv a příloh, kdo a kdy ho připojil. Odděleně a nepřístupně pro ostatní uživatele ukládáme identifikátor zprávy a vašeho účtu Google, aby šel e-mail znovu otevřít. Obsah e-mailů, adresy a přílohy neukládáme.</li>
+            <li><strong>Náhled obsahu</strong> vidí jen ten, kdo e-mail připojil; načte se z jeho schránky pod jeho přístupem a neukládá se. Ostatní členové projektu vidí jen uložené údaje výše – členství v projektu nedává přístup k cizí schránce.</li>
+            <li><strong>Vypnout Gmail</strong> (Nastavení → Propojené účty) zastaví používání Gmailu v ClearSpace a volitelně smaže vaše připojené e-maily. Google neumí odebrat jen Gmail: úplné zrušení oprávnění = odpojení účtu Google (Disk i Gmail).</li>
+            <li><strong>AI:</strong> ClearSpace <strong>neposílá obsah e-mailů žádnému poskytovateli umělé inteligence</strong> a údaje z Gmailu nepoužívá k trénování obecných modelů AI.</li>
+            <li>Pro údaje z Gmailu platí závazně požadavky Limited Use zásad Google API Services User Data Policy (viz bod 3).</li>
+          </ul>
+        )}
+      </section>
+
       <section className="settings-card" id="retention">
         <h2>4. Uchování a výmaz</h2>
         <ul>
@@ -63,7 +82,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Supabase – databáze, přihlášení a úložiště souborů (region EU – Irsko).</li>
           <li>Vercel – provoz webové aplikace.</li>
-          <li>Google – propojení s Google Diskem (jen pokud ho zapnete).</li>
+          <li>Google – propojení s Google Diskem{gmail ? ' a Gmailem' : ''} (jen pokud ho zapnete).</li>
           <li>Resend – odesílání e-mailů (potvrzení účtu, pozvánky do projektů).</li>
           <li>U volitelných AI funkcí a přepisu záznamů porad (jsou-li pro váš účet zapnuté) zpracovávají text nebo zvuk, který do nich sami vložíte, poskytovatelé Google (Gemini) a Soniox. Obsah souborů z Google Disku se jim neposílá.</li>
         </ul>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -63,6 +63,19 @@ if [ "${EXPECT_DRIVE:-0}" = 1 ]; then
   code=$(status GET /__control/state); [ "$code" = 404 ] && ok "no Google mock control route" || bad "/__control/state -> $code"
 fi
 
+# RUN 03C (EXPECT_GMAIL_OFF=1, a build with the Gmail code and GMAIL_INTEGRATION_ENABLED off): every Gmail route is closed BEFORE any
+# auth or Google config (503 gmail_disabled), the privacy policy says Gmail is off. Authenticated checks: e2e/supabase-hosted.spec.ts.
+if [ "${EXPECT_GMAIL_OFF:-0}" = 1 ]; then
+  id=11111111-1111-4111-8111-111111111111
+  for mp in "GET /api/gmail/search?kind=thread" "POST /api/gmail/links" "GET /api/gmail/links/$id/preview" "POST /api/gmail/links/$id/refresh"; do
+    m=${mp%% *}; p=${mp#* }
+    b=$(get "$p" -X "$m" -H 'Content-Type: application/json' -d '{}' -w ' HTTP%{http_code}')
+    case "$b" in *'"error":"gmail_disabled"'*' HTTP503') ok "$m ${p%%\?*} -> 503 gmail_disabled";; *) bad "$m ${p%%\?*} -> ${b: -7} (expected 503 gmail_disabled)";; esac
+  done
+  code=$(status POST /api/google/oauth/start -H 'Content-Type: application/json' -d '{"service":"gmail"}'); [ "$code" = 401 ] && ok "anonymous POST /api/google/oauth/start (gmail) -> 401" || bad "anonymous oauth/start gmail -> $code"
+  P=$(get /privacy); echo "$P" | grep -q 'privacy-gmail-off' && ! echo "$P" | grep -q 'data-testid="privacy-gmail"' && ok "/privacy: Gmail stated as NOT enabled" || bad "/privacy does not state that Gmail is off"
+fi
+
 echo "== client bundle"
 CHUNKS=$(get /login | grep -oE '/_next/static/[^"]+\.js' | sort -u)
 [ -n "$CHUNKS" ] && ok "found $(echo "$CHUNKS" | wc -l | tr -d ' ') script chunks" || bad "no script chunks found (blocked by protection?)"
@@ -73,7 +86,7 @@ has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
 for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini' \
-           'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL'; do
+           'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL' 'auth/gmail' 'gmail.googleapis.com' 'GMAIL_INTEGRATION_ENABLED' 'gmail_link_source'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

@@ -19,7 +19,9 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SVC=${GOOGLE_LIVE_KEYCHAIN_SERVICE:-ClearSpace V1 - Google dev (live)}
 ACCOUNTS=(client_id client_secret picker_key)
 DIR=${DRIVE_STACK_DIR:-${TMPDIR:-/tmp}/cs-drive-sb}
-PORT=3441
+PORT=${GOOGLE_LIVE_PORT:-3441}
+# RUN 03: scripts/gmail-live.sh points this launcher at the Gmail stack (cs-gmail-sb, port 3451); defaults = RUN 02 Drive stack.
+STACK_ENV="COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=${COLLAB_STACK_NAME_OVERRIDE:-cs-drive-sb} COLLAB_STACK_SOCK=${COLLAB_STACK_SOCK_OVERRIDE:-/tmp/cs-drive-docker.sock} COLLAB_SMTP_PORT=${COLLAB_SMTP_PORT_OVERRIDE:-55545} COLLAB_MAIL_UI=${COLLAB_MAIL_UI_OVERRIDE:-55544}"
 BASE="http://127.0.0.1:$PORT"
 REDIRECT="$BASE/api/google/oauth/callback"
 
@@ -89,21 +91,21 @@ case "${1:-}" in
     ;;
   app)
     load_env
-    export PORT COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+    export PORT $STACK_ENV
     [[ "$GOOGLE_OAUTH_CLIENT_SECRET" == GOCSPX-* ]] || { echo "refusing: the client secret does not have Google's GOCSPX- format (mock value?)" >&2; exit 2; }
     echo "real Google; client secret format: GOCSPX; APP_BASE_URL=$APP_BASE_URL; GOOGLE_API_MOCK_BASE=${GOOGLE_API_MOCK_BASE:-<unset>}; redirect URI=$REDIRECT"
     exec "$HERE/scripts/collab-stack.sh" app
     ;;
   revoke-check)  # RUN 02B: disconnect for real, then replay the OLD refresh token -> Google must say invalid_grant (reconnect afterwards)
     load_env
-    export COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+    export $STACK_ENV
     eval "$("$HERE/scripts/collab-stack.sh" env)"
     export E2E_BASE_URL=$BASE E2E_PASSWORD=$(acc COLLAB_PASSWORD)
     exec node "$HERE/supabase/tests/google_live_revoke.mjs"
     ;;
   doc-check)  # RUN 02B: after the manual steps (native Doc attached at project level via the real Picker, then renamed in Drive)
     load_env
-    export COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+    export $STACK_ENV
     eval "$("$HERE/scripts/collab-stack.sh" env)"
     cd "$HERE" && E2E_LIVE_DOC=1 E2E_PASSWORD=$(acc COLLAB_PASSWORD) DEV_AUTO_LOGIN=0 PLAYWRIGHT_TEST_BASE_URL=$BASE \
       PW_CHROMIUM_PATH=${PW_CHROMIUM_PATH:-$(find "$HOME/Library/Caches/ms-playwright" -path '*chromium_headless_shell*' -name chrome-headless-shell -type f 2>/dev/null | head -1)} \

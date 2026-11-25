@@ -1,4 +1,4 @@
-import { DRIVE_FILE_SCOPE, type GoogleConfig } from './config';
+import { DRIVE_FILE_SCOPE, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
 
 /**
  * Google OAuth 2.0 for web server applications (authorization code + PKCE S256 + client secret), RUN 02.
@@ -6,7 +6,8 @@ import { DRIVE_FILE_SCOPE, type GoogleConfig } from './config';
  * Nothing returned from here is ever logged: errors carry only an OAuth error CODE.
  */
 export class GoogleOAuthError extends Error {
-  constructor(public readonly code: string, public readonly status = 0) { super(`google oauth: ${code}`); this.name = 'GoogleOAuthError'; }
+  /** `reason`: network failure class only (e.g. TimeoutError / ECONNRESET) -- never a URL, body or token; for safe logs. */
+  constructor(public readonly code: string, public readonly status = 0, public readonly reason?: string) { super(`google oauth: ${code}`); this.name = 'GoogleOAuthError'; }
 }
 
 export function buildAuthUrl(cfg: GoogleConfig, p: { state: string; codeChallenge: string; scopes: string[]; loginHint?: string }): string {
@@ -41,7 +42,7 @@ export async function readCapped(res: Response, maxBytes: number): Promise<strin
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function postForm(url: string, form: Record<string, string>): Promise<Record<string, unknown>> {
+export async function postForm(url: string, form: Record<string, string>): Promise<Record<string, unknown>> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -52,8 +53,10 @@ async function postForm(url: string, form: Record<string, string>): Promise<Reco
       redirect: 'error',
       cache: 'no-store',
     });
-  } catch {
-    throw new GoogleOAuthError('unavailable');
+  } catch (e) {
+    const err = e as Error & { cause?: { code?: unknown } };
+    const cause = typeof err?.cause?.code === 'string' && /^[A-Z_]{2,40}$/.test(err.cause.code) ? `/${err.cause.code}` : '';
+    throw new GoogleOAuthError('unavailable', 0, `${/^[A-Za-z]{1,40}$/.test(err?.name ?? '') ? err.name : 'Error'}${cause}`);
   }
   const text = await readCapped(res, 64 * 1024);   // throws response_too_large
   let body: Record<string, unknown> = {};
@@ -92,9 +95,11 @@ export async function exchangeCode(cfg: GoogleConfig, code: string, codeVerifier
   }));
 }
 
-export async function refreshAccessToken(cfg: GoogleConfig, refreshToken: string): Promise<TokenResponse> {
+/** `scopes` (optional) asks for a NARROWER access token than the grant (e.g. the browser-side Picker gets no Gmail access). */
+export async function refreshAccessToken(cfg: GoogleConfig, refreshToken: string, scopes?: string[]): Promise<TokenResponse> {
   return toTokens(await postForm(cfg.endpoints.token, {
     grant_type: 'refresh_token', refresh_token: refreshToken, client_id: cfg.clientId, client_secret: cfg.clientSecret,
+    ...(scopes ? { scope: scopes.join(' ') } : {}),
   }));
 }
 
@@ -127,4 +132,8 @@ export function parseIdToken(cfg: GoogleConfig, idToken: string | undefined, now
 /** Granular consent: the user may untick Drive on Google's screen; the token response says what was granted. */
 export function hasDriveScope(scopes: string[]): boolean {
   return scopes.includes(DRIVE_FILE_SCOPE);
+}
+
+export function hasService(scopes: string[] | null | undefined, service: GoogleService): boolean {
+  return Boolean(scopes?.includes(SERVICE_SCOPE[service]));
 }

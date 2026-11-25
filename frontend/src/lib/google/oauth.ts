@@ -6,7 +6,8 @@ import { DRIVE_FILE_SCOPE, SERVICE_SCOPE, type GoogleConfig, type GoogleService 
  * Nothing returned from here is ever logged: errors carry only an OAuth error CODE.
  */
 export class GoogleOAuthError extends Error {
-  constructor(public readonly code: string, public readonly status = 0) { super(`google oauth: ${code}`); this.name = 'GoogleOAuthError'; }
+  /** `reason`: network failure class only (e.g. TimeoutError / ECONNRESET) -- never a URL, body or token; for safe logs. */
+  constructor(public readonly code: string, public readonly status = 0, public readonly reason?: string) { super(`google oauth: ${code}`); this.name = 'GoogleOAuthError'; }
 }
 
 export function buildAuthUrl(cfg: GoogleConfig, p: { state: string; codeChallenge: string; scopes: string[]; loginHint?: string }): string {
@@ -52,8 +53,10 @@ export async function postForm(url: string, form: Record<string, string>): Promi
       redirect: 'error',
       cache: 'no-store',
     });
-  } catch {
-    throw new GoogleOAuthError('unavailable');
+  } catch (e) {
+    const err = e as Error & { cause?: { code?: unknown } };
+    const cause = typeof err?.cause?.code === 'string' && /^[A-Z_]{2,40}$/.test(err.cause.code) ? `/${err.cause.code}` : '';
+    throw new GoogleOAuthError('unavailable', 0, `${/^[A-Za-z]{1,40}$/.test(err?.name ?? '') ? err.name : 'Error'}${cause}`);
   }
   const text = await readCapped(res, 64 * 1024);   // throws response_too_large
   let body: Record<string, unknown> = {};

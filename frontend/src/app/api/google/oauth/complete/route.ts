@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       }
       return reply('connected', row.return_to);
     } catch (err) {
-      oauthLog('complete_failed', { stage: 'exchange_or_identity', code: err instanceof GoogleOAuthError ? err.code : (err as Error)?.name, httpStatus: err instanceof GoogleOAuthError ? err.status : undefined, mode: cfg.mock ? 'mock' : 'real', secretFormat: secretFormat(cfg.clientSecret) });
+      oauthLog('complete_failed', { stage: 'exchange_or_identity', code: err instanceof GoogleOAuthError ? err.code : (err as Error)?.name, httpStatus: err instanceof GoogleOAuthError ? err.status : undefined, reason: err instanceof GoogleOAuthError ? err.reason : undefined, mode: cfg.mock ? 'mock' : 'real', secretFormat: secretFormat(cfg.clientSecret) });
       return reply('error', row.return_to);
     }
   } catch (err) {

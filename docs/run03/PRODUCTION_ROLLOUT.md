@@ -2,6 +2,20 @@
 
 Tento dokument nic nepovoluje. Navazuje na `docs/run02/PRODUCTION_ROLLOUT.md` (RUN 02C, Drive), který musí proběhnout dřív nebo současně.
 
+## Rozhodnutí vlastníka (RUN 03B, 2026-11-25)
+Pro současný portfolio rozsah platí **varianta A**: skutečný Gmail jen v řízeném vývoji/testování (`clearspace-dev`, Testing); **veřejná produkce
+má Gmail vypnutý** (`GMAIL_INTEGRATION_ENABLED` nenastaveno). Žádné ověření restricted scope ani CASA se nezahajuje; `clearspace-prod` se nemění,
+produkční DB se nemigruje, nic se nemerguje do `main`, nepushuje ani nenasazuje. Budoucí položka: veřejná **syntetická** ukázka Gmailu (ROADMAP).
+
+## Plán budoucího merge a rolloutu (až na výslovné schválení)
+1. `feature/run03-gmail` (tag `run03-complete`) obsahuje už `run02c-complete` → merge do `main` bude bez konfliktů s RUN 02C (`--no-ff`, žádný rebase).
+2. Před merge: `vitest`, `supabase/tests/run.sh`, `next build` + `check-production-bundle.sh`; E2E Drive na stacku.
+3. Produkce s Gmailem vypnutým: nasadit kód bez `GMAIL_INTEGRATION_ENABLED` → `/privacy` ukáže „Gmail není zapnutý“, Gmail trasy 503, UI sekci skryje.
+4. **Migrace 1300 je pro tento kód povinná i s vypnutým Gmailem**: `oauth/complete` volá `google_connection_sub` a `google_service_audit`
+   (funkce z 1300) i pro Disk – bez migrace by připojení Disku selhalo bezpečně (fail closed). Pořadí: záloha → nácvik na replice
+   (vzor `rehearse-drive-prod.sh`) → 1300 v jedné transakci → teprve potom kód. Rollback 1300 je bez Gmail dat čistý.
+5. Zapnutí Gmailu kdekoli mimo dev = nové rozhodnutí podle §0 (B/C/D) + Privacy Policy (sekce Gmail je připravená, zobrazí se se zapnutým přepínačem).
+
 ## 0. Rozhodnutí, která musí udělat vlastník (před čímkoli dalším)
 1. **Kdo bude Gmail používat?** `gmail.readonly` je *restricted*:
    * **A – nepublikovat Gmail veřejně** (doporučeno pro portfolio): produkce s `GMAIL_INTEGRATION_ENABLED` nenastaveným; veřejnosti jen popis a lokální/označená simulace.

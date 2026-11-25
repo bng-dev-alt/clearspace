@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DRIVE_SCOPES, GMAIL_READONLY_SCOPE, GMAIL_SCOPES, gmailFeatureEnabled, googleConfig, SERVICE_SCOPES } from '../../lib/google/config';
-import { buildAuthUrl, hasService } from '../../lib/google/oauth';
+import { buildAuthUrl, exchangeCode, GoogleOAuthError, hasService } from '../../lib/google/oauth';
 import { getAccessToken, getNarrowAccessToken, requireGmail, withGmailToken, HttpError } from '../../lib/google/server';
 import { seal, tokenAad } from '../../lib/google/crypto';
 import { serviceActive, type GoogleStatus } from '../../services/driveService';
@@ -108,6 +108,23 @@ describe('tokens are used only for the service the user enabled', () => {
     try { requireGmail(); } catch (e) { expect((e as HttpError).code).toBe('gmail_disabled'); }
     vi.stubEnv('GMAIL_INTEGRATION_ENABLED', '1');
     expect(requireGmail().enabled).toBe(true);
+  });
+});
+
+describe('RUN 03B: network failures are logged by class only', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('a timed-out token exchange says which network failure happened, never the URL, code or secret', async () => {
+    const t = Object.assign(new Error('The operation was aborted due to timeout https://oauth2.googleapis.com/token?code=4/abc'), { name: 'TimeoutError' });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw t; }));
+    const e = await exchangeCode(cfg, '4/secret-code', 'verifier').catch((x) => x);
+    expect(e).toBeInstanceOf(GoogleOAuthError);
+    expect(e.code).toBe('unavailable');
+    expect(e.reason).toBe('TimeoutError');
+    const c = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET', message: 'socket hang up 1//refresh' } });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw c; }));
+    const e2 = await exchangeCode(cfg, '4/secret-code', 'verifier').catch((x) => x);
+    expect(e2.reason).toBe('TypeError/ECONNRESET');
+    expect(JSON.stringify({ r: e.reason, r2: e2.reason })).not.toMatch(/4\/|1\/\/|http/);
   });
 });
 

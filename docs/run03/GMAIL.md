@@ -57,7 +57,8 @@ Chyby: 429 / 403 rateLimit → „Příliš mnoho požadavků na Gmail“, 403 �
 frontend/scripts/gmail-stack.sh up          # izolovaný stack cs-gmail-sb (55550-55559, mail 55564/55565), migrace vč. 1300
 frontend/scripts/gmail-stack.sh mock        # Google + Gmail MOCK na 127.0.0.1:55591 (SIMULACE)
 frontend/scripts/gmail-stack.sh app         # http://127.0.0.1:3451/settings?login=auto  (DEV login, Gmail zapnutý, Monograph k dispozici)
-frontend/scripts/gmail-live.sh verify|app   # tatáž aplikace proti SKUTEČNÉMU Googlu (Keychain z RUN 02B) – viz LIVE_ACCEPTANCE.md
+frontend/scripts/gmail-live.sh verify|app|revoke-check   # tatáž aplikace proti SKUTEČNÉMU Googlu (Keychain z RUN 02B) – viz LIVE_ACCEPTANCE.md
+node frontend/supabase/tests/gmail_live_gate.mjs [expect-no-gmail]   # živá brána: Picker token jen Drive (tokeninfo + Gmail 403)
 eval "$(frontend/scripts/gmail-stack.sh env)"
 ```
 Po změně migrace spusťte znovu `gmail-stack.sh up` (PostgREST si načte schéma). Pro E2E aplikaci spusťte s `DEV_AUTO_LOGIN=0`.
@@ -82,9 +83,15 @@ zúženým `scope`, revokaci celého grantu, schránky po účtech (česká synt
 newsletter s pixelem/skriptem/iframe/formulářem, windows-1250, rozbité UTF-8, dlouhá a prázdná zpráva, smazaná mezi list/get, duplicitní id,
 XSS předmět, prompt-injection text), `q` (from/subject/after/before/text), stránkování, 401/403/404/429/503. V UI vše označeno „simulace“.
 
+## 5b. Živá akceptace (RUN 03B, 2026-11-25, skutečný Google)
+**PASS 20/20** (detail `LIVE_ACCEPTANCE.md` §E), kritická brána zúžení tokenu pro Picker **PASS** se zapnutým i vypnutým Gmailem.
+Po merge `run02c-complete` znovu: Vitest **1334/1334**, DB **2301** PASS (upgrade 1200→1300, rollback 1300), Gmail HTTP **23/23**, Drive HTTP **28/28**,
+`collab_realtime` 64/64, `realtime_check` PASS, `invite_email` 41/41, E2E Gmail + Drive PASS Klasika i Monograph, RUN 01 E2E jen TD-1/TD-2,
+demo Playwright 27/118/0, build + guard **65/65**, `/api/dev/login` 404. `real_stack.sh` v 03B znovu nespuštěn (DB beze změny od RUN 03 PASS).
+
 ## 6. Známá omezení
-1. Živý Gmail neověřen (kroky vlastníka). Restricted scope ⇒ veřejně jen po ověření + CASA.
-2. Odkaz „Otevřít v Gmailu“ (`/mail/u/0/#all/<threadId>`) není oficiálně dokumentovaný a otevírá účet 0 prohlížeče.
+1. Restricted scope ⇒ veřejně jen po ověření + CASA; produkční Gmail je dle rozhodnutí vlastníka vypnutý (`PRODUCTION_ROLLOUT.md` §0).
+2. Odkaz „Otevřít v Gmailu“ (`/mail/u/0/#all/<threadId>`) není oficiálně dokumentovaný; živě funguje (Gmail přepíše id), otevírá účet 0 prohlížeče.
 3. Počet příloh se zjistí až při prvním náhledu vlastníkem (vyhledávání a připojení používají jen `format=metadata`).
 4. Stejný e-mail připojený dvěma lidmi = dva odkazy (různé schránky, různá id; deduplikace přes Message-ID je LATER).
 5. Odebraný člen, který byl v projektu Čtenářem, nemůže své odkazy v tom projektu smazat sám (viewer guard) – purge je hlásí jako přeskočené.

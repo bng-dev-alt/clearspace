@@ -62,12 +62,20 @@ print("DNS (Cloudflare zone luffast.com): type CNAME, name clearspace, target", 
   switch-canonical)
     need_confirm
     python3 -c 'import json,sys;print(json.dumps({"site_url": sys.argv[1]}))' "https://$NEW" | sb_auth_patch
+    # Vercel refuses to redirect a domain that others redirect TO: first point those (e.g. cearspace.vercel.app) straight at $NEW
+    for d in $("$V" api "/v9/projects/$PROJECT/domains" --raw 2>/dev/null | python3 -c 'import json,sys;print(" ".join(x["name"] for x in json.load(sys.stdin)["domains"] if x.get("redirect")==sys.argv[1]))' "$OLD"); do
+      python3 -c 'import json,sys;print(json.dumps({"redirect": sys.argv[1], "redirectStatusCode": 308}))' "$NEW" | "$V" api "/v9/projects/$PROJECT/domains/$d" -X PATCH --input - --silent >/dev/null
+      echo "ok - $d -> 308 https://$NEW (was -> $OLD)"
+    done
     python3 -c 'import json,sys;print(json.dumps({"redirect": sys.argv[1], "redirectStatusCode": 308}))' "$NEW" | "$V" api "/v9/projects/$PROJECT/domains/$OLD" -X PATCH --input - --silent >/dev/null
     echo "ok - $(show_auth)"; echo "ok - https://$OLD -> 308 https://$NEW (paths and query strings are kept; old invitation links keep working)"
     ;;
   rollback)
     need_confirm
     python3 -c 'import json;print(json.dumps({"redirect": None}))' | "$V" api "/v9/projects/$PROJECT/domains/$OLD" -X PATCH --input - --silent >/dev/null && echo "ok - $OLD serves again (no redirect)"
+    for d in $("$V" api "/v9/projects/$PROJECT/domains" --raw 2>/dev/null | python3 -c 'import json,sys;print(" ".join(x["name"] for x in json.load(sys.stdin)["domains"] if x.get("redirect")==sys.argv[1] and x["name"]!=sys.argv[2]))' "$NEW" "$OLD"); do
+      python3 -c 'import json,sys;print(json.dumps({"redirect": sys.argv[1], "redirectStatusCode": 307}))' "$OLD" | "$V" api "/v9/projects/$PROJECT/domains/$d" -X PATCH --input - --silent >/dev/null && echo "ok - $d -> $OLD again"
+    done
     python3 -c 'import json,sys;print(json.dumps({"site_url": sys.argv[1], "uri_allow_list": sys.argv[2]}))' "https://$OLD" "https://$OLD/accept-invite?token=*" | sb_auth_patch
     echo "ok - $(show_auth)"
     set_app_base_url "https://$OLD"

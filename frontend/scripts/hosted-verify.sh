@@ -2,7 +2,7 @@
 # Real-application verification against the HOSTED "ClearSpace V1" project (see e2e/supabase-hosted.spec.ts).
 #
 #  * needs a dev server on loopback WITHOUT a Gemini key:  AI_ALLOW_ALL_AUTHENTICATED=1 npm run dev -- -p 3410 -H 127.0.0.1
-#    (or BASE_URL=https://clearspace-ai.vercel.app PRODUCTION_SMOKE_OK=1 for the post-promote smoke: AI routes are then
+#    (or BASE_URL=https://clearspace.luffast.com PRODUCTION_SMOKE_OK=1 for the post-promote smoke: AI routes are then
 #     expected to answer 403 from the firewall and are never called with a real request)
 #  * creates 3 DISPOSABLE accounts (A, B confirmed; D unconfirmed) through the GoTrue admin API. The service-role
 #    key comes from the Supabase CLI into a shell variable: never printed, never written to disk, never passed
@@ -19,7 +19,7 @@ URL=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2-); ANON=$(gr
 # the PRODUCTION domain (only with PRODUCTION_SMOKE_OK=1) while the firewall deny is active -> 403 and NO provider call.
 case "$BASE" in
   http://127.0.0.1:*|http://localhost:*) AI_MODE=local;;
-  https://clearspace-ai.vercel.app) [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] || { echo "refusing the production domain without PRODUCTION_SMOKE_OK=1"; exit 2; }; AI_MODE=firewall;;
+  https://clearspace.luffast.com|https://clearspace-ai.vercel.app) [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] || { echo "refusing the production domain without PRODUCTION_SMOKE_OK=1"; exit 2; }; AI_MODE=firewall;;
   # a STAGED deployment of this project (protected by Vercel Deployment Protection): needs the bypass secret in STAGED_BYPASS_SECRET
   https://clearspace-[a-z0-9]*-bng-dev-alt-webadvisor.vercel.app)
     [ "${PRODUCTION_SMOKE_OK:-}" = 1 ] && [ -n "${STAGED_BYPASS_SECRET:-}" ] || { echo "refusing the staged URL without PRODUCTION_SMOKE_OK=1 and STAGED_BYPASS_SECRET"; exit 2; }; AI_MODE=firewall; E2E_BYPASS_SECRET=$STAGED_BYPASS_SECRET; export E2E_BYPASS_SECRET;;

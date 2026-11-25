@@ -65,6 +65,8 @@ async function connect(u, account, { service = 'drive', decision = 'allow', gran
 }
 const ANNA = '100000000000000000001', BOHDAN = '100000000000000000002', CYRIL = '100000000000000000003';
 const status = async (u) => (await app('/api/google/connection', u.token)).json;
+// RUN 04 added services.calendar (additive); this suite asserts the Drive/Gmail pair exactly as before
+const svc = (x) => ({ drive: x.drive, gmail: x.gmail });
 async function expire(u) {
   await ctl('expire-access', {});
   await admin(`/rest/v1/google_connections?user_id=eq.${u.id}`, { method: 'PATCH', body: { access_expires_at: new Date(Date.now() - 1000).toISOString() } });
@@ -116,7 +118,7 @@ ok('no Google connection -> 409 not_connected; unknown service -> 400');
 let c = await connect(O, ANNA);
 assert.equal(c.outcome, 'connected');
 st = await status(O);
-assert.deepEqual(st.connection.services, { drive: true, gmail: false });
+assert.deepEqual(svc(st.connection.services), { drive: true, gmail: false });
 assert.ok(!st.connection.scopes.includes(GMAIL));
 r = await search(O);
 assert.equal(r.status, 409); assert.equal(r.json.error, 'gmail_not_granted');
@@ -130,7 +132,7 @@ assert.equal(c.auth.searchParams.get('include_granted_scopes'), 'true');
 assert.equal(c.auth.searchParams.get('scope'), `openid email ${GMAIL}`);
 assert.equal(c.auth.searchParams.get('login_hint'), 'anna.mock@example.test');
 st = await status(O);
-assert.deepEqual(st.connection.services, { drive: true, gmail: false });
+assert.deepEqual(svc(st.connection.services), { drive: true, gmail: false });
 assert.equal(st.connection.status, 'active');
 assert.equal((await ctl('stats')).json.revocations, stats0.revocations, 'no revocation');
 assert.equal((await app('/api/google/picker-token', O.token, { method: 'POST', body: {} })).status, 200);
@@ -140,14 +142,14 @@ stats0 = (await ctl('stats')).json;
 c = await connect(O, BOHDAN, { service: 'gmail' });
 assert.equal(c.outcome, 'account_mismatch');
 st = await status(O);
-assert.equal(st.connection.email, 'anna.mock@example.test'); assert.deepEqual(st.connection.services, { drive: true, gmail: false });
+assert.equal(st.connection.email, 'anna.mock@example.test'); assert.deepEqual(svc(st.connection.services), { drive: true, gmail: false });
 assert.equal((await ctl('stats')).json.revocations, stats0.revocations + 1, 'the unused grant of the OTHER (unconnected) account is revoked');
 ok('Gmail from a different Google account: refused (account_mismatch), connected account unchanged, the stray grant revoked');
 
 c = await connect(O, ANNA, { service: 'gmail' });
 assert.equal(c.outcome, 'gmail_connected');
 st = await status(O);
-assert.deepEqual(st.connection.services, { drive: true, gmail: true });
+assert.deepEqual(svc(st.connection.services), { drive: true, gmail: true });
 assert.ok(st.connection.scopes.includes(DRIVE) && st.connection.scopes.includes(GMAIL));
 const audit = await db(`/rest/v1/integration_audit?select=event,detail&user_id=eq.${O.id}&order=id`, { token: O.token });
 assert.ok(audit.json.some((a) => a.event === 'service_added' && a.detail === 'gmail'));
@@ -236,7 +238,7 @@ ok('attach refused: viewer / outsider (403), editor without Google (409), editor
 c = await connect(E, BOHDAN, { service: 'gmail' });
 assert.equal(c.outcome, 'gmail_connected');
 st = await status(E);
-assert.deepEqual(st.connection.services, { drive: false, gmail: true });
+assert.deepEqual(svc(st.connection.services), { drive: false, gmail: true });
 assert.equal((await app('/api/google/picker-token', E.token, { method: 'POST', body: {} })).json.error, 'drive_not_granted');
 r = await app('/api/gmail/links', E.token, { method: 'POST', body: { projectId: P, cardId: CARD, items: [{ kind: 'thread', id: B_THREAD }, { kind: 'thread', id: T_OFFER }] } });
 assert.equal(r.status, 201); assert.equal(r.json.links.length, 1); assert.equal(r.json.failed[0].reason, 'not_found', 'the owner\'s thread id does not exist in the editor\'s mailbox');
@@ -322,7 +324,7 @@ ok('Gmail consent uses the same hardened flow: fixed redirect URI, forged state/
 r = await app('/api/gmail/connection', O.token, { method: 'DELETE' });
 assert.equal(r.status, 200); assert.equal(r.json.gmailRemoved, true); assert.equal(r.json.purged, null);
 st = await status(O);
-assert.deepEqual(st.connection.services, { drive: true, gmail: false }); assert.equal(st.connection.status, 'active');
+assert.deepEqual(svc(st.connection.services), { drive: true, gmail: false }); assert.equal(st.connection.status, 'active');
 assert.equal((await search(O)).json.error, 'gmail_not_granted');
 r = await app(`/api/gmail/links/${L_OFFER}/preview`, O.token);
 assert.equal(r.status, 409, 'no preview after Gmail was switched off'); assert.equal(r.json.error, 'gmail_not_granted');
@@ -331,7 +333,7 @@ assert.equal(pt.status, 200);
 assert.equal((await http(`${MOCK}/gmail/v1/users/me/messages`, { headers: { Authorization: `Bearer ${pt.json.accessToken}` } })).status, 403, 'the Picker token still cannot read Gmail (grant at Google still holds it)');
 c = await connect(O, ANNA, { service: 'drive' });
 assert.equal(c.outcome, 'connected');
-assert.deepEqual((await status(O)).connection.services, { drive: true, gmail: false }, 'reconnecting Drive does not silently re-enable Gmail although Google still returns it');
+assert.deepEqual(svc((await status(O)).connection.services), { drive: true, gmail: false }, 'reconnecting Drive does not silently re-enable Gmail although Google still returns it');
 r = await app('/api/gmail/connection?purge=1', O.token, { method: 'DELETE' });
 assert.equal(r.json.gmailRemoved, false); assert.deepEqual(r.json.purged, { removed: 8, skipped: 0 });
 assert.equal((await db(`/rest/v1/external_resource_links?project_id=eq.${P}&provider=neq.google_drive&select=id`, { token: V.token })).json.length, 1, 'only the editor\'s e-mail remains');

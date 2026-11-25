@@ -165,10 +165,11 @@ export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts
  * grant may also hold Gmail; the browser must never receive a token that can read the mailbox. Asks Google for a narrower
  * token (refresh grant with `scope`), never stores it, and refuses when Google answers with more than was asked for.
  */
-export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig, scopes: string[]): Promise<{ token: string; expiresAt: number }> {
+export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig, scopes: string[], service: GoogleService = 'drive'): Promise<{ token: string; expiresAt: number }> {
   const row = await readCreds(db, cfg, 1);
   if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
   if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
+  if (!row.scopes?.includes(SERVICE_SCOPE[service])) throw new HttpError(409, service === 'gmail' ? MSG.gmail_not_granted : MSG.drive_not_granted, `${service}_not_granted`);
   let refreshToken: string;
   try { refreshToken = open(cfg.keys, row.refresh_token_enc, tokenAad(row.user_id, 'refresh')); } catch { throw new HttpError(409, MSG.revoked, 'revoked'); }
   try {

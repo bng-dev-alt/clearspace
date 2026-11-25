@@ -51,8 +51,10 @@ export async function POST(req: NextRequest) {
       oauthLog('exchange_ok', { service, hasRefresh: Boolean(t.refreshToken), hasIdToken: Boolean(t.idToken), driveGranted: hasDriveScope(t.scopes), gmailGranted: hasService(t.scopes, 'gmail'), scopeCount: t.scopes.length, expiresIn: t.expiresIn });
       const id = parseIdToken(cfg, t.idToken);
       oauthLog('identity_ok', { subLength: id.sub.length });
-      const { data: subData } = await db.rpc('google_connection_sub', { p_server_secret: cfg.serverSecret, p_candidate_sub: id.sub });
+      const { data: subData, error: subErr } = await db.rpc('google_connection_sub', { p_server_secret: cfg.serverSecret, p_candidate_sub: id.sub });
       const sub = (Array.isArray(subData) ? subData[0] : subData) as { own_sub: string | null; candidate_in_use: boolean } | undefined;
+      // fail CLOSED: without knowing who else depends on this grant we neither store nor revoke anything
+      if (subErr || !sub) { oauthLog('complete_failed', { stage: 'account_lookup', pgCode: subErr?.code }); return reply('error', row.return_to); }
       const existing = sub?.own_sub ?? null;
       // A Google grant is revoked only as a WHOLE (all services, every ClearSpace user of that Google account). So a token
       // we do not keep is revoked only when nothing else depends on that grant.

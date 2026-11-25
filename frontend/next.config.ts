@@ -26,7 +26,8 @@ export const securityHeaders = [
  * request URL, which would put the code into the terminal / log files: never log that route (RUN 02B finding). Production servers
  * do not print request URLs this way; this only concerns development.
  */
-export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/];
+// RUN 03: Gmail search URLs carry the user's search terms (private) -- never printed either.
+export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/, /\/api\/gmail\//];
 
 const nextConfig: NextConfig = {
   logging: { incomingRequests: { ignore: noRequestLogPaths } },

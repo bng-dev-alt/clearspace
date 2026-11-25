@@ -10,6 +10,8 @@
 #   frontend/scripts/google-live.sh status    # which items exist (never values)
 #   frontend/scripts/google-live.sh verify    # proves the client id/secret/redirect URI are accepted BY GOOGLE (no login, no consent)
 #   frontend/scripts/google-live.sh app       # next dev on 127.0.0.1:3441, real Google, GOOGLE_API_MOCK_BASE unset
+#   frontend/scripts/google-live.sh revoke-check  # disconnects the owner for real and proves the grant is dead AT GOOGLE (reconnect after)
+#   frontend/scripts/google-live.sh doc-check     # read-only live check of the native Doc preview / refresh / open-original (after the manual steps)
 #   frontend/scripts/google-live.sh forget    # delete the Keychain items
 # Mock mode stays available: frontend/scripts/drive-stack.sh mock + app (the two never run at the same time).
 set -euo pipefail
@@ -92,8 +94,23 @@ case "${1:-}" in
     echo "real Google; client secret format: GOCSPX; APP_BASE_URL=$APP_BASE_URL; GOOGLE_API_MOCK_BASE=${GOOGLE_API_MOCK_BASE:-<unset>}; redirect URI=$REDIRECT"
     exec "$HERE/scripts/collab-stack.sh" app
     ;;
+  revoke-check)  # RUN 02B: disconnect for real, then replay the OLD refresh token -> Google must say invalid_grant (reconnect afterwards)
+    load_env
+    export COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+    eval "$("$HERE/scripts/collab-stack.sh" env)"
+    export E2E_BASE_URL=$BASE E2E_PASSWORD=$(acc COLLAB_PASSWORD)
+    exec node "$HERE/supabase/tests/google_live_revoke.mjs"
+    ;;
+  doc-check)  # RUN 02B: after the manual steps (native Doc attached at project level via the real Picker, then renamed in Drive)
+    load_env
+    export COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
+    eval "$("$HERE/scripts/collab-stack.sh" env)"
+    cd "$HERE" && E2E_LIVE_DOC=1 E2E_PASSWORD=$(acc COLLAB_PASSWORD) DEV_AUTO_LOGIN=0 PLAYWRIGHT_TEST_BASE_URL=$BASE \
+      PW_CHROMIUM_PATH=${PW_CHROMIUM_PATH:-$(find "$HOME/Library/Caches/ms-playwright" -path '*chromium_headless_shell*' -name chrome-headless-shell -type f 2>/dev/null | head -1)} \
+      exec npx playwright test e2e/google-drive-live-doc.spec.ts --reporter=line
+    ;;
   forget)
     for a in "${ACCOUNTS[@]}"; do security delete-generic-password -s "$SVC" -a "$a" >/dev/null 2>&1 && echo "deleted $a" || echo "$a: nothing to delete"; done
     ;;
-  *) echo "usage: $0 setup|status|verify|app|forget"; exit 2;;
+  *) echo "usage: $0 setup|status|verify|app|revoke-check|doc-check|forget"; exit 2;;
 esac

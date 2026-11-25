@@ -245,7 +245,7 @@ Test files: dedicated harmless files in the owner's own Drive (one JPEG, one Wor
 | 10 | Duplicate protection | **LIVE PASS** | same real file again → `duplicate: true`, still 1 row |
 | 11 | Realtime between members | **LIVE PASS** | editor + viewer on the dialog, no reload: attach seen after ≈540 ms (incl. the real Drive call), removal after ≈115 ms |
 | 12 | Activity events | **LIVE PASS** | `drive_file_linked/unlinked` per persisted change, actor verified, none for duplicates/refreshes; timeline shows the Czech sentence |
-| 13 | Roles | **LIVE PASS** | editor: remove only (not connected → no add), viewer: no add/remove; outsider via RLS (mock + DB suites) |
+| 13 | Roles | **LIVE PASS** | editor without own Google connection: remove yes, add no (see §14 – a Google rule, not a ClearSpace one); viewer: neither; outsider via RLS (mock + DB suites) |
 | 14 | ClearSpace vs Google permissions | **PARTIAL** | teammate without own Google connection gets „Nejprve připojte…“ and no content; **second real Google account NOT VERIFIED** |
 | 15 | Persistence | **LIVE PASS** | connection `active` across app restarts / reloads |
 | 16 | Access-token refresh | **LIVE PASS** | stored token expired → server refreshed with the real refresh token at Google (`token_version` 1→2, +60 min); browser got only the access token |
@@ -255,7 +255,7 @@ Test files: dedicated harmless files in the owner's own Drive (one JPEG, one Wor
 | 20 | Classic + Monograph | **LIVE PASS** | DOM assertions, desktop light + mobile dark, no horizontal overflow, no „simulace“ label |
 | – | Rename in Drive → *Obnovit informace* | **NOT VERIFIED live** | mock only |
 | – | 7-day refresh-token expiry (Testing) | **NOT VERIFIED** | needs ≥ 7 days; documented behaviour |
-| – | Revocation at Google on disconnect | **NOT VERIFIED** | result of the revoke call not captured |
+| – | Revocation at Google on disconnect | **LIVE PASS** (closeout, §14) | `google-live.sh revoke-check`: old refresh token live (200) → product disconnect (`revokedAtGoogle:true`) → same token now `invalid_grant` |
 
 **Verdict: CONDITIONAL PASS** – the core real-Google path (OAuth, Picker, Drive API, refresh, attach, realtime, events, roles, disconnect/
 reconnect, UI in both styles) is live-verified; the items marked NOT VERIFIED remain open. Mock results are never counted as live.
@@ -269,3 +269,38 @@ E2E_LIVE_REALTIME=1 E2E_LIVE_FILE_ID=<an already picked Drive id> E2E_PASSWORD=�
 ### 13.4 Testing-mode limits (observed behaviour to plan for)
 Refresh tokens of an External app in *Testing* expire after 7 days (re-consent: „Znovu připojit účet“); ≤100 test users; the consent screen
 shows the unverified-app warning (Advanced → Go to ClearSpace). A public portfolio must not claim Google Drive is available to everyone.
+
+## 14. RUN 02B closeout (2026-11-25)
+
+### 14.1 Permission model of Drive links (audit; no inconsistency found)
+Two **independent** layers (unchanged since RUN 02, now pinned by tests):
+
+| Question | Decided by | Rule |
+|---|---|---|
+| May this user **add / remove** a link (the association in ClearSpace)? | **ClearSpace role** | add: `can_edit_project` (owner, admin, member) inside `drive_link_add`; remove: RLS DELETE `can_edit_project`; both also behind `collab_guard_write` (viewer = read-only). Identical to ordinary task attachments (`task_resources`: member of the project, viewer blocked by the same guard). |
+| Can this user's **Picker / Drive call** see the file? | **Google**, `drive.file` is per user and per file | the caller's OWN token is used; ClearSpace never lends one user's token to another and never changes Google sharing. |
+
+Consequence: **an editor can both add and remove**. The earlier report line "editor: remove only" described the live run in which the
+tested editor had **no Google account connected** (adding needs the caller's own connection to open the Picker and read the metadata; removal needs
+none). It was a test condition, not a permission difference. Evidence: DB suite `92_google_drive.sql` (editor adds/dedupes/removes, viewer refused
+on add, remove and refresh), unit matrix `driveLinksPanel.test.tsx` "role matrix" (editor+Google: add+remove; editor without Google: remove only;
+viewer: neither), mock browser E2E `google-drive.spec.ts` (editor/viewer/outsider), live realtime spec (editor and viewer see changes).
+Still **NOT VERIFIED live: a second real Google account** (an editor who connects *their own* Google and adds a file).
+
+### 14.2 Disconnect vs. revocation at Google (LIVE PASS)
+* **Local disconnect** (`DELETE /api/google/connection`): decrypts the stored refresh token, calls `https://oauth2.googleapis.com/revoke`
+  (best effort), then `google_disconnect` deletes the encrypted credentials. Links stay; Google sharing is not touched. Response carries
+  `revokedAtGoogle` (UI tells the user when Google could not be reached and where to remove the grant manually: myaccount.google.com/permissions).
+* **Real revocation proof** (`frontend/scripts/google-live.sh revoke-check`, in-memory token, only statuses printed): before disconnect the old
+  refresh token → HTTP 200 (access token issued); after the product's own disconnect → `revokedAtGoogle: true` and the same token → HTTP 400
+  `invalid_grant`. So the grant is dead at Google, not just forgotten locally. The connection row is gone (0 rows). The owner reconnects with one click.
+
+### 14.3 Re-check of production protections
+* DEV login: production build made with **all dev flags deliberately set** (`CLEARSPACE_DEV_LOGIN`, `NEXT_PUBLIC_DEV_LOGIN`, `NEXT_PUBLIC_DEV_AUTO_LOGIN`, a
+  dummy `DEV_LOGIN_PASSWORD`): bundle guard 48/48 ok (no dev-login string, no dummy password anywhere in `.next`); `next start` with the same
+  flags: `POST /api/dev/login` → **404**, no dev-login button on `/login`. Unit tests `devLogin`/`devAutoLogin` green.
+* OAuth callback logs: dev log of the real-Google run has no `code=`, `state=`, token or secret (only the format label `GOCSPX`); old mock log contains
+  mock codes only. `next.config.ts` ignores the callback path in request logging; `oauthLog` drops strings > 80 chars and never receives tokens.
+
+### 14.4 Known baseline E2E failures
+Recorded in `docs/TECH_DEBT.md` (TD-1, TD-2); both fail identically on `run01-complete`.

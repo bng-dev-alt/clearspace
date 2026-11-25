@@ -68,6 +68,23 @@ describe('DriveLinksPanel', () => {
     expect(await screen.findByTestId('drive-reconnect')).toBeTruthy();
   });
 
+  // Permission matrix (RUN 02B closeout): the CLEARSPACE role decides who may change the associations (same rule as ordinary
+  // attachments: owner/admin/member = editor+; viewer = read only). Adding ALSO needs the caller's OWN Google connection, because
+  // drive.file lets the Picker/Drive API see only the files THAT user grants -- that is Google's rule, not a ClearSpace permission.
+  it.each([
+    ['editor, own Google connected', true, true, true, true],
+    ['editor WITHOUT own Google connection', true, false, false, true],
+    ['viewer, Google connected', false, true, false, false],
+    ['viewer, no Google connection', false, false, false, false],
+  ])('role matrix: %s', async (_label, canEdit, isConnected, canAdd, canRemove) => {
+    h.status.mockResolvedValue(isConnected ? connected : { configured: true, connection: null });
+    render(<DriveLinksPanel projectId="p1" canEdit={canEdit} returnTo="/projects/p1" />);
+    await screen.findByText('Rozpočet projektu Q1');
+    await waitFor(() => expect(h.status).toHaveBeenCalled());
+    await waitFor(() => expect(Boolean(screen.queryByTestId('drive-attach'))).toBe(canAdd));
+    expect(screen.queryAllByTestId('drive-remove').length > 0).toBe(canRemove);
+  });
+
   it('remove asks first, says the Drive file stays, then removes only the association', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     h.remove.mockResolvedValue(undefined);

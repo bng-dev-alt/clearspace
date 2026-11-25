@@ -55,7 +55,8 @@ case "${1:-}" in
     prod=$("$V" api "/v9/projects/$PROJECT" --raw 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["targets"]["production"]["id"])')
     keys() { "$V" api "/v13/deployments/$1" --raw 2>/dev/null | python3 -c 'import json,sys;print("\n".join(sorted(k for k in (json.load(sys.stdin).get("build") or {}).get("env") or [] if not k.startswith(("VERCEL","TURBO","NX_")))))'; }
     host=${URL#https://}; diff <(keys "$prod") <(keys "$host") | grep -E '^[<>]' | sed 's/^</   only in current production:/; s/^>/   only in staged:/'
-    keys "$host" | grep -qx NEXT_PUBLIC_ENABLE_MONOGRAPH && ok "NEXT_PUBLIC_ENABLE_MONOGRAPH baked into the staged build" || bad "NEXT_PUBLIC_ENABLE_MONOGRAPH missing (Monograph would vanish)"
+    # Monograph is the default in every build since RUN 02C (only NEXT_PUBLIC_ENABLE_MONOGRAPH=0 turns it off); the deploy still passes =1 explicitly
+    keys "$host" | grep -qx NEXT_PUBLIC_ENABLE_MONOGRAPH && ok "NEXT_PUBLIC_ENABLE_MONOGRAPH passed explicitly" || ok "no NEXT_PUBLIC_ENABLE_MONOGRAPH in build.env (Monograph stays the default)"
     echo "== black-box checks"
     MODE=vercel DEPLOYMENT="$URL" EXPECT_DRIVE=1 bash "$FRONTEND/scripts/check-deployment.sh" "$URL" || fail=1
     echo "NOTE: Google OAuth cannot be exercised on the staged URL (not an authorized redirect URI): it is accepted after promote (PRODUCTION_ACCEPTANCE.md)."

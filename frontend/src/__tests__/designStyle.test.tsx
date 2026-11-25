@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { resolveDesignStyle } from '../lib/designStyle';
 
-// Původní no-flash skript (před Monograph integrací). Bez příznaku musí zůstat znak po znaku stejný.
+// Původní no-flash skript (před Monograph integrací). S vypnutým Monographem (=0) musí zůstat znak po znaku stejný.
 const ORIGINAL_NO_FLASH = `(function(){try{var t=localStorage.getItem('clearspace-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 describe('resolveDesignStyle (čistá logika)', () => {
@@ -19,7 +19,7 @@ describe('resolveDesignStyle (čistá logika)', () => {
   });
 });
 
-async function loadTheme(flag: '1' | '') {
+async function loadTheme(flag: '1' | '' | '0') {
   vi.resetModules();
   vi.stubEnv('NEXT_PUBLIC_ENABLE_MONOGRAPH', flag);
   return import('../contexts/ThemeContext');
@@ -44,9 +44,9 @@ describe('ThemeProvider + příznak NEXT_PUBLIC_ENABLE_MONOGRAPH', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it('příznak vypnutý: uložený monograph se ignoruje, data-style se nenastaví, no-flash skript je beze změny', async () => {
+  it('vypnuto (=0): uložený monograph se ignoruje, data-style se nenastaví, no-flash skript je beze změny', async () => {
     localStorage.setItem('clearspace-style', 'monograph');
-    const m = await loadTheme('');
+    const m = await loadTheme('0');
     expect(m.themeNoFlashScript).toBe(ORIGINAL_NO_FLASH);
     render(<m.ThemeProvider><Probe useTheme={m.useTheme} /></m.ThemeProvider>);
     expect(screen.getByTestId('style').textContent).toBe('existing');
@@ -57,8 +57,8 @@ describe('ThemeProvider + příznak NEXT_PUBLIC_ENABLE_MONOGRAPH', () => {
     expect(screen.getByTestId('style').textContent).toBe('existing');
   });
 
-  it('příznak zapnutý: nový uživatel = Monograph; výslovná volba Classic se uloží a respektuje; světlý/tmavý zůstává nezávislý', async () => {
-    const m = await loadTheme('1');
+  it.each(['1', ''] as const)('příznak %j (bez příznaku = výchozí): nový uživatel = Monograph; výslovná volba Classic se uloží a respektuje; světlý/tmavý zůstává nezávislý', async (flag) => {
+    const m = await loadTheme(flag);
     expect(m.themeNoFlashScript.startsWith(ORIGINAL_NO_FLASH)).toBe(true);
     // no-flash: bez uložené volby nastaví data-style ještě před vykreslením, s volbou 'existing' ne
     document.documentElement.removeAttribute('data-style');

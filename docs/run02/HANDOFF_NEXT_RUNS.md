@@ -32,6 +32,7 @@ Zdroj: větev `release/run02-google-drive` (commity po `run02-complete`; po G10 
 | `src/lib/google/labels.ts` (`PILOT_TEXT`), `src/components/drive/GoogleConnectionCard.tsx`, `DriveLinksPanel.tsx` | hláška pilotu, odkaz na zásady | ano, pokud RUN 03 rozšiřuje kartu Google |
 | `src/app/privacy/page.tsx`, `src/app/about/page.tsx`, `src/components/legal/PublicPage.tsx`, `ProtectedRoute.tsx`, `login/page.tsx`, `globals.css` (konec souboru) | veřejné stránky | **RUN 03 musí zásady rozšířit o Gmail** (restricted scopes ⇒ Limited Use závazně, bezpečnostní posouzení CASA, ověření aplikace) |
 | `src/app/api/dev/login/route.ts` | 404 pro všechny metody | ne |
+| `src/lib/designStyle.ts`, `ThemeContext.tsx`, `Navbar.tsx`, `designStyle.test.tsx`, `playwright.config.ts` | **Monograph je výchozí vzhled v každém buildu** (dřív jen s `NEXT_PUBLIC_ENABLE_MONOGRAPH=1`); vypíná jen `=0`; výslovná volba Classic se dál respektuje | ne |
 | `scripts/set-google-keys.sh`, `check-deployment.sh`, `domain-cutover.sh`, `deploy-drive-staged.sh`, `rehearse-drive-prod.sh` | provozní brány | rozšířit o Gmail proměnné / migraci (vzor `rehearse-drive-prod.sh`) |
 | Migrace 1200 | **beze změny** (checksum `8c0b4b06…`) | ne |
 Provozní fakta pro RUN 03: produkční doména `https://clearspace.luffast.com`; Google projekt `clearspace-prod` (Gmail přidá scopes do téhož projektu

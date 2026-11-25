@@ -12,7 +12,7 @@ interface ThemeContextType {
   theme: ThemeChoice;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: ThemeChoice) => void;
-  /** Designový styl (opt-in Monograph, viz lib/designStyle.ts). Bez příznaku je vždy 'existing'. */
+  /** Designový styl (výchozí Monograph, viz lib/designStyle.ts). Jen s NEXT_PUBLIC_ENABLE_MONOGRAPH=0 vždy 'existing'. */
   designStyle: DesignStyle;
   setDesignStyle: (style: DesignStyle) => void;
 }
@@ -119,8 +119,8 @@ export function useTheme() {
 }
 
 /**
- * Inline skript pro <head>, který nastaví data-theme (a jen při zapnutém příznaku i data-style) před prvním vykreslením.
- * Bez NEXT_PUBLIC_ENABLE_MONOGRAPH=1 je skript znak po znaku stejný jako dřív.
+ * Inline skript pro <head>, který nastaví data-theme (a pokud Monograph není vypnutý, i data-style) před prvním vykreslením.
+ * S NEXT_PUBLIC_ENABLE_MONOGRAPH=0 je skript znak po znaku stejný jako před Monographem.
  */
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 const STYLE_SCRIPT = `(function(){try{if(localStorage.getItem('${STYLE_STORAGE_KEY}')!=='existing')document.documentElement.setAttribute('data-style','monograph');}catch(e){}})();`;

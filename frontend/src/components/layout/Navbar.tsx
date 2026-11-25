@@ -26,7 +26,7 @@ const STYLE_OPTIONS: { value: DesignStyle; label: string }[] = [
   { value: 'monograph', label: 'Monograph' },
 ];
 
-/** Výběr designového stylu. Existuje jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=1; Monograph pak následuje přepínač motivu (světlý/tmavý). */
+/** Výběr designového stylu. Chybí jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=0; Monograph pak následuje přepínač motivu (světlý/tmavý). */
 function StyleToggle() {
   const { designStyle, setDesignStyle } = useTheme();
   return (

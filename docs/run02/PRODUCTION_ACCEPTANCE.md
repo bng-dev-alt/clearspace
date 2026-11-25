@@ -37,6 +37,7 @@ Mock výsledky nejsou live důkaz; každá položka je označena **LIVE** / **MO
 | Zásady: přesně popsaná data z Google (jen vybrané soubory, ukládaná metadata, šifrované tokeny, týmový přístup ≠ přístup k obsahu, odpojení, odebrání odkazu, výmaz, žádný obsah Disku do AI, Limited Use prohlášení); správce a kontakt **jen ze serverových env** `PRIVACY_CONTROLLER`, `PRIVACY_CONTACT_EMAIL` (nic nevymyšleno, nic osobního v repozitáři); bez nich stránka uvede, že kontakt chybí, a staged brána neprojde | pravdivost, soukromí vlastníka |
 | `GOOGLE_OAUTH_PUBLISHING` ≠ `production` ⇒ v Nastavení a u souborů hláška **„Omezený pilotní provoz: Google Disk zatím mohou připojit jen schválené testovací účty Google…“** | Testing režim se nevydává za veřejnou funkci |
 | `/api/dev/login` → 404 i pro GET/PUT/PATCH/DELETE | produkce odpovídala 405 (existence trasy) |
+| **Monograph = výchozí vzhled v každém buildu** (`NEXT_PUBLIC_ENABLE_MONOGRAPH` už není potřeba; vypíná jen `=0`; uložená volba Classic se respektuje) | požadavek vlastníka; zároveň odstraňuje riziko z 2026-11-25 (build bez `--build-env` ztratil Monograph) |
 | Odkaz „O aplikaci · Ochrana osobních údajů“ na přihlašovací stránce, odkaz na zásady v kartě Google | dostupnost zásad |
 | Skripty: `rehearse-drive-prod.sh`, `domain-cutover.sh`, `deploy-drive-staged.sh`; `check-deployment.sh` (`EXPECT_DRIVE=1`); `set-google-keys.sh` (tělo požadavku přes stdin – žádný dočasný soubor; odmítne DEV client ID/secret/Picker key; volitelný kontakt správce) | provozní brány, poučení z RUN 02B |
 Migrace 1200 **beze změny** (checksum `8c0b4b06…` = nacvičený soubor).
@@ -132,7 +133,7 @@ s produkcí, `check-deployment.sh` s `EXPECT_DRIVE=1`: firewall, hlavičky, DEV 
 | G10 | Merge `release/run02-google-drive` → `main`, push, tag `run02c-complete` | agent po schválení | jen po G8 PASS |
 
 ## 10. Souhrnná žádost o schválení
-> „Schvaluji RUN 02C pro `release/run02-google-drive` (commit dle tagu `run02c-ready`): (1) přidání `clearspace.luffast.com` do Vercel projektu
+> „Schvaluji RUN 02C pro `release/run02-google-drive` (HEAD větve = tag `run02c-ready` + commit „Monograph výchozí“): (1) přidání `clearspace.luffast.com` do Vercel projektu
 > `clearspace` a CNAME `clearspace` → `55517e6e972f6ddf.vercel-dns-017.com` (DNS only) v zóně luffast.com; (2) změnu Production env `APP_BASE_URL` na
 > `https://clearspace.luffast.com` a doplnění `GOOGLE_*`/`PRIVACY_*` přes `set-google-keys.sh`; (3) Supabase Auth: allow-list obou
 > `…/accept-invite?token=*`, po promote Site URL na novou doménu; (4) migraci 1200 na `twjlnsxjtuntujarwner` skriptem `apply-drive-hosted.sh`;

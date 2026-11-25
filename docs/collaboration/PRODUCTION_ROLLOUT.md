@@ -1,6 +1,6 @@
 # ClearSpace V1 – spolupráce a pozvánky e-mailem: produkční nasazení (RUN 01C)
 
-Stav (2026-11-25): **nasazeno na produkci a ověřeno** – záznam a výsledky v oddílu 10. Zbývá živý test s vašimi skutečnými adresami (oddíl 7).
+Stav (2026-11-25): **RUN 01 = PASS v rozsahu ověřených funkcí** (nasazeno, ověřeno technicky i ručním akceptačním testem vlastníka) – oddíly 10 a 11.
 Oddíly 1–9 zůstávají jako postup a podklad pro případný rollback (oddíl 6).
 
 ## 1. Zjištěný stav (2026-11-24, jen čtení)
@@ -211,3 +211,24 @@ vypadají konzistentně; účty i testovací projekt smazány. Preflight živéh
 Zpět na verzi bez Monographu: `vercel promote dpl_7RtvpN81SKBk4UzMLA92G48g8kWc`; na RC5: `vercel promote dpl_HHk26E8sEJs1wF57mZeMkcNqzqbb` (jen spolu s rollbackem DB, oddíl 6).
 Poznámka: kdo si dřív výslovně zvolil „Stávající“, má ho uložené a Monograph uvidí až po přepnutí v liště.
 Ponaučení: před každým dalším nasazením porovnat `build.env` s předchozí produkcí (`vercel api /v13/deployments/<id>`).
+
+## 11. Akceptace a uzavření RUN 01 (2026-11-25)
+
+**Stav: PASS v rozsahu ověřených funkcí.** Rozlišuji, kdo co ověřil.
+
+### Ověřeno technicky (automaticky / read-only dotazy do produkce)
+* Migrace 1000 + 1100, záloha, Realtime jen privátní, presence, izolace kanálů, RLS a oprávnění funkcí, firewall, DNS, Vercel proměnné, Supabase Auth, česká šablona (oddíl 10).
+* Automatické testy na produkční doméně s jednorázovými účty: `hosted-verify.sh` 16/16 + Realtime 9/9; `hosted-collab-accept.sh` (pozvánka → přijetí → přístup → živý úkol → presence → použitý odkaz neplatí → odebrání ruší přístup); Monograph + kolaborativní UI.
+* **Stopa ručního testu v databázi (read-only):** nový potvrzený účet testovací adresy A (vznikl 09:23; adresa se v dokumentaci záměrně neuvádí, repozitář je veřejný), pozvánka do projektu „Akceptacni test pozvánek“ (role `member`) vytvořena 09:21:38 a **přijata 09:23:56**, **1 záznam o doručení**: `kind=invite`, `status=accepted`, `transport=smtp`, bez chybového kódu, s ID zprávy poštovního serveru; 4 notifikace, +1 komentář; dále jedna dříve zrušená pozvánka na úrovni workspace (`rejected`, bez e-mailu).
+* Dostupnost: preflight OK, `/login` 200, `/api/ai/*` 403; dataset RUN 00 kompletní (14 projektů, 154 úkolů, `verify` bez chyb).
+
+### Potvrzeno uživatelem (ruční test, bez technického důkazu z mé strany)
+* Skutečné doručení e-mailu do schránky, registrace, potvrzovací e-mail Supabase a jeho odkaz, přijetí pozvánky a realtime spolupráce („100 %“).
+* **Nemám technický důkaz** pro: umístění ve schránce/spam, hlavičky SPF/DKIM/DMARC a stav *Delivered* v Resend (nemám k Resendu přístup). Databáze potvrzuje jen „server převzal zprávu“, ne doručení do schránky.
+
+### Mimo rozsah tohoto PASS (nezkoušeno s reálnými adresami; části pokryty automatickými testy)
+Role Čtenář u skutečného pozvaného (B), opakované odeslání a jeho minutový limit, zrušení čekající pozvánky a odebrání člena se skutečnými účty. V databázi po ručním testu nejsou žádné stopy těchto kroků (jedna pozvánka do projektu, jeden pokus o doručení). Automaticky na produkci s jednorázovými účty ověřeno přijetí, přístup, odebrání člena a neplatnost použitého odkazu; opakované odeslání a zrušení jen lokálně (`invite_email.mjs` 41/41, `collaboration-01b`).
+
+### Baseline po testu (nemazáno, vše ponecháno)
+18 projektů (14 RUN 00 + 4 skutečné včetně testovacího „Akceptacni test pozvánek“), 183 úkolů, 90 členů projektů, 43 komentářů, 297 záznamů historie, 3 účty (z toho testovací účet adresy A), 2 pozvánky, 1 doručení, 4 notifikace. Řádek `baseline` v `live-acceptance-preflight.sh` je jen informativní; nový referenční stav je tento (původně 17 projektů / 182 úkolů / 0 pozvánek / 2 účty).
+Testovací projekt a účet **nebyly smazány** (bez výslovného souhlasu); úklid podle LIVE_ACCEPTANCE_TEST.md §7 kdykoli na pokyn.

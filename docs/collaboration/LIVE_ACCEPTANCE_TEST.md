@@ -1,5 +1,7 @@
 # Živý akceptační test e-mailových pozvánek (produkce)
 
+> **Proveden 2026-11-25 vlastníkem (ručně), výsledek viz PRODUCTION_ROLLOUT.md §11.** Dokument zůstává jako opakovatelný postup; referenční baseline po testu je tam uvedený (ne 17/182/0).
+
 Stav (2026-11-25): **prostředí je připravené, nic se neodeslalo.** Skutečné e-maily vzniknou až ve chvíli, kdy vy v aplikaci kliknete
 na „Pozvat“ na adresu, kterou sami určíte. Já žádný e-mail neposílám.
 

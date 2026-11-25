@@ -50,3 +50,15 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
   kontrola citlivých dat v produkčních logách je možná jen krátce po akci. Pro audit delší historie by byl potřeba Log Drain nebo vyšší plán.
 * Zamítnutý souhlas (`access_denied`) se neaudituje do `integration_audit` (jen `scope_denied`); stačí pro pilot, případně doplnit událost `denied`.
 * Výměna produkčního Picker API klíče čeká na vlastníka (`set-google-keys.sh rotate-picker`, PRODUCTION_ACCEPTANCE.md §11a).
+
+## RUN 04 (Google Calendar) – vědomá omezení a zjištění
+* TD-1 a TD-2 padají stejně (E2E RUN 01: 10 passed + 2 failed); nic nového.
+* **Klasika: navbar přetéká vodorovně při šířce 1024 px** (`navbar-right` končí na ~1136 px; Monograph ne). Zjištěno při živé kontrole kalendáře,
+  není z RUN 04 (týká se všech stránek s navbarem). Návrh: zúžit/zalomit `navbar-right` pod 1140 px.
+* Kalendář: na plném dni „+N další“ bez rozbalení na desktopu (původní chování kalendáře úkolů); vlastní událost, která je i připojená, se zobrazí
+  dvakrát (vrstva + událost projektu).
+* Sdílená metadata událostí obnovuje jen vlastník odkazu (žádný sync); stejná událost od dvou lidí = dva odkazy (dedup přes iCalUID LATER).
+* `/about` sekce Kalendář se renderuje při buildu (změna přepínače = redeploy).
+* Živě NEOVĚŘENO: odškrtnutí Calendar na granulární obrazovce (Google ho pro jeden scope neukáže), `confidential` (UI ho nenabízí), podzimní DST,
+  410 Gone, druhý Google účet, 7denní expirace, revokace z myaccount (viz `docs/run04/LIVE_ACCEPTANCE.md` §D).
+* `monograph-prodcheck.mjs`: přepínač/rail v navbaru se na produkci odhlášeně neověří (beze změny z RUN 03C).

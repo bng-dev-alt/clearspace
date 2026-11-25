@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 03C)
+# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 04)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -13,7 +13,8 @@
 | 03B | Upstream merge `run02c-complete` + Gmail live acceptance (dev projekt, Testing) | **HOTOVO 2026-11-25** (PASS 20/20; NOT VERIFIED: druhý Google účet, Workspace blokace, 7denní expirace, odškrtnutí checkboxu) | `docs/run03/LIVE_ACCEPTANCE.md` §E |
 | **03C** | Konsolidace do `main` + produkční nasazení s Gmailem vypnutým (migrace 1300 před kódem) | **HOTOVO 2026-11-25, tag `run03c-complete`**: `dpl_3wGY3njT…` z `e9aefbc`, produkční brány 110/110 + hosted 17/17, Gmail containment ověřen | `docs/run03/PRODUCTION_ACCEPTANCE.md` |
 | později | **Veřejná syntetická ukázka Gmailu** pro návštěvníky portfolia (bez připojení vlastní schránky; syntetická schránka na serveru, jasně označená) | návrh, neimplementováno | `docs/run03/HANDOFF_NEXT_RUNS.md` |
-| 04 | Google Calendar | **další**; větev z `main` po RUN 03C; základ z RUN 02/03 ověřen živě | `docs/run03/HANDOFF_NEXT_RUNS.md` |
+| **04** | **Google Calendar** (inkrementální `calendar.events.owned.readonly` – sensitive; osobní vrstva v kalendáři projektu jen pro uživatele, připojení vlastních událostí k projektům a úkolům se sdílenými metadaty a soukromým zdrojem, soukromé události nelze připojit, realtime, aktivita bez názvu, přepínač) | **HOTOVO 2026-11-26, tag `run04-complete`; v `main` a v produkci s Kalendářem VYPNUTÝM** (`dpl_FeGsSgZx…`, migrace 1400): mock + DB + E2E PASS, **živá akceptace proti skutečnému Googlu PASS** (E1–E10 kromě NOT VERIFIED v LIVE_ACCEPTANCE §D), produkční brány 122/122 + hosted 18/18 | `docs/run04/CALENDAR.md`, `LIVE_ACCEPTANCE.md`, `PRODUCTION_ACCEPTANCE.md` |
+| později | Produkční Kalendář (pilot v Testing / ověření – sensitive, bez CASA); Meeting Intelligence „porada z události“; Project Intelligence nad událostmi | rozhodnutí vlastníka / návrh | `docs/run04/HANDOFF_NEXT_RUNS.md`, `MEETING_INTELLIGENCE_COMPAT.md` |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
 * Webhooky Resend (stav *Delivered/Bounced* v `invitation_deliveries`) – dnes je znám jen „server převzal“.
@@ -24,6 +25,11 @@
 
 ## Technický dluh
 * Viz `docs/TECH_DEBT.md` (TD-1, TD-2: dva známé E2E testy, které padají i na `run01-complete`).
+
+## Poznámky z RUN 04
+* Kalendář produkčně jen po rozhodnutí vlastníka (`docs/run04/PRODUCTION_ROLLOUT.md` §0); scope je sensitive → pilot v Testing bez ověření, veřejně ověření bez CASA.
+* Picker token zůstává zúžený na Drive i s povoleným Gmailem a Kalendářem (živě ověřeno).
+* Testovací události ve skutečném kalendáři vlastníka byly po akceptaci smazány; dev grant ClearSpace Dev revokován (revoke-check).
 
 ## Poznámky z RUN 03
 * Gmail produkčně jen po rozhodnutí vlastníka (A nepublikovat / B Testing / C interní Workspace / D ověření + CASA): `docs/run03/PRODUCTION_ROLLOUT.md` §0.

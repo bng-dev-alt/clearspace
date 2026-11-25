@@ -16,7 +16,8 @@ Mock výsledky nejsou live důkaz; každá položka je označena **LIVE** / **MO
 | G6 | staged `dpl_26oNU69rEMtEazEZpMk1pgf7hV8k` z čistého `git archive` commitu `32eb451` (`--build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1`); `build.env` = předchozí produkce + jen nové `GOOGLE_*`/`PRIVACY_*` | `check-deployment.sh` (EXPECT_DRIVE=1) **100/100** (první běh skončil souhrnným FAIL bez konkrétní položky – přechodná chyba `vercel curl`; dva další běhy PASS) |
 | G7 | promote → produkce = `dpl_26oNU69r…`; Supabase Site URL = nová doména; `clearspace-ai.vercel.app` a `cearspace.vercel.app` → **308** na novou doménu (cesta i dotaz zachovány) | `check-deployment.sh https://clearspace.luffast.com` **100/100**; `hosted-verify.sh` **16/16** + realtime check PASS (3 jednorázové účty smazány, 0 zbytků); firewall `/api/ai/*` 403 na obou doménách |
 | G8 | živá akceptace (§12) | vlastník: všech 11 ručních testů PASS; read-only kontrola DB + logů (§12) |
-| G10 | merge `release/run02-google-drive` → `main` (fast-forward), push, tag `run02c-complete` | §13 |
+| G10 | merge `release/run02-google-drive` → `main` (fast-forward), push, tag `run02c-complete` | finální brána na výsledném kódu: demo E2E 27/0 (Monograph výchozí), stack E2E `collaboration` + `collaboration-01b` PASS, `task-resources` 5/6 (TD-2), `dev-login-stack` 3/3, live UI Monograph 2/2, build + bundle guard 48/48; scan Git historie `main..release` bez produkčních identifikátorů, klíčů, tokenů a osobních údajů |
+| Shoda | produkce `dpl_26oNU69r…` = commit `32eb451`; commity po něm mění **jen** skripty a dokumentaci (`git diff 32eb451 run02c-complete -- frontend/src public package*.json next.config.ts vercel.json supabase/migrations` = 0 souborů) → produkční runtime = kód v `main` | – |
 
 ## 1. Skutečný produkční stav (read-only audit 2026-11-25, PŘED rolloutem)
 | Oblast | Stav | Odpovídá RUN 01? |

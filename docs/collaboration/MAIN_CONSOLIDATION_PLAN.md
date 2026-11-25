@@ -1,7 +1,6 @@
 # ClearSpace V1 – plán konsolidace větve `feature/run01-collaboration` do `main`
 
-Stav (2026-11-25): **jen plán. Nic nebylo mergnuto ani pushnuto.** Každý příkaz níže, který mění Git na serveru nebo ve vašem checkoutu `V1`,
-čeká na vaše výslovné schválení.
+Stav (2026-11-25): **Fáze A provedena (push do `origin/main`), Fáze B provedena** – viz oddíl 6. Původní plán níže zůstává jako záznam postupu.
 
 ## 1. Zjištěný stav (jen čtení)
 
@@ -105,3 +104,19 @@ Cíl: lokální `main` ve `V1` posunout na `origin/main`, **aniž se ztratí va�
 
 Jedno schválení pro **Fázi A** (kroky 1–4), nejlépe po úspěšném živém testu pozvánek. Fázi B stačí potvrdit, až se vám hodí
 (je bez rizika pro produkci i server). Bez vašeho pokynu nic nespouštím.
+
+## 6. Provedení (2026-11-25, schváleno vlastníkem)
+
+**Zjištění navíc: repozitář `bng-dev-alt/clearspace` je VEŘEJNÝ** (plán to neuváděl; zjištěno `gh repo view`). Brány proto navíc hlídaly osobní údaje. První běh bran se **zastavil**
+(nic nepushnuto): v mém dokumentačním commitu byla maskovaná adresa testovacího účtu. Protože commit byl jen lokální a nepublikovaný, opravil jsem ho úpravou posledního commitu
+(`--amend`; žádná publikovaná historie nebyla přepsána) a brány prošly. Provozní identifikátory (project ref, názvy Keychain položek, slug týmu Vercelu) už ve veřejné historii byly.
+
+**Fáze A:** brány (čistý strom, vzdálený `main` = `5c80dcf`, fast-forward, žádná změna zdrojů od nasazeného `78c2b7b`, guard `deploymentEnabled:false`, žádná tajemství ani osobní údaje v přidaných řádcích)
+→ záložní tag `pre-collab-main` (= `5c80dcf`, lokálně i na serveru) → `git push origin HEAD:main` (**fast-forward `5c80dcf..b92910c`, 53 commitů, bez `--force`**) + tagy `pre-collab-main`, `collab-prod-2026-11-25`.
+Po pushi: **žádné nové nasazení** (seznam nasazení identický, produkce stále `dpl_6x1fgFaA…`, `/login` 200, `/api/ai/*` 403).
+
+**Fáze B:** synchronizace checkoutu `V1` podle oddílu 2 (záloha ověřena, WIP větev `wip/v1-local-20261125`, `main` posunut fast-forwardem) – podrobnosti a stav v reportu; DEMO videa a `frontend/test_intro.mp4` zůstala beze změny na místě (nesledovaná) a jsou i v ověřené záloze.
+
+**Seed RUN 00:** nepublikováno (obsahuje UUID účtu, viz RUN00_SEED_INTEGRATION.md); připraven lokální důkaz čistého začlenění.
+
+**Značka pro RUN 02:** tag `run01-complete` na finálním commitu `main` (SHA v reportu).

@@ -55,7 +55,7 @@ test('members see the owner\'s real Drive links live (no reload), roles hold, ti
   await bob.page.keyboard.press('Escape');
   await bob.page.getByTestId('activity-feed-btn').click();
   const feed = await bob.page.getByTestId('activity-feed-list').innerText();
-  result.timelineLinkedEvents = (feed.match(/připojil\(a\) (k projektu )?soubor z Disku/g) ?? []).length + (feed.match(/připojil\(a\) soubor z Disku/g) ?? []).length;
+  result.timelineLinkedEvents = (feed.match(/připojil\(a\) (k projektu )?soubor z Disku/g) ?? []).length;
   result.timelineUnlinkedEvents = (feed.match(/odebral\(a\) .*soubor z Disku/g) ?? []).length;
   writeFileSync(OUT, JSON.stringify(result, null, 2));
   console.log('LIVE OBSERVER RESULT', JSON.stringify(result));

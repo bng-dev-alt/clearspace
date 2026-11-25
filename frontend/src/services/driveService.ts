@@ -16,6 +16,8 @@ export interface GoogleStatus {
   configured: boolean;
   message?: string;
   simulated?: boolean;
+  /** Google consent screen in Testing mode: only approved test users can connect */
+  pilot?: boolean;
   connection: GoogleConnection | null;
 }
 export interface DriveLink {

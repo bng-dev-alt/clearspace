@@ -10,13 +10,18 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const pathname = usePathname();
 
   // /accept-invite musí být dostupná i nepřihlášenému (pozvaný si tam zakládá účet).
-  const isPublicPath = pathname === '/login' || pathname === '/register' || pathname === '/accept-invite';
+  // /privacy a /about jsou statické veřejné stránky (Google OAuth: zásady a domovská stránka musí být čitelné bez přihlášení
+  // i bez JavaScriptu) -- vykreslí se hned, bez čekání na stav přihlášení.
+  const isStaticPublic = pathname === '/privacy' || pathname === '/about';
+  const isPublicPath = isStaticPublic || pathname === '/login' || pathname === '/register' || pathname === '/accept-invite';
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicPath) {
       router.replace('/login');
     }
   }, [user, isLoading, isPublicPath, router]);
+
+  if (isStaticPublic) return <>{children}</>;
 
   // Loading state with clearspace design style
   if (isLoading) {

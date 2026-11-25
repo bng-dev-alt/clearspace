@@ -51,3 +51,6 @@ export function fileIconKind(mimeType: string): FileIconKind {
 export function safeDriveUrl(url: string): string | null {
   return /^https:\/\/(drive|docs)\.google\.com\/[A-Za-z0-9/_?=&.%-]*$/.test(url) ? url : null;
 }
+
+/** Shown while the Google consent screen is in Testing mode (RUN 02C): honest about who can connect. */
+export const PILOT_TEXT = 'Omezený pilotní provoz: Google Disk zatím mohou připojit jen schválené testovací účty Google. Ostatní funkce ClearSpace fungují bez omezení.';

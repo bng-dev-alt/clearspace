@@ -13,6 +13,8 @@ import { keyFromBase64, type KeyRing } from './crypto';
  *   GOOGLE_CLOUD_PROJECT_NUMBER                          -- numeric project number (Picker setAppId, drive.file grants)
  *   APP_BASE_URL                                         -- shared with e-mail; the redirect URI is built only from it
  *   GOOGLE_API_MOCK_BASE                                 -- local tests only: honoured only outside production AND on loopback
+ *   GOOGLE_OAUTH_PUBLISHING                              -- 'production' only once the consent screen is published (In production);
+ *                                                           anything else = Testing: the UI says only approved test users can connect
  */
 
 /** Drive integration = least privilege: per-file access to files the user picks (non-sensitive scope). */
@@ -55,6 +57,8 @@ export interface GoogleConfig {
   projectNumber: string;
   endpoints: GoogleEndpoints;
   mock: boolean;
+  /** consent screen still in Testing: only test users added in Google Cloud can connect (limited pilot) */
+  pilot: boolean;
 }
 
 /** Format CLASS of a secret for diagnostics (never the value): Google's client secrets start with GOCSPX-. */
@@ -115,5 +119,6 @@ export function googleConfig(env: NodeJS.ProcessEnv = process.env): GoogleConfig
     projectNumber,
     endpoints: mock ?? REAL,
     mock: mock !== null,
+    pilot: env.GOOGLE_OAUTH_PUBLISHING?.trim() !== 'production',
   };
 }

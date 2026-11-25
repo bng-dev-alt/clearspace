@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, FileText, FileSpreadsheet, Presentation, Folder, Image as ImageIcon, File, RefreshCw, Trash2, Eye, Plus, HardDrive } from 'lucide-react';
 import { driveService, onLinksChanged, DriveError, type DriveLink, type GoogleStatus, type ResourceContent } from '../../services/driveService';
 import { pickDriveFiles } from '../../lib/google/picker';
-import { ACCESS_TEXT, fileIconKind, fileKind, safeDriveUrl, type AccessState } from '../../lib/google/labels';
+import { ACCESS_TEXT, PILOT_TEXT, fileIconKind, fileKind, safeDriveUrl, type AccessState } from '../../lib/google/labels';
 import ModalShell from '../ui/ModalShell';
 
 interface DriveLinksPanelProps {
@@ -223,7 +223,7 @@ export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, 
       {status && !status.configured && <p className="drive-hint">{status.message ?? 'Propojení s Google Diskem není na serveru nastavené.'}</p>}
       {status?.configured && !status.connection && (
         <div className="drive-hint drive-hint--row">
-          <span>{canEdit ? 'Připojte svůj účet Google a přidávejte soubory z Disku.' : 'Připojte svůj účet Google a ověřte si přístup k souborům.'}</span>
+          <span>{canEdit ? 'Připojte svůj účet Google a přidávejte soubory z Disku.' : 'Připojte svůj účet Google a ověřte si přístup k souborům.'}{status.pilot ? ` ${PILOT_TEXT}` : ''}</span>
           <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={connect} disabled={busy !== null} data-testid="drive-connect">
             {busy === 'connect' ? 'Přesměrování…' : 'Připojit Google Disk'}
           </button>

@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
       configured: cfg.enabled,
       message: cfg.enabled ? undefined : MSG.not_configured,
       simulated: cfg.enabled && cfg.mock,           // local test provider, never presented as real Google
+      pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
       connection: row ? { email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at } : null,
     }, { headers: NO_STORE });
   } catch (err) {

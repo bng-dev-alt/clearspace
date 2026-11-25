@@ -352,6 +352,10 @@ export default function LoginPage() {
               Zaregistrujte se
             </Link>
           </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.72rem', fontWeight: 500 }}>
+            <Link href="/about" style={{ color: 'var(--gray-text)' }}>O aplikaci</Link>
+            <Link href="/privacy" style={{ color: 'var(--gray-text)' }} data-testid="privacy-link">Ochrana osobních údajů</Link>
+          </div>
         </div>
       </div>
 

@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { HardDrive } from 'lucide-react';
 import { driveService, DriveError, type GoogleStatus } from '../../services/driveService';
-import { ACCESS_TEXT } from '../../lib/google/labels';
+import Link from 'next/link';
+import { ACCESS_TEXT, PILOT_TEXT } from '../../lib/google/labels';
 
 /** Outcome of Google's redirect back to ClearSpace (?google=...). */
 export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
@@ -61,6 +62,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
         {status?.simulated && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Google">simulace</span>}
       </h2>
       <p>Připojení účtu Google je oddělené od přihlášení do ClearSpace a vaši identitu v ClearSpace nemění.</p>
+      {status?.configured && status.pilot && <p className="drive-hint" data-testid="google-pilot-note">{PILOT_TEXT}</p>}
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="google-connection-message">{message.text}</p>}
 
       {status === null ? <p>Načítání…</p> : !status.configured ? (
@@ -92,6 +94,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
             <li>Požadovaná oprávnění: vaše e-mailová adresa Google a přístup <strong>jen k souborům, které vyberete</strong> (Google Disk – „soubory použité s touto aplikací“).</li>
             <li>ClearSpace neprochází celý Disk, nemění sdílení souborů a nic nemaže.</li>
             <li>Připojení můžete kdykoli zrušit zde nebo v nastavení účtu Google.</li>
+            <li>Podrobnosti: <Link href="/privacy#google">Ochrana osobních údajů – Google Disk</Link>.</li>
           </ul>
           <div><button type="button" className="cs-btn cs-btn--primary" onClick={connect} disabled={busy} data-testid="google-connect">{busy ? 'Přesměrování…' : 'Připojit Google Disk'}</button></div>
         </>

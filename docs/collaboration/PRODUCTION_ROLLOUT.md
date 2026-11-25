@@ -205,5 +205,9 @@ Staged build z oddílu 10 (`dpl_7RtvpN81…`) jsem postavil **bez** `--build-env
 styl Monograph (RC5 `dpl_HHk26E8s…` měl příznak v `build.env`; ověřeno přes API). Data, funkce ani zabezpečení to neovlivnilo, jde jen o vzhled.
 Oprava = nový build **téhož kódu** (`bc34de4`, ve zdrojích se od `78c2b7b` nic nezměnilo) s příznakem: `dpl_6x1fgFaAeJJ2CaU8WMfJYtwJsZhW`
 (`clearspace-9nczah0zw-bng-dev-alt-webadvisor.vercel.app`, READY, bez aliasu, `build.env` obsahuje `NEXT_PUBLIC_ENABLE_MONOGRAPH` i e-mailové proměnné).
-Stav: **staged, nepromotováno** (čeká na schválení). Zpět na verzi bez Monographu: `vercel promote dpl_7RtvpN81SKBk4UzMLA92G48g8kWc`.
+Stav: **promotováno 2026-11-25 09:16 (schváleno vlastníkem)**; produkce obsluhuje `dpl_6x1fgFaA…` (`bc34de4`). Verze bez Monographu byla v produkci 07:57–09:16.
+Ověřeno na živé doméně se dvěma jednorázovými účty: `html[data-style=monograph]`, okno *Členové projektu*, živý úkol bez obnovení, presence „také zde“ a zvonek fungují a ve stylu Monograph
+vypadají konzistentně; účty i testovací projekt smazány. Preflight živého testu OK, firewall shodný s pořízeným stavem, 0 bypass secretů.
+Zpět na verzi bez Monographu: `vercel promote dpl_7RtvpN81SKBk4UzMLA92G48g8kWc`; na RC5: `vercel promote dpl_HHk26E8sEJs1wF57mZeMkcNqzqbb` (jen spolu s rollbackem DB, oddíl 6).
+Poznámka: kdo si dřív výslovně zvolil „Stávající“, má ho uložené a Monograph uvidí až po přepnutí v liště.
 Ponaučení: před každým dalším nasazením porovnat `build.env` s předchozí produkcí (`vercel api /v13/deployments/<id>`).

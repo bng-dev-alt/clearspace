@@ -55,8 +55,9 @@ async function postForm(url: string, form: Record<string, string>): Promise<Reco
   } catch {
     throw new GoogleOAuthError('unavailable');
   }
+  const text = await readCapped(res, 64 * 1024);   // throws response_too_large
   let body: Record<string, unknown> = {};
-  try { body = JSON.parse(await readCapped(res, 64 * 1024)) as Record<string, unknown>; } catch { /* non-JSON */ }
+  try { body = JSON.parse(text) as Record<string, unknown>; } catch { /* non-JSON */ }
   if (!res.ok) {
     const code = typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error) ? body.error : (res.status >= 500 ? 'unavailable' : 'oauth_error');
     throw new GoogleOAuthError(code, res.status);

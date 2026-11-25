@@ -21,6 +21,9 @@ export const IDENTITY_SCOPES = ['openid', 'email'];
 export const DRIVE_SCOPES = [...IDENTITY_SCOPES, DRIVE_FILE_SCOPE];
 /** HttpOnly browser-binding nonce of an OAuth transaction (path-scoped to the OAuth routes). */
 export const OAUTH_COOKIE = 'cs_google_oauth';
+/** Google's answer (state + code or error), parked by the callback until the signed-in page completes the flow. */
+export const OAUTH_RESULT_COOKIE = 'cs_google_oauth_result';
+export const OAUTH_COOKIE_PATH = '/api/google/oauth';
 // RUN 03/04 add their own sets here (e.g. gmail.readonly, calendar.events) and request them only when the user
 // enables that service (include_granted_scopes keeps earlier grants).
 

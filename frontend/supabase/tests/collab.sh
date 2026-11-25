@@ -53,7 +53,8 @@ echo "--- hardening rollback (1100): refused while edit history exists; otherwis
 DOWN2="$FRONTEND/supabase/rollback/20261125001100_collab_hardening.down.sql"
 newdb cs_kh0; apply cs_kh0 "$BASELINE" "${UPTO_1000[@]}"
 S1000=$(psql_admin -d cs_kh0 -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
-newdb cs_kh; apply cs_kh "$BASELINE" "${MIGRATIONS[@]}"
+UPTO_1100=(); for f in "${MIGRATIONS[@]}"; do [[ "$(basename "$f")" > "20261125001100~" ]] || UPTO_1100+=("$f"); done
+newdb cs_kh; apply cs_kh "$BASELINE" "${UPTO_1100[@]}"
 psql_admin -d cs_kh -q >/dev/null <<'SQL'
 DO $$ DECLARE a uuid := test.mkuser('hr-a@example.test'); BEGIN
   PERFORM test.act_as(a, 'hr-a@example.test');
@@ -76,3 +77,49 @@ echo "ok - catalog after 1100 rollback == catalog at 1000 ($SR2)"
 apply cs_kh "$FRONTEND/supabase/migrations/20261125001100_collab_hardening.sql"
 [ "$(psql_admin -d cs_kh -At -c "select count(*) from public.clearspace_migrations where version = '20261125001100_collab_hardening'")" = "1" ] || { echo "FAIL: re-apply 1100 after rollback"; exit 1; }
 echo "ok - 20261125001100 applies again after its rollback"
+
+# ---------------------------------------------------------------- RUN 02: Google connections + Drive links
+echo "== Scenario K3: Google Drive (credentials isolation, OAuth state, links, roles, events) -- committed transactions"
+newdb cs_k3
+apply cs_k3 "$BASELINE" "${MIGRATIONS[@]}"
+out="$(mktemp)"
+if psql_admin -d cs_k3 -f - < "$HERE/collab/92_google_drive.sql" >"$out" 2>&1; then
+  k=$(grep -cE "NOTICE:  ok" "$out" || true); TOTAL=$((TOTAL + k))
+  grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //'
+  echo "    ($k assertions)"; rm -f "$out"
+else
+  cat "$out"; rm -f "$out"; echo "FAIL: collab/92_google_drive.sql"; exit 1
+fi
+
+echo "--- Drive rollback (1200): refused while links or connections exist; otherwise restores the 1100 catalog exactly"
+DOWN3="$FRONTEND/supabase/rollback/20261126001200_google_drive.down.sql"
+newdb cs_kd0; apply cs_kd0 "$BASELINE" "${UPTO_1100[@]}"
+S1100=$(psql_admin -d cs_kd0 -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+newdb cs_kd; apply cs_kd "$BASELINE" "${MIGRATIONS[@]}"
+psql_admin -d cs_kd -q >/dev/null <<'SQL'
+DO $$ DECLARE a uuid := test.mkuser('dr-a@example.test'); BEGIN
+  INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('google', encode(sha256(convert_to(repeat('g', 40), 'UTF8')), 'hex'))
+  ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256;
+  PERFORM test.act_as(a, 'dr-a@example.test');
+  INSERT INTO public.projects (id, name) VALUES ('pDR', 'R');
+  INSERT INTO public.project_members (project_id, member_id) VALUES ('pDR', 'member-owner-' || a::text);
+  PERFORM public.drive_link_add(repeat('g', 40), 'pDR', null, 'fileRollback001', 'Soubor', 'application/pdf', 'https://drive.google.com/file/d/fileRollback001/view', 1, now(), 'ok');
+  PERFORM test.reset();
+  INSERT INTO public.google_connections (user_id, google_sub, google_email, scopes, refresh_token_enc) VALUES (a, '999', 'r@example.test', '{openid}', 'v1.0000aaaa.a.b.c');
+END $$;
+SQL
+if out=$(psql_admin -d cs_kd --single-transaction -f - < "$DOWN3" 2>&1); then echo "FAIL: 1200 rollback ran although Drive links exist"; exit 1; fi
+echo "$out" | grep -q "Drive links would be lost" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+echo "ok - 1200 rollback refused while Drive links exist, nothing changed"
+psql_admin -d cs_kd -q -c "delete from public.external_resource_links" >/dev/null
+if out=$(psql_admin -d cs_kd --single-transaction -f - < "$DOWN3" 2>&1); then echo "FAIL: 1200 rollback ran although connections exist"; exit 1; fi
+echo "$out" | grep -q "Google connections exist" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+[ "$(psql_admin -d cs_kd -At -c "select count(*) from public.google_connections")" = "1" ] || { echo "FAIL: refused rollback changed data"; exit 1; }
+echo "ok - 1200 rollback refused while Google connections exist (they must be revoked at Google first), nothing changed"
+{ echo "SET clearspace.rollback_allow_data_loss = 'on';"; cat "$DOWN3"; } | psql_admin -d cs_kd --single-transaction -f - >/dev/null
+SR3=$(psql_admin -d cs_kd -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+[ "$SR3" = "$S1100" ] || { echo "FAIL: catalog after 1200 rollback ($SR3) differs from 1100 ($S1100)"; exit 1; }
+echo "ok - catalog after 1200 rollback == catalog at 1100 ($SR3)"
+apply cs_kd "$FRONTEND/supabase/migrations/20261126001200_google_drive.sql"
+[ "$(psql_admin -d cs_kd -At -c "select count(*) from public.clearspace_migrations where version = '20261126001200_google_drive'")" = "1" ] || { echo "FAIL: re-apply 1200 after rollback"; exit 1; }
+echo "ok - 20261126001200 applies again after its rollback"

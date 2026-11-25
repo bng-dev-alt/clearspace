@@ -9,9 +9,9 @@
 --      (key in the server environment, never in the database). The table is invisible to anon/authenticated:
 --      the browser sees a status projection through google_connection_status(); everything else goes through
 --      SECURITY DEFINER RPCs that require the server secret (server_trust purpose 'google') AND act only on
---      the caller's own row (auth.uid()), except the OAuth callback, which is bound to a single-use state.
---   2. google_oauth_states: single-use, 10-minute OAuth transactions bound to the initiating user (begin is an
---      authenticated call) and to the initiating browser (hash of an HttpOnly cookie nonce).
+--      the caller's own row (auth.uid()). No anonymous RPC: the OAuth completion runs under the user's session.
+--   2. google_oauth_states: single-use, 10-minute OAuth transactions bound to the initiating user (begin AND
+--      completion are authenticated calls by the same user) and to the initiating browser (HttpOnly cookie nonce).
 --   3. integration_audit: connect / reconnect / disconnect / provider revocation, readable by the user (own rows).
 --   4. external_resource_links: a project- or task-level link to an external file (provider 'google_drive').
 --      Metadata is written only by the server (from the Drive API, never from the client): insert/refresh are
@@ -147,8 +147,8 @@ BEGIN
     VALUES (p_state_sha256, v_uid, p_binding_sha256, p_code_verifier_enc, p_return_to, p_scopes, now() + interval '10 minutes');
 END $$;
 
--- OAuth callback, step 1: consume the state exactly once (no ClearSpace session on Google's redirect; the state
--- row carries the user, the cookie hash proves it is the same browser).
+-- OAuth completion, step 1: consume the state exactly once. Bound three ways: the signed-in ClearSpace user who
+-- began it (auth.uid()), the browser (hash of the HttpOnly nonce cookie) and a 10-minute lifetime.
 CREATE OR REPLACE FUNCTION public.google_oauth_consume(p_server_secret TEXT, p_state_sha256 TEXT, p_binding_sha256 TEXT)
 RETURNS TABLE (user_id UUID, code_verifier_enc TEXT, return_to TEXT, scopes TEXT[])
 LANGUAGE plpgsql
@@ -157,9 +157,10 @@ SET search_path = public, pg_temp
 AS $$
 BEGIN
     PERFORM public.require_server_secret('google', p_server_secret);
+    PERFORM public.google_require_user();
     RETURN QUERY
     UPDATE public.google_oauth_states s SET consumed_at = now()
-    WHERE s.state_sha256 = p_state_sha256 AND s.binding_sha256 = p_binding_sha256
+    WHERE s.state_sha256 = p_state_sha256 AND s.binding_sha256 = p_binding_sha256 AND s.user_id = auth.uid()
       AND s.consumed_at IS NULL AND s.expires_at > now()
     RETURNING s.user_id, s.code_verifier_enc, s.return_to, s.scopes;
     IF NOT FOUND THEN
@@ -167,7 +168,7 @@ BEGIN
     END IF;
 END $$;
 
--- OAuth callback, step 2: store the connection for the user of a just-consumed state (once per state).
+-- OAuth completion, step 2: store the connection for the user of a just-consumed state (once per state).
 -- p_refresh_token_enc NULL = Google returned no new refresh token: keep the stored one (same Google account only).
 CREATE OR REPLACE FUNCTION public.google_oauth_complete(
     p_server_secret TEXT, p_state_sha256 TEXT, p_sub TEXT, p_email TEXT, p_scopes TEXT[],
@@ -182,9 +183,10 @@ DECLARE
     v_old public.google_connections%ROWTYPE;
 BEGIN
     PERFORM public.require_server_secret('google', p_server_secret);
+    PERFORM public.google_require_user();
     UPDATE public.google_oauth_states s SET completed_at = now()
     WHERE s.state_sha256 = p_state_sha256 AND s.consumed_at IS NOT NULL AND s.completed_at IS NULL
-      AND s.consumed_at > now() - interval '5 minutes'
+      AND s.consumed_at > now() - interval '5 minutes' AND s.user_id = auth.uid()
     RETURNING s.user_id INTO v_uid;
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'Požadavek na připojení vypršel nebo už byl použit.' USING ERRCODE = '22023';
@@ -225,7 +227,8 @@ BEGIN
     PERFORM public.require_server_secret('google', p_server_secret);
     INSERT INTO public.integration_audit (user_id, provider, event)
     SELECT s.user_id, 'google', 'scope_denied' FROM public.google_oauth_states s
-    WHERE s.state_sha256 = p_state_sha256 AND s.consumed_at IS NOT NULL AND s.consumed_at > now() - interval '5 minutes';
+    WHERE s.state_sha256 = p_state_sha256 AND s.consumed_at IS NOT NULL AND s.consumed_at > now() - interval '5 minutes'
+      AND s.user_id = public.google_require_user();
 END $$;
 
 -- The caller's own credentials (server only). Counts one unit of the caller's Google API budget.
@@ -341,19 +344,19 @@ BEGIN
 END $$;
 
 REVOKE ALL ON FUNCTION public.google_oauth_begin(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[]) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.google_oauth_consume(TEXT, TEXT, TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.google_oauth_complete(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT, TEXT, TIMESTAMP WITH TIME ZONE) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.google_oauth_audit_denied(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.google_oauth_consume(TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.google_oauth_complete(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT, TEXT, TIMESTAMP WITH TIME ZONE) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.google_oauth_audit_denied(TEXT, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.google_credentials_get(TEXT, INTEGER) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.google_refresh_lease(TEXT, BIGINT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.google_refresh_store(TEXT, BIGINT, TEXT, TIMESTAMP WITH TIME ZONE, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.google_connection_mark(TEXT, TEXT, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.google_disconnect(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.google_oauth_begin(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT[]) TO authenticated;
--- the callback arrives without a ClearSpace session (Google's top-level redirect): anon + server secret + state
-GRANT EXECUTE ON FUNCTION public.google_oauth_consume(TEXT, TEXT, TEXT) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.google_oauth_complete(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT, TEXT, TIMESTAMP WITH TIME ZONE) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.google_oauth_audit_denied(TEXT, TEXT) TO anon, authenticated;
+-- completion runs under the user's ClearSpace session (POST /api/google/oauth/complete), never anonymously
+GRANT EXECUTE ON FUNCTION public.google_oauth_consume(TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.google_oauth_complete(TEXT, TEXT, TEXT, TEXT, TEXT[], TEXT, TEXT, TIMESTAMP WITH TIME ZONE) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.google_oauth_audit_denied(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.google_credentials_get(TEXT, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.google_refresh_lease(TEXT, BIGINT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.google_refresh_store(TEXT, BIGINT, TEXT, TIMESTAMP WITH TIME ZONE, TEXT) TO authenticated;

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   X, History, PlusCircle, ArrowRightLeft, Archive, Columns3, UserPlus, Sparkles,
-  CheckCircle2, PencilLine, UserCheck, MessageSquare, FolderKanban,
+  CheckCircle2, PencilLine, UserCheck, MessageSquare, FolderKanban, HardDrive,
 } from 'lucide-react';
 import type { ProjectActivityLog } from '../../types/kanban';
 import { collaborationService, mapActivityRow } from '../../services/collaborationService';
@@ -31,6 +31,7 @@ const ICONS: Record<ActivityKind, React.ComponentType<{ size?: number }>> = {
   column: Columns3,
   member: UserPlus,
   project: FolderKanban,
+  file: HardDrive,
   other: Sparkles,
 };
 

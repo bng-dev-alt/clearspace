@@ -20,7 +20,7 @@ function formatDue(v: unknown): string {
   return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('cs-CZ');
 }
 
-export type ActivityKind = 'create' | 'move' | 'done' | 'archive' | 'edit' | 'assign' | 'comment' | 'column' | 'member' | 'project' | 'other';
+export type ActivityKind = 'create' | 'move' | 'done' | 'archive' | 'edit' | 'assign' | 'comment' | 'column' | 'member' | 'project' | 'file' | 'other';
 
 export function describeActivity(log: ProjectActivityLog): { text: string; kind: ActivityKind } {
   const d = log.details ?? {};
@@ -66,6 +66,15 @@ export function describeActivity(log: ProjectActivityLog): { text: string; kind:
         : { text: `přidal(a) do projektu ${str(d.name, 'člena')}${d.role ? ` jako ${ROLE[str(d.role)] ?? str(d.role)}` : ''}`, kind: 'member' };
     case 'member_role_changed': return { text: `změnil(a) roli ${str(d.name, 'člena')} na ${ROLE[str(d.to)] ?? str(d.to)}`, kind: 'member' };
     case 'member_removed': return { text: `odebral(a) z projektu ${str(d.name, 'člena')}`, kind: 'member' };
+    // RUN 02: Google Drive links (the file in Drive is never changed; this is the ClearSpace association)
+    case 'drive_file_linked':
+      return d.title
+        ? { text: `připojil(a) soubor z Disku „${str(d.name, 'soubor')}" k úkolu ${title}`, kind: 'file' }
+        : { text: `připojil(a) k projektu soubor z Disku „${str(d.name, 'soubor')}"`, kind: 'file' };
+    case 'drive_file_unlinked':
+      return d.title
+        ? { text: `odebral(a) soubor z Disku „${str(d.name, 'soubor')}" od úkolu ${title}`, kind: 'file' }
+        : { text: `odebral(a) z projektu soubor z Disku „${str(d.name, 'soubor')}"`, kind: 'file' };
     default: return { text: 'provedl(a) akci', kind: 'other' };
   }
 }

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 /**
  * Token encryption at rest (RUN 02): AES-256-GCM (authenticated), random 96-bit IV per value, the AAD binds a
@@ -52,13 +52,8 @@ export function sha256hex(s: string): string {
 }
 
 /** PKCE (RFC 7636, S256). */
+export const s256 = (verifier: string) => b64u(createHash('sha256').update(verifier, 'ascii').digest());
 export function pkcePair(): { verifier: string; challenge: string } {
   const verifier = randomToken(48);
-  return { verifier, challenge: b64u(createHash('sha256').update(verifier, 'ascii').digest()) };
-}
-
-export function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
+  return { verifier, challenge: s256(verifier) };
 }

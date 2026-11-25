@@ -41,7 +41,11 @@ async function user(tag) {
   return { id: l.json.user.id, email, token: l.json.access_token };
 }
 
-/** Full authorization-code flow through the app and the mock consent screen. Returns the callback outcome. */
+/**
+ * Full authorization-code flow: app start -> mock consent -> Google redirect to our callback (no session) ->
+ * /oauth/google page completes it under the user's session (POST /api/google/oauth/complete). `tamper` may swap the
+ * callback URL, the browser's nonce cookie, or the session that completes it.
+ */
 async function connect(u, account, { decision = 'allow', grantDrive = true, returnTo = '/settings', tamper } = {}) {
   const s = await app('/api/google/oauth/start', u.token, { method: 'POST', body: { returnTo } });
   assert.equal(s.status, 200, JSON.stringify(s.json));
@@ -57,9 +61,15 @@ async function connect(u, account, { decision = 'allow', grantDrive = true, retu
   assert.equal(back.status, 302);
   let cb = back.headers.get('location');
   let ck = cookie;
-  if (tamper) ({ cb, ck } = tamper({ cb, ck, auth }));
-  const r = await http(cb, { headers: { Cookie: `cs_google_oauth=${ck}` } });
-  return { status: r.status, location: r.headers.get('location') ?? '', outcome: /google=([a-z_]+)/.exec(r.headers.get('location') ?? '')?.[1], cb, cookie, setCookie: r.headers.get('set-cookie') ?? '', auth };
+  let completer = u;
+  if (tamper) ({ cb = cb, ck = ck, completer = u } = tamper({ cb, ck, auth }));
+  const r1 = await http(cb);
+  assert.equal(r1.status, 303); assert.equal(r1.headers.get('location'), `${APP}/oauth/google`);
+  assert.ok(!/code=/.test(r1.headers.get('location')), 'the code never lands in a page URL');
+  const parked = /cs_google_oauth_result=([^;]+)/.exec(r1.headers.get('set-cookie') ?? '')?.[1];
+  const r = await app('/api/google/oauth/complete', completer.token, { method: 'POST', headers: { Cookie: `cs_google_oauth=${ck}; cs_google_oauth_result=${parked}` } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  return { outcome: r.json.outcome, returnTo: r.json.returnTo, cb, cookie, parked, setCookie: r.headers.get('set-cookie') ?? '', text: r.text };
 }
 const ANNA = '100000000000000000001', BOHDAN = '100000000000000000002', CYRIL = '100000000000000000003';
 const DOC = 'mockDoc_SmlouvaCorvane01', SHEET = 'mockSheet_RozpocetQ1_01', ZAPIS = 'mockDoc_ZapisPorady1211', MD = 'mockTxt_Poznamky000001',
@@ -109,7 +119,7 @@ ok('status: configured, clearly flagged as SIMULATED provider, not connected');
 
 // ---------------------------------------------------------------- OAuth: consent, denial, granular scope
 let c = await connect(O, ANNA, { decision: 'deny' });
-assert.equal(c.outcome, 'denied'); assert.ok(c.location.startsWith(`${APP}/settings?`), c.location);
+assert.equal(c.outcome, 'denied'); assert.equal(c.returnTo, '/settings');
 assert.equal((await app('/api/google/connection', O.token)).json.connection, null);
 ok('denied consent -> ?google=denied, nothing stored');
 const before = (await ctl('stats')).json;
@@ -120,39 +130,43 @@ assert.equal((await ctl('stats')).json.revocations, before.revocations + 1);
 ok('granular consent without Drive -> scope_denied, nothing stored, the grant is revoked at the provider');
 
 c = await connect(O, ANNA, { returnTo: `/projects/${P}` });
-assert.equal(c.status, 303); assert.equal(c.outcome, 'connected');
-assert.ok(c.location.startsWith(`${APP}/projects/${P}?google=connected`), c.location);
-assert.match(c.setCookie, /cs_google_oauth=;/); assert.equal((await ctl('stats')).json.codeExchanges >= 1, true);
+assert.equal(c.outcome, 'connected'); assert.equal(c.returnTo, `/projects/${P}`);
+assert.match(c.setCookie, /cs_google_oauth=;/); assert.match(c.setCookie, /cs_google_oauth_result=;/);
 st = await app('/api/google/connection', O.token);
 assert.equal(st.json.connection.email, 'anna.mock@example.test');
 assert.ok(st.json.connection.scopes.includes('https://www.googleapis.com/auth/drive.file'));
 assert.ok(!st.json.connection.scopes.some((s) => /gmail|calendar|auth\/drive($|\.readonly|\.metadata)/.test(s)), 'no broader scopes');
-assert.ok(!TOKEN_RE.test(st.text) && !TOKEN_RE.test(c.location), 'no token in status or redirect');
+assert.ok(!TOKEN_RE.test(st.text) && !TOKEN_RE.test(c.text), 'no token in status or completion response');
 ok('connect: PKCE code flow, redirect to the validated return path, nonce cookie cleared, only openid/email/drive.file granted, no token exposed');
 
-// replay the same callback (same state, same cookie, same code)
-let r = await http(c.cb, { headers: { Cookie: `cs_google_oauth=${c.cookie}` } });
-assert.match(r.headers.get('location'), /google=expired/);
+// replay the same completion (same state, same cookies, same code)
+let r = await app('/api/google/oauth/complete', O.token, { method: 'POST', headers: { Cookie: `cs_google_oauth=${c.cookie}; cs_google_oauth_result=${c.parked}` } });
+assert.equal(r.json.outcome, 'expired');
 ok('OAuth state is single-use: replaying the callback is refused');
 
 // CSRF / account linking: E's own transaction completed in another browser (wrong / missing nonce) is refused...
-c = await connect(E, BOHDAN, { tamper: ({ cb }) => ({ cb, ck: 'A'.repeat(43) }) });
+c = await connect(E, BOHDAN, { tamper: () => ({ ck: 'A'.repeat(43) }) });
 assert.equal(c.outcome, 'expired');
-c = await connect(E, BOHDAN, { tamper: ({ cb }) => ({ cb, ck: '' }) });
+c = await connect(E, BOHDAN, { tamper: () => ({ ck: '' }) });
+assert.equal(c.outcome, 'expired');
+c = await connect(E, BOHDAN, { tamper: () => ({ completer: X }) });
 assert.equal(c.outcome, 'expired');
 assert.equal((await app('/api/google/connection', E.token)).json.connection, null);
-ok('callback bound to the initiating browser: wrong or missing nonce cookie -> refused, nothing linked');
+assert.equal((await app('/api/google/connection', X.token)).json.connection, null);
+ok('transaction bound to the initiating browser AND ClearSpace session: wrong/missing nonce or another signed-in user -> refused, nothing linked');
 // ...and a code minted for ANOTHER transaction cannot be swapped in (PKCE verifier mismatch)
-const foreign = await connect(X, CYRIL, { tamper: ({ cb, ck }) => ({ cb: cb.replace(/state=[^&]+/, 'state=x'), ck }) }); // obtain an unused code for X
+const foreign = await connect(X, CYRIL, { tamper: ({ cb }) => ({ cb: cb.replace(/state=[^&]+/, 'state=x') }) }); // obtain an unused code for X
 const foreignCode = new URL(foreign.cb).searchParams.get('code');
-c = await connect(E, BOHDAN, { tamper: ({ cb, ck }) => ({ cb: cb.replace(/code=[^&]+/, `code=${encodeURIComponent(foreignCode)}`), ck }) });
+c = await connect(E, BOHDAN, { tamper: ({ cb }) => ({ cb: cb.replace(/code=[^&]+/, `code=${encodeURIComponent(foreignCode)}`) }) });
 assert.equal(c.outcome, 'error');
 assert.equal((await app('/api/google/connection', E.token)).json.connection, null);
 ok('authorization-code injection: a code issued to another transaction fails the PKCE check, nothing linked');
 
 c = await connect(E, BOHDAN, { returnTo: 'https://evil.example/steal' });
-assert.equal(c.outcome, 'connected'); assert.ok(c.location.startsWith(`${APP}/settings?`), c.location);
-ok('open redirect: a foreign returnTo is replaced by /settings; redirects only to APP_BASE_URL');
+assert.equal(c.outcome, 'connected'); assert.equal(c.returnTo, '/settings');
+r = await http(`${APP}/api/google/oauth/callback?state=${'s'.repeat(43)}&code=x&redirect=https://evil.example`);
+assert.equal(r.headers.get('location'), `${APP}/oauth/google`);
+ok('open redirect: a foreign returnTo is replaced by /settings; the callback redirects only to APP_BASE_URL');
 
 c = await connect(X, ANNA);
 assert.equal(c.outcome, 'conflict');

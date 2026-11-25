@@ -16,6 +16,20 @@ produkční DB se nemigruje, nic se nemerguje do `main`, nepushuje ani nenasazuj
    (vzor `rehearse-drive-prod.sh`) → 1300 v jedné transakci → teprve potom kód. Rollback 1300 je bez Gmail dat čistý.
 5. Zapnutí Gmailu kdekoli mimo dev = nové rozhodnutí podle §0 (B/C/D) + Privacy Policy (sekce Gmail je připravená, zobrazí se se zapnutým přepínačem).
 
+## RUN 03C – schválené pořadí nasazení (Gmail VYPNUTÝ)
+Vercel: `vercel.json` má `git.deploymentEnabled: false` a všechny produkční buildy jsou `src=cli` (push RUN 02C žádný build nevytvořil) –
+push `main` tedy nic nenasazuje; nasazuje jen `deploy-drive-staged.sh` + `vercel promote`.
+1. Nácvik: `scripts/rehearse-gmail-prod.sh` (produkce jen čtena; replika = produkční DDL + syntetická data vč. Drive řádků) → PASS.
+2. Kompatibilita: kód RUN 02C (`run02c-complete`) proti DB s 1300 – Drive HTTP 28/28 + Drive E2E (lokálně, mock).
+3. Produkční env: `GMAIL_INTEGRATION_ENABLED=0` (Production, výslovně; Preview nemá).
+4. `CONFIRM_GMAIL=twjlnsxjtuntujarwner scripts/apply-gmail-hosted.sh` (záloha `pg_dump` → 1 transakce → otisk existujících Google řádků beze změny).
+5. Starý build (RUN 02C) dál běží: `check-deployment.sh https://clearspace.luffast.com` (EXPECT_DRIVE=1) + `hosted-verify.sh` (jednorázové účty).
+6. Merge `feature/run03-gmail` → `main` (`--no-ff`), z merge commitu `RELEASE_BRANCH=main EXPECT_GMAIL_MIGRATION=1 CONFIRM_DRIVE_DEPLOY=<sha>
+   deploy-drive-staged.sh deploy` → `check <staged-url>` (vč. Gmail containment) → `vercel promote`.
+7. Produkce: `check-deployment.sh` (EXPECT_DRIVE=1 EXPECT_GMAIL_OFF=1), `E2E_EXPECT_GMAIL=off hosted-verify.sh`, Monograph, runtime logy; push `main` + tagy.
+**Rollback:** kód = `vercel promote` předchozího buildu (`dpl_26oNU69r…`, RUN 02C, s 1300 funguje – krok 2). DB 1300 se **nevrací**, dokud běží kód,
+který ji potřebuje; i potom jen `rollback/20261127001300_gmail.down.sql` (odmítne při Gmail datech).
+
 ## 0. Rozhodnutí, která musí udělat vlastník (před čímkoli dalším)
 1. **Kdo bude Gmail používat?** `gmail.readonly` je *restricted*:
    * **A – nepublikovat Gmail veřejně** (doporučeno pro portfolio): produkce s `GMAIL_INTEGRATION_ENABLED` nenastaveným; veřejnosti jen popis a lokální/označená simulace.

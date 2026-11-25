@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { googleConfig, secretFormat, type GoogleConfig } from './config';
+import { googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -18,6 +18,8 @@ export const MSG = {
   rate_limited: 'Příliš mnoho požadavků na Google Disk. Zkuste to prosím za několik minut.',
   invalid: 'Neplatný požadavek.',
   forbidden: 'K této akci nemáte oprávnění.',
+  drive_not_granted: 'Účet Google nemá povolený přístup ke Google Disku. Připojte prosím Google Disk.',
+  gmail_not_granted: 'Účet Google nemá povolený přístup ke Gmailu. Připojte prosím Gmail v Propojených účtech.',
 } as const;
 
 /**
@@ -97,10 +99,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * concurrent request refreshes (database lease on token_version), the others wait for the stored result. A refresh
  * that Google refuses with invalid_grant marks the connection revoked. `cost` = Google API calls the caller plans.
  */
-export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts: { cost?: number; force?: boolean } = {}): Promise<{ token: string; expiresAt: number; userId: string }> {
+export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts: { cost?: number; force?: boolean; service?: GoogleService } = {}): Promise<{ token: string; expiresAt: number; userId: string }> {
   let row = await readCreds(db, cfg, opts.cost ?? 1);
   if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
   if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
+  // RUN 03: one Google grant, several services. A route asks for ITS service; a token never serves a service the user
+  // did not enable in ClearSpace (e.g. Gmail removed in ClearSpace while Google still holds the grant).
+  if (opts.service && !row.scopes?.includes(SERVICE_SCOPE[opts.service])) {
+    throw new HttpError(409, opts.service === 'gmail' ? MSG.gmail_not_granted : MSG.drive_not_granted, `${opts.service}_not_granted`);
+  }
   const fresh = (r: CredRow) => r.access_token_enc && r.access_expires_at && Date.parse(r.access_expires_at) > Date.now() + 60_000;
   if (!opts.force && fresh(row)) {
     return { token: open(cfg.keys, row.access_token_enc!, tokenAad(row.user_id, 'access')), expiresAt: Date.parse(row.access_expires_at!), userId: row.user_id };
@@ -152,3 +159,46 @@ export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts
     throw err;
   }
 }
+
+/**
+ * RUN 03: a short-lived access token LIMITED to `scopes`, for code that runs in the browser (the Google Picker). The stored
+ * grant may also hold Gmail; the browser must never receive a token that can read the mailbox. Asks Google for a narrower
+ * token (refresh grant with `scope`), never stores it, and refuses when Google answers with more than was asked for.
+ */
+export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig, scopes: string[]): Promise<{ token: string; expiresAt: number }> {
+  const row = await readCreds(db, cfg, 1);
+  if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
+  if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
+  let refreshToken: string;
+  try { refreshToken = open(cfg.keys, row.refresh_token_enc, tokenAad(row.user_id, 'refresh')); } catch { throw new HttpError(409, MSG.revoked, 'revoked'); }
+  try {
+    const t = await refreshAccessToken(cfg, refreshToken, scopes);
+    const extra = t.scopes.filter((s) => !scopes.includes(s) && !/^(openid|email|profile|https:\/\/www\.googleapis\.com\/auth\/userinfo\.(email|profile))$/.test(s));
+    oauthLog('narrow_token', { asked: scopes.length, granted: t.scopes.length, extra: extra.length });
+    if (extra.length) throw new HttpError(503, 'Výběr z Disku se nepodařilo bezpečně připravit (Google nevrátil omezené oprávnění). Zkuste to prosím později.', 'narrow_token_refused');
+    return { token: t.accessToken, expiresAt: Date.now() + t.expiresIn * 1000 };
+  } catch (err) {
+    if (err instanceof GoogleOAuthError && (err.code === 'invalid_grant' || err.code === 'unauthorized_client')) {
+      await db.rpc('google_connection_mark', { p_server_secret: cfg.serverSecret, p_status: 'revoked', p_error_code: err.code });
+      throw new HttpError(409, MSG.revoked, 'revoked');
+    }
+    if (err instanceof GoogleOAuthError) throw new HttpError(503, MSG.unavailable, 'unavailable');
+    throw err;
+  }
+}
+
+/** RUN 03: Gmail routes need the Google integration AND the Gmail feature switch (independent of Drive). */
+export function requireGmail(): GoogleConfig {
+  const cfg = requireGoogle();
+  if (process.env.GMAIL_INTEGRATION_ENABLED?.trim() !== '1') throw new HttpError(503, 'Propojení s Gmailem není na serveru zapnuté.', 'gmail_disabled');
+  return cfg;
+}
+
+/** Run a Google call with the caller's own Gmail-capable token; one forced refresh when Google says the token is stale. */
+export async function withGmailToken<T extends { ok: boolean; reason?: string }>(db: SupabaseClient, cfg: GoogleConfig, cost: number, call: (token: string) => Promise<T>): Promise<T> {
+  const first = await call((await getAccessToken(db, cfg, { cost, service: 'gmail' })).token);
+  if (first.ok || first.reason !== 'auth') return first;
+  return call((await getAccessToken(db, cfg, { cost: 1, force: true, service: 'gmail' })).token);
+}
+
+export const GMAIL_STATUS: Record<string, number> = { not_found: 404, auth: 409, rate_limited: 429, forbidden: 403, unavailable: 503, too_large: 413 };

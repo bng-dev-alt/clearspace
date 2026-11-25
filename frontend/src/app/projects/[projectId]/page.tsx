@@ -24,6 +24,7 @@ const AiCapacityPlannerModal = dynamic(() => import('../../../components/board/A
 const GlobalSearchModal = dynamic(() => import('../../../components/search/GlobalSearchModal'), { ssr: false });
 const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
 const DriveLinksPanel = dynamic(() => import('../../../components/drive/DriveLinksPanel'), { ssr: false });
+const GmailLinksPanel = dynamic(() => import('../../../components/gmail/GmailLinksPanel'), { ssr: false });
 import ModalShell from '../../../components/ui/ModalShell';
 import { RETURN_TEXT } from '../../../components/drive/GoogleConnectionCard';
 const ProjectDashboardView = dynamic(() => import('../../../components/dashboardStats/ProjectDashboardView'), { ssr: false });
@@ -1075,12 +1076,19 @@ export default function ProjectBoardPage() {
       )}
 
       {isFilesOpen && !accessRevoked && (
-        <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory projektu" maxWidth={720} testId="project-files-modal">
+        <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory a e-maily projektu" maxWidth={720} testId="project-files-modal">
           <DriveLinksPanel
             projectId={projectId}
             canEdit={!readOnly}
             returnTo={`/projects/${projectId}`}
             notice={filesNotice}
+            cardTitle={(id) => columns.flatMap((c) => c.cards).find((c) => c.id === id)?.title}
+          />
+          <div className="drawer-divider" />
+          <GmailLinksPanel
+            projectId={projectId}
+            canEdit={!readOnly}
+            returnTo={`/projects/${projectId}`}
             cardTitle={(id) => columns.flatMap((c) => c.cards).find((c) => c.id === id)?.title}
           />
         </ModalShell>

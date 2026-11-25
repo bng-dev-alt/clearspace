@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, FileText, FileSpreadsheet, Presentation, Folder, Image as ImageIcon, File, RefreshCw, Trash2, Eye, Plus, HardDrive } from 'lucide-react';
-import { driveService, onLinksChanged, DriveError, type DriveLink, type GoogleStatus, type ResourceContent } from '../../services/driveService';
+import { driveService, onLinksChanged, serviceActive, DriveError, type DriveLink, type GoogleStatus, type ResourceContent } from '../../services/driveService';
 import { pickDriveFiles } from '../../lib/google/picker';
 import { ACCESS_TEXT, fileIconKind, fileKind, safeDriveUrl, type AccessState } from '../../lib/google/labels';
 import ModalShell from '../ui/ModalShell';
@@ -64,7 +64,9 @@ export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, 
     return () => { active = false; };
   }, []);
 
-  const connected = status?.connection?.status === 'active';
+  const connected = serviceActive(status, 'drive');
+  // RUN 03: the Google account is connected (e.g. for Gmail) but Drive was never enabled -> offer to add Drive
+  const driveMissing = status?.connection?.status === 'active' && !connected;
   const revoked = status?.connection != null && status.connection.status !== 'active';
 
   const refresh = useCallback(async (quiet = false) => {
@@ -221,7 +223,7 @@ export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, 
       </div>
 
       {status && !status.configured && <p className="drive-hint">{status.message ?? 'Propojení s Google Diskem není na serveru nastavené.'}</p>}
-      {status?.configured && !status.connection && (
+      {status?.configured && (!status.connection || driveMissing) && (
         <div className="drive-hint drive-hint--row">
           <span>{canEdit ? 'Připojte svůj účet Google a přidávejte soubory z Disku.' : 'Připojte svůj účet Google a ověřte si přístup k souborům.'}</span>
           <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={connect} disabled={busy !== null} data-testid="drive-connect">

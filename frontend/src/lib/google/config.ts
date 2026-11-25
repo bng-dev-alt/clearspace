@@ -13,6 +13,7 @@ import { keyFromBase64, type KeyRing } from './crypto';
  *   GOOGLE_CLOUD_PROJECT_NUMBER                          -- numeric project number (Picker setAppId, drive.file grants)
  *   APP_BASE_URL                                         -- shared with e-mail; the redirect URI is built only from it
  *   GOOGLE_API_MOCK_BASE                                 -- local tests only: honoured only outside production AND on loopback
+ *   GMAIL_INTEGRATION_ENABLED                            -- RUN 03 feature switch, '1' = Gmail on (independent of Drive; default OFF)
  */
 
 /** Drive integration = least privilege: per-file access to files the user picks (non-sensitive scope). */
@@ -24,14 +25,25 @@ export const OAUTH_COOKIE = 'cs_google_oauth';
 /** Google's answer (state + code or error), parked by the callback until the signed-in page completes the flow. */
 export const OAUTH_RESULT_COOKIE = 'cs_google_oauth_result';
 export const OAUTH_COOKIE_PATH = '/api/google/oauth';
-// RUN 03/04 add their own sets here (e.g. gmail.readonly, calendar.events) and request them only when the user
-// enables that service (include_granted_scopes keeps earlier grants).
+/**
+ * RUN 03 Gmail: gmail.readonly is a RESTRICTED scope (docs/run03/ARCHITECTURE_DECISION.md). It is the narrowest scope that
+ * allows searching (q) and reading a selected message: gmail.metadata is restricted too and forbids both. Requested only when
+ * the user enables Gmail (incremental authorization, include_granted_scopes keeps Drive). Never modify/send/compose.
+ */
+export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export const GMAIL_SCOPES = [...IDENTITY_SCOPES, GMAIL_READONLY_SCOPE];
+export type GoogleService = 'drive' | 'gmail';
+export const SERVICE_SCOPE: Record<GoogleService, string> = { drive: DRIVE_FILE_SCOPE, gmail: GMAIL_READONLY_SCOPE };
+export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SCOPES, gmail: GMAIL_SCOPES };
+/** Gmail feature switch, independent of Drive and of the Google grant (turning it off stops every Gmail call). */
+export const gmailFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.GMAIL_INTEGRATION_ENABLED?.trim() === '1';
 
 export interface GoogleEndpoints {
   auth: string;
   token: string;
   revoke: string;
   drive: string;
+  gmail: string;
   pickerScript: string;
 }
 
@@ -40,6 +52,7 @@ const REAL: GoogleEndpoints = {
   token: 'https://oauth2.googleapis.com/token',
   revoke: 'https://oauth2.googleapis.com/revoke',
   drive: 'https://www.googleapis.com/drive/v3',
+  gmail: 'https://gmail.googleapis.com/gmail/v1',
   pickerScript: 'https://apis.google.com/js/api.js',
 };
 
@@ -71,7 +84,7 @@ function mockEndpoints(env: NodeJS.ProcessEnv): GoogleEndpoints | null | 'refuse
   try { u = new URL(raw); } catch { return 'refused'; }
   if (isProductionRuntime(env) || !isLoopbackHost(u.hostname) || u.protocol !== 'http:') return 'refused';
   const b = u.origin;
-  return { auth: `${b}/o/oauth2/v2/auth`, token: `${b}/token`, revoke: `${b}/revoke`, drive: `${b}/drive/v3`, pickerScript: `${b}/picker/api.js` };
+  return { auth: `${b}/o/oauth2/v2/auth`, token: `${b}/token`, revoke: `${b}/revoke`, drive: `${b}/drive/v3`, gmail: `${b}/gmail/v1`, pickerScript: `${b}/picker/api.js` };
 }
 
 export function googleConfig(env: NodeJS.ProcessEnv = process.env): GoogleConfigResult {

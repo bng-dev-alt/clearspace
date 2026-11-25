@@ -75,6 +75,15 @@ export function describeActivity(log: ProjectActivityLog): { text: string; kind:
       return d.title
         ? { text: `odebral(a) soubor z Disku „${str(d.name, 'soubor')}" od úkolu ${title}`, kind: 'file' }
         : { text: `odebral(a) z projektu soubor z Disku „${str(d.name, 'soubor')}"`, kind: 'file' };
+    // RUN 03: Gmail links. The event deliberately carries no subject (privacy: removing the link leaves nothing behind).
+    case 'email_linked': {
+      const what = d.kind === 'thread' ? 'e-mailovou konverzaci' : 'e-mail';
+      return d.title ? { text: `připojil(a) ${what} z Gmailu k úkolu ${title}`, kind: 'file' } : { text: `připojil(a) k projektu ${what} z Gmailu`, kind: 'file' };
+    }
+    case 'email_unlinked': {
+      const what = d.kind === 'thread' ? 'e-mailovou konverzaci' : 'e-mail';
+      return d.title ? { text: `odebral(a) ${what} z Gmailu od úkolu ${title}`, kind: 'file' } : { text: `odebral(a) z projektu ${what} z Gmailu`, kind: 'file' };
+    }
     default: return { text: 'provedl(a) akci', kind: 'other' };
   }
 }

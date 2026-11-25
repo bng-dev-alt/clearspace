@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DRIVE_SCOPES, OAUTH_COOKIE } from '../../../../../lib/google/config';
+import { gmailFeatureEnabled, OAUTH_COOKIE, SERVICE_SCOPES, type GoogleService } from '../../../../../lib/google/config';
 import { pkcePair, randomToken, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { buildAuthUrl } from '../../../../../lib/google/oauth';
-import { caller, dbError, errorResponse, NO_STORE, readJson, requireGoogle } from '../../../../../lib/google/server';
+import { caller, dbError, errorResponse, HttpError, NO_STORE, readJson, requireGoogle } from '../../../../../lib/google/server';
 
 const RETURN_TO = /^\/(settings|projects\/[A-Za-z0-9_-]{1,100})$/;
 
 /**
- * POST /api/google/oauth/start { returnTo } -- begins connecting the caller's Google account.
+ * POST /api/google/oauth/start { returnTo, service? } -- begins connecting the caller's Google account, or adding one
+ * service to it (RUN 03 incremental authorization: 'drive' (default, RUN 02) or 'gmail'). Only that service's scope is
+ * requested; include_granted_scopes keeps what was granted before. The requested scopes are stored with the state, so
+ * the completion knows which service was asked for.
  * The state (single use, 10 min) is bound to this ClearSpace user (authenticated call) and to this browser
  * (HttpOnly cookie nonce, only its hash is stored). The PKCE verifier is stored encrypted, never sent anywhere.
  */
@@ -15,8 +18,15 @@ export async function POST(req: NextRequest) {
   try {
     const cfg = requireGoogle();
     const { db } = await caller(req);
-    const body = await readJson<{ returnTo?: unknown }>(req);
+    const body = await readJson<{ returnTo?: unknown; service?: unknown }>(req);
     const returnTo = typeof body.returnTo === 'string' && RETURN_TO.test(body.returnTo) ? body.returnTo : '/settings';
+    const service: GoogleService | null = body.service === undefined || body.service === 'drive' ? 'drive' : body.service === 'gmail' ? 'gmail' : null;
+    if (!service) throw new HttpError(400, 'Neplatná služba.', 'invalid');
+    if (service === 'gmail' && !gmailFeatureEnabled()) throw new HttpError(503, 'Propojení s Gmailem není na serveru zapnuté.', 'gmail_disabled');
+    const scopes = SERVICE_SCOPES[service];
+    // adding a service to an existing connection: pre-select the same Google account on Google's screen
+    const { data: st } = await db.rpc('google_connection_status');
+    const current = (Array.isArray(st) ? st[0] : st) as { google_email?: string } | undefined;
     const state = randomToken(32);
     const nonce = randomToken(32);
     const { verifier, challenge } = pkcePair();
@@ -26,10 +36,10 @@ export async function POST(req: NextRequest) {
       p_binding_sha256: sha256hex(nonce),
       p_code_verifier_enc: seal(cfg.keys, verifier, tokenAad(state, 'pkce')),
       p_return_to: returnTo,
-      p_scopes: DRIVE_SCOPES,
+      p_scopes: scopes,
     });
     if (error) throw dbError(error, 'Připojení se nepodařilo zahájit.');
-    const res = NextResponse.json({ url: buildAuthUrl(cfg, { state, codeChallenge: challenge, scopes: DRIVE_SCOPES }) }, { headers: NO_STORE });
+    const res = NextResponse.json({ url: buildAuthUrl(cfg, { state, codeChallenge: challenge, scopes, loginHint: current?.google_email }) }, { headers: NO_STORE });
     res.cookies.set(OAUTH_COOKIE, nonce, {
       httpOnly: true,
       secure: cfg.appBaseUrl.startsWith('https://'),

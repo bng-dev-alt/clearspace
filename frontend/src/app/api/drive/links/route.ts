@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
     if (roleErr) throw dbError(roleErr);
     if (!canEdit) throw new HttpError(403, 'K tomuto projektu nemáte oprávnění přidávat soubory.', 'forbidden');
 
-    let { token } = await getAccessToken(db, cfg, { cost: fileIds.length });
+    let { token } = await getAccessToken(db, cfg, { cost: fileIds.length, service: 'drive' });
     const links: { id: string; fileId: string; duplicate: boolean }[] = [];
     const failed: { fileId: string; reason: string; message: string }[] = [];
     for (const fileId of fileIds as string[]) {
       let r = await getFile(cfg, token, fileId);
-      if (!r.ok && r.reason === 'auth') { token = (await getAccessToken(db, cfg, { force: true, cost: 1 })).token; r = await getFile(cfg, token, fileId); }
+      if (!r.ok && r.reason === 'auth') { token = (await getAccessToken(db, cfg, { force: true, cost: 1, service: 'drive' })).token; r = await getFile(cfg, token, fileId); }
       if (!r.ok) { failed.push({ fileId, reason: r.reason, message: ACCESS_TEXT[r.reason] }); continue; }
       const f = r.value;
       const { data, error } = await db.rpc('drive_link_add', {

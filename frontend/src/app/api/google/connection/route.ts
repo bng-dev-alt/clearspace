@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gmailFeatureEnabled, googleConfig } from '../../../../lib/google/config';
+import { calendarFeatureEnabled, gmailFeatureEnabled, googleConfig } from '../../../../lib/google/config';
 import { open, tokenAad } from '../../../../lib/google/crypto';
 import { hasService, revokeToken } from '../../../../lib/google/oauth';
 import { caller, dbError, errorResponse, MSG, NO_STORE, requireGoogle } from '../../../../lib/google/server';
@@ -18,10 +18,11 @@ export async function GET(req: NextRequest) {
       simulated: cfg.enabled && cfg.mock,           // local test provider, never presented as real Google
       // RUN 03: one Google grant, per-service state (what ClearSpace uses) + the Gmail feature switch
       gmailAvailable: cfg.enabled && gmailFeatureEnabled(),
+      calendarAvailable: cfg.enabled && calendarFeatureEnabled(),     // RUN 04
       pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
       connection: row ? {
         email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at,
-        services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail') },
+        services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail'), calendar: hasService(row.scopes, 'calendar') },
       } : null,
     }, { headers: NO_STORE });
   } catch (err) {
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
 /**
  * DELETE /api/google/connection -- disconnect: revoke the grant at Google (best effort), then delete the stored
  * credentials. Linked files stay in the projects; nobody gains or loses access to them in Google Drive.
- * RUN 03: Google revokes the WHOLE grant -- Drive and Gmail end together. Linked e-mails keep their shared metadata;
+ * RUN 03/04: Google revokes the WHOLE grant -- Drive, Gmail and Calendar end together. Linked e-mails keep their shared metadata;
  * only their owner can preview them again after reconnecting the same Google account.
  */
 export async function DELETE(req: NextRequest) {

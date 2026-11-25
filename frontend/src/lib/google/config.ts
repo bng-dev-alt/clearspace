@@ -14,6 +14,7 @@ import { keyFromBase64, type KeyRing } from './crypto';
  *   APP_BASE_URL                                         -- shared with e-mail; the redirect URI is built only from it
  *   GOOGLE_API_MOCK_BASE                                 -- local tests only: honoured only outside production AND on loopback
  *   GMAIL_INTEGRATION_ENABLED                            -- RUN 03 feature switch, '1' = Gmail on (independent of Drive; default OFF)
+ *   CALENDAR_INTEGRATION_ENABLED                         -- RUN 04 feature switch, '1' = Google Calendar on (independent; default OFF)
  *   GOOGLE_OAUTH_PUBLISHING                              -- 'production' only once the consent screen is published (In production);
  *                                                           anything else = Testing: the UI says only approved test users can connect
  */
@@ -34,11 +35,20 @@ export const OAUTH_COOKIE_PATH = '/api/google/oauth';
  */
 export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export const GMAIL_SCOPES = [...IDENTITY_SCOPES, GMAIL_READONLY_SCOPE];
-export type GoogleService = 'drive' | 'gmail';
-export const SERVICE_SCOPE: Record<GoogleService, string> = { drive: DRIVE_FILE_SCOPE, gmail: GMAIL_READONLY_SCOPE };
-export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SCOPES, gmail: GMAIL_SCOPES };
+/**
+ * RUN 04 Calendar: the narrowest read scope that can list and read events of the user's OWN primary calendar
+ * ("See the events on Google calendars you own"); classified SENSITIVE in the Google Cloud console (docs/run04/ARCHITECTURE_DECISION.md).
+ * Requested only when the user enables Calendar. No write scope exists in this code.
+ */
+export const CALENDAR_READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
+export const CALENDAR_SCOPES = [...IDENTITY_SCOPES, CALENDAR_READONLY_SCOPE];
+export type GoogleService = 'drive' | 'gmail' | 'calendar';
+export const SERVICE_SCOPE: Record<GoogleService, string> = { drive: DRIVE_FILE_SCOPE, gmail: GMAIL_READONLY_SCOPE, calendar: CALENDAR_READONLY_SCOPE };
+export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SCOPES, gmail: GMAIL_SCOPES, calendar: CALENDAR_SCOPES };
 /** Gmail feature switch, independent of Drive and of the Google grant (turning it off stops every Gmail call). */
 export const gmailFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.GMAIL_INTEGRATION_ENABLED?.trim() === '1';
+/** Calendar feature switch (RUN 04), independent of Drive, Gmail and the Google grant. Default OFF. */
+export const calendarFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.CALENDAR_INTEGRATION_ENABLED?.trim() === '1';
 
 export interface GoogleEndpoints {
   auth: string;
@@ -46,6 +56,7 @@ export interface GoogleEndpoints {
   revoke: string;
   drive: string;
   gmail: string;
+  calendar: string;
   pickerScript: string;
 }
 
@@ -55,6 +66,7 @@ const REAL: GoogleEndpoints = {
   revoke: 'https://oauth2.googleapis.com/revoke',
   drive: 'https://www.googleapis.com/drive/v3',
   gmail: 'https://gmail.googleapis.com/gmail/v1',
+  calendar: 'https://www.googleapis.com/calendar/v3',
   pickerScript: 'https://apis.google.com/js/api.js',
 };
 
@@ -88,7 +100,7 @@ function mockEndpoints(env: NodeJS.ProcessEnv): GoogleEndpoints | null | 'refuse
   try { u = new URL(raw); } catch { return 'refused'; }
   if (isProductionRuntime(env) || !isLoopbackHost(u.hostname) || u.protocol !== 'http:') return 'refused';
   const b = u.origin;
-  return { auth: `${b}/o/oauth2/v2/auth`, token: `${b}/token`, revoke: `${b}/revoke`, drive: `${b}/drive/v3`, gmail: `${b}/gmail/v1`, pickerScript: `${b}/picker/api.js` };
+  return { auth: `${b}/o/oauth2/v2/auth`, token: `${b}/token`, revoke: `${b}/revoke`, drive: `${b}/drive/v3`, gmail: `${b}/gmail/v1`, calendar: `${b}/calendar/v3`, pickerScript: `${b}/picker/api.js` };
 }
 
 export function googleConfig(env: NodeJS.ProcessEnv = process.env): GoogleConfigResult {

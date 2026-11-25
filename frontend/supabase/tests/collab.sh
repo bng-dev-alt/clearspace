@@ -191,3 +191,76 @@ echo "ok - Drive links survive the 1300 rollback"
 apply cs_kg "$FRONTEND/supabase/migrations/20261127001300_gmail.sql"
 [ "$(psql_admin -d cs_kg -At -c "select count(*) from public.clearspace_migrations where version = '20261127001300_gmail'")" = "1" ] || { echo "FAIL: re-apply 1300 after rollback"; exit 1; }
 echo "ok - 20261127001300 applies again after its rollback"
+
+# ---------------------------------------------------------------- RUN 04: Google Calendar events
+echo "== Scenario K5: Google Calendar (private sources, roles, duplicates, refresh, purge, per-service permission, Gmail/Drive compatibility) -- committed transactions"
+newdb cs_k5
+apply cs_k5 "$BASELINE" "${MIGRATIONS[@]}"
+out="$(mktemp)"
+if psql_admin -d cs_k5 -f - < "$HERE/collab/94_google_calendar.sql" >"$out" 2>&1; then
+  k=$(grep -cE "NOTICE:  ok" "$out" || true); TOTAL=$((TOTAL + k))
+  grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //'
+  echo "    ($k assertions)"; rm -f "$out"
+else
+  cat "$out"; rm -f "$out"; echo "FAIL: collab/94_google_calendar.sql"; exit 1
+fi
+
+echo "--- upgrade from run03c-complete (1300 with Drive + Gmail data) -> 1400: Drive / Gmail rows, sources, connections and audit unchanged"
+UPTO_1300=(); for f in "${MIGRATIONS[@]}"; do [[ "$(basename "$f")" > "20261127001300~" ]] || UPTO_1300+=("$f"); done
+newdb cs_kc; apply cs_kc "$BASELINE" "${UPTO_1300[@]}"
+S1300=$(psql_admin -d cs_kc -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+psql_admin -d cs_kc -q >/dev/null <<'SQL'
+DO $$ DECLARE a uuid := test.mkuser('cu-a@example.test'); BEGIN
+  INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('google', encode(sha256(convert_to(repeat('g', 40), 'UTF8')), 'hex'))
+  ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256;
+  INSERT INTO public.google_connections (user_id, google_sub, google_email, scopes, refresh_token_enc) VALUES (a, '992', 'c@example.test', ARRAY['openid', 'https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/gmail.readonly'], 'v1.0000aaaa.a.b.c');
+  INSERT INTO public.integration_audit (user_id, provider, event) VALUES (a, 'google', 'connected');
+  PERFORM test.act_as(a, 'cu-a@example.test');
+  INSERT INTO public.projects (id, name) VALUES ('pCU', 'U');
+  INSERT INTO public.project_members (project_id, member_id) VALUES ('pCU', 'member-owner-' || a::text);
+  PERFORM public.drive_link_add(repeat('g', 40), 'pCU', null, 'fileUpgrade0002', 'Soubor', 'application/pdf', 'https://drive.google.com/file/d/fileUpgrade0002/view', 1, now(), 'ok');
+  PERFORM public.gmail_link_add(repeat('g', 40), 'pCU', null, 'thread', 'refUpgradeGmail00000001', '992', '18c3a5e000000000', '18c3a5e000000000', 'S', 'F', now(), 2, null, 'ok');
+  PERFORM public.google_service_audit(repeat('g', 40), 'service_added', 'gmail');
+END $$;
+SQL
+FP="select md5(string_agg(t::text, '|' order by t::text)) from (select id, project_id, card_id, provider, external_id, name, mime_type, web_url, size_bytes, modified_at, provider_state, linked_by, email_from, email_count, email_attachments from public.external_resource_links) t"
+FPS="select md5(string_agg(t::text, '|' order by t::text)) from (select * from public.gmail_link_sources) t"
+FPC="select md5(string_agg(t::text, '|' order by t::text)) from (select user_id, google_sub, scopes, status, refresh_token_enc from public.google_connections) t"
+FPA="select md5(string_agg(t::text, '|' order by t::text)) from (select user_id, provider, event, detail, created_at from public.integration_audit) t"
+BEFORE="$(psql_admin -d cs_kc -At -c "$FP")/$(psql_admin -d cs_kc -At -c "$FPS")/$(psql_admin -d cs_kc -At -c "$FPC")/$(psql_admin -d cs_kc -At -c "$FPA")"
+CAL="$FRONTEND/supabase/migrations/20261128001400_google_calendar.sql"
+apply cs_kc "$CAL"
+apply cs_kc "$CAL"      # idempotent
+AFTER="$(psql_admin -d cs_kc -At -c "$FP")/$(psql_admin -d cs_kc -At -c "$FPS")/$(psql_admin -d cs_kc -At -c "$FPC")/$(psql_admin -d cs_kc -At -c "$FPA")"
+[ "$BEFORE" = "$AFTER" ] || { echo "FAIL: Drive/Gmail rows, sources, connections or audit changed by the 1400 upgrade"; exit 1; }
+echo "ok - upgrade 1300 -> 1400 keeps Drive + Gmail links, Gmail sources, connections and audit byte-identical; re-apply is a no-op"
+
+echo "--- Calendar rollback (1400): refused while Calendar links / Calendar audit exist; otherwise restores the 1300 catalog exactly"
+DOWN5="$FRONTEND/supabase/rollback/20261128001400_google_calendar.down.sql"
+psql_admin -d cs_kc -q >/dev/null <<'SQL'
+DO $$ DECLARE a uuid := (select id from auth.users where email = 'cu-a@example.test'); BEGIN
+  PERFORM test.reset();
+  UPDATE public.google_connections SET scopes = scopes || ARRAY['https://www.googleapis.com/auth/calendar.events.owned.readonly'] WHERE user_id = a;
+  PERFORM test.act_as(a, 'cu-a@example.test');
+  PERFORM public.calendar_link_add(repeat('g', 40), 'pCU', null, 'refRollbackCal000000001', '992', 'evtrollback01', null, 'T', now(), now(), false, null, false, 0, null, now(), 'ok');
+END $$;
+SQL
+if out=$(psql_admin -d cs_kc --single-transaction -f - < "$DOWN5" 2>&1); then echo "FAIL: 1400 rollback ran although Calendar links exist"; exit 1; fi
+echo "$out" | grep -q "Calendar links would be lost" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+[ "$(psql_admin -d cs_kc -At -c "select count(*) from public.calendar_link_sources")" = "1" ] || { echo "FAIL: refused rollback changed data"; exit 1; }
+echo "ok - 1400 rollback refused while Calendar links exist, nothing changed"
+psql_admin -d cs_kc -q -c "delete from public.external_resource_links where provider = 'google_calendar_event'; update public.google_connections set scopes = array_remove(scopes, 'https://www.googleapis.com/auth/calendar.events.owned.readonly')" >/dev/null
+psql_admin -d cs_kc -q -c "insert into public.integration_audit (user_id, provider, event, detail) select id, 'google', 'service_removed', 'calendar' from auth.users where email = 'cu-a@example.test'" >/dev/null
+if out=$(psql_admin -d cs_kc --single-transaction -f - < "$DOWN5" 2>&1); then echo "FAIL: 1400 rollback ran although Calendar audit rows exist"; exit 1; fi
+echo "$out" | grep -q "Calendar audit rows would be lost" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+echo "ok - 1400 rollback refused while Calendar audit rows exist"
+{ echo "SET clearspace.rollback_allow_data_loss = 'on';"; cat "$DOWN5"; } | psql_admin -d cs_kc --single-transaction -f - >/dev/null
+SR5=$(psql_admin -d cs_kc -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+[ "$SR5" = "$S1300" ] || { echo "FAIL: catalog after 1400 rollback ($SR5) differs from 1300 ($S1300)"; exit 1; }
+echo "ok - catalog after 1400 rollback == catalog at 1300 ($SR5)"
+AFTER_RB="$(psql_admin -d cs_kc -At -c "$FP")/$(psql_admin -d cs_kc -At -c "$FPS")"
+[ "$AFTER_RB" = "$(echo "$BEFORE" | cut -d/ -f1-2)" ] || { echo "FAIL: rollback changed Drive/Gmail links"; exit 1; }
+echo "ok - Drive + Gmail links and Gmail sources survive the 1400 rollback byte-identical"
+apply cs_kc "$CAL"
+[ "$(psql_admin -d cs_kc -At -c "select count(*) from public.clearspace_migrations where version = '20261128001400_google_calendar'")" = "1" ] || { echo "FAIL: re-apply 1400 after rollback"; exit 1; }
+echo "ok - 20261128001400 applies again after its rollback"

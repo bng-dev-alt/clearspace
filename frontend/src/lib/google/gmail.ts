@@ -68,7 +68,8 @@ function classify(status: number, body: string): GmailFailure {
   return 'unavailable';
 }
 
-async function gmailFetch(url: string, token: string, maxBytes: number): Promise<{ status: number; body: string }> {
+/** Bounded GET (timeout, one jittered retry on network/429/5xx, size cap, no redirects). RUN 04: also used by calendar.ts. */
+export async function gmailFetch(url: string, token: string, maxBytes: number): Promise<{ status: number; body: string }> {
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {

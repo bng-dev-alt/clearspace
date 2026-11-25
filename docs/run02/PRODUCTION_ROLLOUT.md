@@ -1,6 +1,7 @@
 # RUN 02 – Google Drive: produkční rollout (runbook)
 
-Stav 2026-11-25: **nic z tohoto dokumentu ještě neproběhlo.** Implementace je na větvi `feature/run02-google-drive`
+Stav 2026-11-25: **nic z tohoto dokumentu ještě neproběhlo.** RUN 02C: příprava hotová, aktuální postup, hodnoty a brány jsou v
+`docs/run02/PRODUCTION_ACCEPTANCE.md` (ten má přednost před §2–§4 a §9 níže, které popisují původní variantu s `clearspace-ai.vercel.app`). Implementace je na větvi `feature/run02-google-drive`
 (lokálně, nepushnuto, tag `run02-complete`). Produkce = stav RUN 01 (`clearspace-ai.vercel.app`, Supabase `twjlnsxjtuntujarwner`,
 migrace 0100–0700, 0900, 1000, 1100). Vzor: `docs/collaboration/PRODUCTION_ROLLOUT.md` (RUN 01).
 Architektura a bezpečnost: `docs/run02/GOOGLE_DRIVE.md`.
@@ -118,3 +119,11 @@ produkčního Google projektu `clearspace-prod` (§2: Drive API + Picker API, co
 Rollback: §7 (kód: `vercel promote` předchozí; DB: odpojit účty → rollback skript; vypnutí: smazat `GOOGLE_OAUTH_CLIENT_ID`).
 Rizika: režim *Testing* (7denní refresh token, max. 100 testovacích uživatelů, varování o neověřené aplikaci) · Google odvolává grant celého *projektu*
 (proto oddělený dev/prod projekt) · staged URL není v redirect URI (OAuth se testuje až po promote) · zapomenutý `NEXT_PUBLIC_ENABLE_MONOGRAPH`.
+
+## 10. RUN 02C – změny proti původnímu plánu
+* Produkční doména **`https://clearspace.luffast.com`** (vlastní doména kvůli ověření značky; `vercel.app` nelze ověřit). Redirect URI
+  `https://clearspace.luffast.com/api/google/oauth/callback`, homepage `/about`, zásady `/privacy`, authorized domain `luffast.com`.
+* Nové Production env: `PRIVACY_CONTROLLER`, `PRIVACY_CONTACT_EMAIL` (zásady), volitelně `GOOGLE_OAUTH_PUBLISHING=production` (až po publikování).
+  `APP_BASE_URL` se mění na novou doménu (pozvánky i Google). Skripty: `domain-cutover.sh`, `deploy-drive-staged.sh`, `rehearse-drive-prod.sh`.
+* Nácvik migrace proběhl na replice produkčního schématu (schema-only, žádná produkční data) – PASS; kopie produkčních dat **nebyla potřeba**.
+* Pořadí, brány, souhrnné schválení a rollback: `PRODUCTION_ACCEPTANCE.md` §9–§11.

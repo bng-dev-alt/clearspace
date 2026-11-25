@@ -321,3 +321,12 @@ The real-Google dev log of this run has no `code=`/`state=`/token.
 Regression at closeout: unit 1266/1266, `tsc` 0, lint 0 errors (3 old warnings), production build with DEV flags set → bundle guard 48/48 and `/api/dev/login` 404,
 live specs (`google-drive-live-ui` Classic + Monograph 4/4, `dev-login-stack` 3/3, `google-drive-live-doc` 1/1). DB harness and mock suites were **not** re-run
 (migration and server code unchanged since their last green run: DB harness 2231 assertions, `drive_http` 28/28, `collab_realtime` 64/64, `invite_email` 41/41).
+
+## 15. RUN 02C (production rollout preparation, 2026-11-25)
+* **Limited pilot flag:** `GOOGLE_OAUTH_PUBLISHING` (server env). Anything but `production` = consent screen in *Testing* → status API returns
+  `pilot: true` and the settings card / files panel say that only approved Google test users can connect. Set `production` only after publishing.
+* **Public pages:** `/about` (OAuth homepage) and `/privacy` (Google data disclosure, Limited Use statement; controller/contact from server env
+  `PRIVACY_CONTROLLER` / `PRIVACY_CONTACT_EMAIL` only) – rendered without login and without client JS (`ProtectedRoute` static public paths).
+* `/api/dev/login` returns 404 for every method (production previously answered 405 to GET).
+* Production rehearsal of 1200 on a faithful replica of the production schema: PASS (`scripts/rehearse-drive-prod.sh`).
+* Everything about the production rollout: `docs/run02/PRODUCTION_ACCEPTANCE.md`.

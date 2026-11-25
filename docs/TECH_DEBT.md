@@ -1,6 +1,6 @@
 # ClearSpace V1 – technický dluh (známé, vědomě neřešené)
 
-Stav k 2026-11-25. Položky níže **nevznikly v RUN 02** (ověřeno: padají beze změny i na tagu `run01-complete`); jsou jen evidované,
+Stav k 2026-11-25 (ověřeno znovu v RUN 02C na kandidátovi `release/run02-google-drive`: TD-1 a TD-2 padají stejně, žádné nové selhání). Položky níže **nevznikly v RUN 02** (ověřeno: padají beze změny i na tagu `run01-complete`); jsou jen evidované,
 aby je další RUN nepovažoval za regresi a aby se nepřehlédly. Opravovat je samostatným malým úkolem (test, ne produktový kód).
 
 | # | Test | Příznak (přesně) | Příčina | Dopad | Návrh opravy |
@@ -11,3 +11,10 @@ aby je další RUN nepovažoval za regresi a aby se nepřehlédly. Opravovat je 
 ## Další známá omezení (z RUN 02/02B; ne chyby)
 * Skript E2E s **DEV auto-loginem**: `collaboration-01b` (čistý kontext hosta) musí běžet s `DEV_AUTO_LOGIN=0` (zdokumentováno v `docs/LOCAL_DEV.md`).
 * `npm run lint`: 3 starší varování (beze změny proti RUN 01).
+
+## Známá omezení z RUN 02C (vědomě, bez akce)
+* `integration_audit` nemá retenci (záznamy jen událost + čas, mažou se s účtem); zásady to tak uvádějí.
+* Hromadné odvolání všech Google grantů neexistuje jako skript (tokeny jsou šifrované klíčem, který je jen ve Vercelu): postup = smazat/vypnout OAuth
+  klienta v Google Cloud (PRODUCTION_ACCEPTANCE.md §11).
+* Úplná sada Playwright testů potřebuje dva běhy: stack režim (`drive-stack.sh app`) a demo režim (build bez Supabase env); jeden běh proti stacku
+  hlásí falešná selhání demo testů (`kanban`, `reflow`, `feature-updates`, `ios-zoom`).

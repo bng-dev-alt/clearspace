@@ -51,5 +51,11 @@ if ! exists GOOGLE_TOKEN_ENCRYPTION_KEY; then
   EK=$(openssl rand -base64 32)
   VAL=$EK put GOOGLE_TOKEN_ENCRYPTION_KEY sensitive; unset EK
 else echo "  GOOGLE_TOKEN_ENCRYPTION_KEY already exists -- left unchanged"; fi
-unset VAL
+echo "== Privacy policy controller (shown on /privacy; never in the repository). Leave empty to skip."
+read -rp "PRIVACY_CONTROLLER (name of the person/company responsible, as it should appear publicly): " PCTL
+read -rp "PRIVACY_CONTACT_EMAIL (monitored address for privacy / deletion requests): " PMAIL
+if [ -n "$PCTL" ] && [[ "$PMAIL" =~ ^[^[:space:]@\<\>]+@[^[:space:]@\<\>]+\.[A-Za-z]{2,}$ ]]; then
+  VAL=$PCTL put PRIVACY_CONTROLLER encrypted; VAL=$PMAIL put PRIVACY_CONTACT_EMAIL encrypted
+else echo "  privacy contact skipped (the /privacy page will say the contact is missing; deploy-drive-staged.sh preflight blocks)"; fi
+unset VAL PCTL PMAIL
 echo "DONE. Nothing was deployed. The redirect URI is built from APP_BASE_URL -- set it to https://clearspace.luffast.com first (scripts/domain-cutover.sh switch-env)."

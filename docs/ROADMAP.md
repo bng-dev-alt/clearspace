@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 03)
+# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 02C a RUN 03)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -8,7 +8,7 @@
 | 01B | Zabezpečení a spolehlivost, pozvánky e-mailem | **hotovo, v produkci** | tamtéž |
 | 01C | Produkční připravenost (Resend, nodemailer, rollout, DMARC, Monograph build) | **hotovo, v produkci** | `PRODUCTION_ROLLOUT.md` |
 | **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **dokončeno lokálně, tag `run02-complete`** (nepushnuto, nenasazeno): RUN 02B živě ověřeno proti skutečnému Googlu (dev projekt, režim Testing) včetně náhledu nativního Dokumentu, obnovy po přejmenování a **prokázané revokace u Googlu**; NOT VERIFIED: druhý Google účet, 7denní expirace refresh tokenu, odmítnutý souhlas naživo | `docs/run02/GOOGLE_DRIVE.md` §13–14, `docs/run02/PRODUCTION_ROLLOUT.md` |
-| **02C** | **Production Rollout** Google Drive (produkční Google projekt, migrace 1200, staged build, živá akceptace) | **další, vyžaduje rozhodnutí vlastníka** (Testing vs. ověření značky) | `docs/run02/PRODUCTION_ROLLOUT.md` §9 |
+| **02C** | **Production Rollout** Google Drive | **HOTOVO 2026-11-25, tag `run02c-complete`**: produkce `https://clearspace.luffast.com` (308 ze `clearspace-ai.vercel.app`), migrace 1200, Google projekt `clearspace-prod` v režimu **Testing = omezený pilot** (jen test users), živá akceptace vlastníka PASS; Monograph výchozí vzhled. Otevřené: výměna Picker API klíče (připraveno), veřejné publikování / ověření značky (samostatné rozhodnutí); NOT VERIFIED: druhý Google účet, 7denní expirace | `docs/run02/PRODUCTION_ACCEPTANCE.md` |
 | **03** | **Gmail Integration** (inkrementální `gmail.readonly` vedle Disku, vlastní výběr e-mailů/konverzací, připojení k projektům a úkolům, soukromé zdroje + sdílená metadata, náhled jen pro vlastníka, realtime, aktivita bez předmětu, přepínač funkce) | **dokončeno lokálně proti mocku, tag `run03-mock-complete`** (nepushnuto, nenasazeno). Živý Gmail **NEOVĚŘEN** – čeká na kroky vlastníka v Google Cloud; `gmail.readonly` je *restricted* (veřejně jen po ověření + CASA) | `docs/run03/GMAIL.md`, `ARCHITECTURE_DECISION.md`, `LIVE_ACCEPTANCE.md` |
 | 03B | Gmail live acceptance (dev projekt, Testing) | další; Gmail API + scope + redirect URI 3451 (vlastník) | `docs/run03/LIVE_ACCEPTANCE.md` |
 | 04 | Google Calendar | plánováno; znovupoužití základu z RUN 02/03 | `docs/run03/HANDOFF_NEXT_RUNS.md` |

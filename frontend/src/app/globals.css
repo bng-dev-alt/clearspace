@@ -3563,7 +3563,7 @@ body {
 /* Na mobilu je celý .navbar-right skrytý -- hledání proto žije
    v hamburger menu (sekce Akce). */
 
-/* Přepínač vzhledu (jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=1): textová tlačítka ve stejném segmentovaném ovladači jako motiv. */
+/* Přepínač vzhledu (chybí jen při NEXT_PUBLIC_ENABLE_MONOGRAPH=0): textová tlačítka ve stejném segmentovaném ovladači jako motiv. */
 .style-toggle .theme-toggle-btn { width: auto; padding: 0 0.6rem; font-size: 0.7rem; font-weight: 600; font-family: var(--font-sans); }
 
 /* ============================================================
@@ -3706,3 +3706,11 @@ body {
 .settings-service { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.55rem 0.7rem;
   border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); }
 .settings-service strong { color: var(--dark-navy); font-size: 0.82rem; }
+/* RUN 02C: public static pages (/about, /privacy) -- readable without login */
+.public-page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 1rem 3rem 0; }
+.public-page-brand { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; color: var(--dark-navy); text-decoration: none; }
+.public-page-brand span { color: var(--accent-yellow); }
+.public-page-nav { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.8rem; font-weight: 600; }
+.public-page-nav a, .public-page a { color: var(--blue-primary); }
+.public-page code { font-size: 0.75rem; }
+@media (max-width: 640px) { .public-page-head { padding: 0.9rem 1rem 0; } .public-page { padding: 0 1rem 2rem; } }

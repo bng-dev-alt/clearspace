@@ -39,3 +39,7 @@ export async function POST(req: NextRequest) {
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }
+
+/** Every other method answers like a missing route too (a 405 would reveal that the helper exists in a build). */
+const missing = () => new NextResponse(null, { status: 404 });
+export { missing as GET, missing as PUT, missing as PATCH, missing as DELETE };

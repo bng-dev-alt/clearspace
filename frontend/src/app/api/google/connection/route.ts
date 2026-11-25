@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
       simulated: cfg.enabled && cfg.mock,           // local test provider, never presented as real Google
       // RUN 03: one Google grant, per-service state (what ClearSpace uses) + the Gmail feature switch
       gmailAvailable: cfg.enabled && gmailFeatureEnabled(),
+      pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
       connection: row ? {
         email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at,
         services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail') },

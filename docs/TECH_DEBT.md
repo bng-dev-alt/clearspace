@@ -1,6 +1,6 @@
 # ClearSpace V1 – technický dluh (známé, vědomě neřešené)
 
-Stav k 2026-11-25. Položky níže **nevznikly v RUN 02** (ověřeno: padají beze změny i na tagu `run01-complete`); jsou jen evidované,
+Stav k 2026-11-25 (ověřeno znovu v RUN 02C na kandidátovi `release/run02-google-drive`: TD-1 a TD-2 padají stejně, žádné nové selhání). Položky níže **nevznikly v RUN 02** (ověřeno: padají beze změny i na tagu `run01-complete`); jsou jen evidované,
 aby je další RUN nepovažoval za regresi a aby se nepřehlédly. Opravovat je samostatným malým úkolem (test, ne produktový kód).
 
 | # | Test | Příznak (přesně) | Příčina | Dopad | Návrh opravy |
@@ -21,3 +21,14 @@ Ověřeno i v RUN 03 (2026-11-25, stack `cs-gmail-sb`): TD-1 a TD-2 padají stej
 * Bývalý Čtenář nemůže své e-mailové odkazy v daném projektu smazat sám (viewer guard); purge je nahlásí jako přeskočené.
 * Rotace `GOOGLE_SERVER_SECRET` mění HMAC klíč odkazů (nové připojení téhož e-mailu se nepozná jako duplicita).
 * Mock `__control/fail` s `count: 0` nastaví 1 (testy používají přesné počty).
+
+## Známá omezení z RUN 02C (vědomě, bez akce)
+* `integration_audit` nemá retenci (záznamy jen událost + čas, mažou se s účtem); zásady to tak uvádějí.
+* Hromadné odvolání všech Google grantů neexistuje jako skript (tokeny jsou šifrované klíčem, který je jen ve Vercelu): postup = smazat/vypnout OAuth
+  klienta v Google Cloud (PRODUCTION_ACCEPTANCE.md §11).
+* Úplná sada Playwright testů potřebuje dva běhy: stack režim (`drive-stack.sh app`) a demo režim (build bez Supabase env); jeden běh proti stacku
+  hlásí falešná selhání demo testů (`kanban`, `reflow`, `feature-updates`, `ios-zoom`).
+* **Vercel Hobby plán drží runtime logy jen ~1 hodinu** (`vercel logs --since 12h` → „does not retain runtime logs for the requested time range“):
+  kontrola citlivých dat v produkčních logách je možná jen krátce po akci. Pro audit delší historie by byl potřeba Log Drain nebo vyšší plán.
+* Zamítnutý souhlas (`access_denied`) se neaudituje do `integration_audit` (jen `scope_denied`); stačí pro pilot, případně doplnit událost `denied`.
+* Výměna produkčního Picker API klíče čeká na vlastníka (`set-google-keys.sh rotate-picker`, PRODUCTION_ACCEPTANCE.md §11a).

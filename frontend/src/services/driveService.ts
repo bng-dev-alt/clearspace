@@ -20,6 +20,8 @@ export interface GoogleStatus {
   simulated?: boolean;
   /** RUN 03: Gmail feature switch on the server. */
   gmailAvailable?: boolean;
+  /** Google consent screen in Testing mode: only approved test users can connect */
+  pilot?: boolean;
   connection: GoogleConnection | null;
 }
 export type GoogleServiceName = 'drive' | 'gmail';

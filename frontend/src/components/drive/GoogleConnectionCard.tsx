@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { HardDrive, Mail, Link2 } from 'lucide-react';
+import Link from 'next/link';
 import { driveService, serviceActive, DriveError, type GoogleServiceName, type GoogleStatus } from '../../services/driveService';
 import { gmailService } from '../../services/gmailService';
-import { ACCESS_TEXT } from '../../lib/google/labels';
+import { ACCESS_TEXT, PILOT_TEXT } from '../../lib/google/labels';
 
 /** Outcome of Google's redirect back to ClearSpace (?google=...). */
 export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
@@ -85,6 +86,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
         {status?.simulated && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Google">simulace</span>}
       </h2>
       <p>Připojení účtu Google je oddělené od přihlášení do ClearSpace a vaši identitu v ClearSpace nemění. Jednotlivé služby povolujete zvlášť.</p>
+      {status?.configured && status.pilot && <p className="drive-hint" data-testid="google-pilot-note">{PILOT_TEXT}</p>}
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="google-connection-message">{message.text}</p>}
 
       {status === null ? <p>Načítání…</p> : !status.configured ? (
@@ -140,6 +142,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
             <li>U e-mailů uvidí členové projektu jen předmět, odesílatele (jméno nebo doménu), datum a počet zpráv. Obsah, adresy a přílohy zůstávají ve vaší schránce; náhled vidíte jen vy.</li>
             <li>Obsah souborů a e-mailů se čte jen na vaši žádost (náhled), neukládá se a nic se automaticky neposílá AI.</li>
             <li><strong>Vypnout Gmail</strong> = ClearSpace Gmail přestane používat (Disk zůstane). <strong>Odpojit Google účet</strong> = Google zruší celé oprávnění ClearSpace (Disk i Gmail najednou); jednotlivé služby Google zvlášť zrušit neumí.</li>
+            <li>Podrobnosti: <Link href="/privacy#google">Ochrana osobních údajů – Google</Link>.</li>
           </ul>
         </>
       )}

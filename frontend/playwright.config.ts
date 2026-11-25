@@ -17,7 +17,7 @@ export default defineConfig({
   use: {
     baseURL: baseUrl,
     trace: 'on-first-retry',
-    // E2E_STYLE=monograph: run a spec with the opt-in Monograph style selected (the app under test needs NEXT_PUBLIC_ENABLE_MONOGRAPH=1).
+    // E2E_STYLE=monograph: store the Monograph choice explicitly (Monograph is also the app default unless NEXT_PUBLIC_ENABLE_MONOGRAPH=0).
     ...(process.env.E2E_STYLE === 'monograph'
       ? { storageState: { cookies: [], origins: [{ origin: new URL(baseUrl).origin, localStorage: [{ name: 'clearspace-style', value: 'monograph' }] }] } }
       : {}),

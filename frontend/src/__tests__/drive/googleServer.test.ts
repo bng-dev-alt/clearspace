@@ -78,6 +78,13 @@ describe('configuration (fail closed)', () => {
   ])('disabled when %s is invalid', (k, v) => {
     expect(googleConfig({ ...ENV, [k]: v }).enabled).toBe(false);
   });
+  it('RUN 02C: Testing mode (limited pilot) unless GOOGLE_OAUTH_PUBLISHING=production', () => {
+    expect(cfg().pilot).toBe(true);
+    const pub = googleConfig({ ...ENV, GOOGLE_OAUTH_PUBLISHING: 'production' });
+    expect(pub.enabled && pub.pilot).toBe(false);
+    const typo = googleConfig({ ...ENV, GOOGLE_OAUTH_PUBLISHING: 'prod' });
+    expect(typo.enabled && typo.pilot).toBe(true);                 // anything but the exact word stays honest (pilot)
+  });
   it('the e-mail server secret cannot double as the Google one', () => {
     expect(googleConfig({ ...ENV, EMAIL_SERVER_SECRET: 'g'.repeat(40) }).enabled).toBe(false);
   });

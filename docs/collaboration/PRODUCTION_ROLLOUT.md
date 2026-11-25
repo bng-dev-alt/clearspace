@@ -187,11 +187,12 @@ Okno, kdy produkce běžela na staré verzi RC5 s novou databází: **asi 2 minu
 **Nedělal se skutečný e-mail ven.** Všechny testovací adresy byly `@example.test` (potlačeno serverem), Supabase Auth neposlal žádné potvrzení.
 
 **Zbývá / rizika:**
-1. **Bypass secret ve Vercelu** (Protection Bypass for Automation, vytvořen 2026-11-23, nevytvořil ho tento rollout): použit pro staged smoke a jeho hodnota se omylem
-   vypsala do tohoto sezení. Pokus o zrušení byl zablokován (mimo rozsah schválení). **Doporučeno ho vyměnit:** Vercel → projekt `clearspace` →
-   Settings → Deployment Protection → *Protection Bypass for Automation* → *Regenerate*/*Revoke*.
-2. Živý akceptační test se skutečnými adresami (oddíl 7) – čeká na vaše adresy. Doručení skutečného e-mailu, hlavičky `dkim/spf/dmarc=pass`
+1. ~~Bypass secret ve Vercelu~~ **vyřešeno 2026-11-25 (schváleno vlastníkem):** secret z 23. 11. (jeho hodnota se omylem vypsala do sezení) byl zrušen **bez náhrady** –
+   nic trvale na něm nezávisí (skripty ho berou z proměnné při spuštění, v projektu není žádná proměnná `*BYPASS*`). Ověřeno: před zrušením `200`, po zrušení
+   `302` na chráněné URL s původní hodnotou; v projektu 0 bypass secretů; produkce 200, firewall shodný, `ssoProtection` beze změny, `check-deployment.sh` 77/77.
+   Další staged smoke si vyžádá nový dočasný secret (po testu zrušit).
+2. Živý akceptační test se skutečnými adresami (oddíl 7; návod a nástroje: [LIVE_ACCEPTANCE_TEST.md](LIVE_ACCEPTANCE_TEST.md)) – čeká na vaše adresy. Doručení skutečného e-mailu, hlavičky `dkim/spf/dmarc=pass`
    a potvrzovací e-mail Supabase přes Resend zatím nebyly ověřeny. Pozn.: předmět potvrzovacího e-mailu je teď česky („Potvrďte…“).
-3. Git: změny jsou jen lokálně ve větvi `feature/run01-collaboration` (commit + tag); nebylo pushováno ani mergováno do `main`. Produkce běží z buildu
+3. Git: změny jsou jen lokálně ve větvi `feature/run01-collaboration` (commit + tag); nebylo pushováno ani mergováno do `main`. Plán konsolidace: [MAIN_CONSOLIDATION_PLAN.md](MAIN_CONSOLIDATION_PLAN.md). Produkce běží z buildu
    commitu `78c2b7b`, nasazeného přímo přes CLI. Merge do `main` (a případný push) čeká na vaše rozhodnutí.
 4. Rollback (oddíl 6) zůstává připraven; záloha a rollback skripty jsou beze změny.

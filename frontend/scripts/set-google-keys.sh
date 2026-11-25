@@ -25,15 +25,19 @@ put() {  # $1 key, $2 type (sensitive|encrypted); value in $VAL
   echo "  ok - $1 set ($2, Production)"
 }
 
-read -rp "GOOGLE_OAUTH_CLIENT_ID (…apps.googleusercontent.com): " CID
+# A pasted value often carries a trailing newline/space: strip all whitespace. Rejections never show the value (length + prefix only).
+trim() { local v=$1; printf '%s' "${v//[[:space:]]/}"; }
+why() { echo "  rejected: ${#1} characters, expected prefix '$2' $([[ "$1" == "$2"* ]] && echo present || echo ABSENT) -- nothing was stored"; }
+read -rp "GOOGLE_OAUTH_CLIENT_ID (…apps.googleusercontent.com): " CID; CID=$(trim "$CID")
 [[ "$CID" =~ ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$ ]] || { echo "not a Web client id"; exit 1; }
 [ "$CID" != "$(security find-generic-password -s "$DEVSVC" -a client_id -w 2>/dev/null)" ] || { echo "refusing: this is the DEV project's client id -- production needs its own project (clearspace-prod)"; exit 1; }
-read -rp "GOOGLE_CLOUD_PROJECT_NUMBER (digits, not the project id): " PNUM
+read -rp "GOOGLE_CLOUD_PROJECT_NUMBER (digits, not the project id; = the digits before the first '-' of the client id): " PNUM; PNUM=$(trim "$PNUM")
 [[ "$PNUM" =~ ^[0-9]{4,20}$ ]] || { echo "not a project number"; exit 1; }
-read -rp "GOOGLE_PICKER_API_KEY (browser key restricted to the Picker API + app origins): " PKEY
-[[ "$PKEY" =~ ^AIza[0-9A-Za-z_-]{30,}$ ]] || { echo "not a Google API key"; exit 1; }
-read -rsp "GOOGLE_OAUTH_CLIENT_SECRET (hidden): " CSEC </dev/tty; echo
-[[ "$CSEC" =~ ^GOCSPX-[A-Za-z0-9_-]{20,}$ ]] || { echo "not an OAuth client secret (GOCSPX-…)"; exit 1; }
+[ "$PNUM" = "${CID%%-*}" ] || { echo "the project number does not match the client id's project -- nothing was stored"; exit 1; }
+read -rp "GOOGLE_PICKER_API_KEY (browser key restricted to the Picker API + app origins): " PKEY; PKEY=$(trim "$PKEY")
+[[ "$PKEY" =~ ^AIza[0-9A-Za-z_-]{30,}$ ]] || { echo "not a Google API key"; why "$PKEY" AIza; exit 1; }
+read -rsp "GOOGLE_OAUTH_CLIENT_SECRET (hidden): " CSEC </dev/tty; echo; CSEC=$(trim "$CSEC")
+[[ "$CSEC" =~ ^GOCSPX-[A-Za-z0-9_-]{20,}$ ]] || { echo "not an OAuth client secret (GOCSPX-…)"; why "$CSEC" GOCSPX-; unset CSEC; exit 1; }
 [ "$CSEC" != "$(security find-generic-password -s "$DEVSVC" -a client_secret -w 2>/dev/null)" ] || { echo "refusing: this is the DEV client secret"; exit 1; }
 [ "$PKEY" != "$(security find-generic-password -s "$DEVSVC" -a picker_key -w 2>/dev/null)" ] || { echo "refusing: this is the DEV Picker API key"; exit 1; }
 

@@ -9,8 +9,9 @@ export default function SettingsPage() {
   const [outcome, setOutcome] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('google');
+    // keep the first answer: React dev mode runs this effect twice, the second time after the URL was cleaned
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOutcome(q);
+    setOutcome((prev) => prev ?? q);
     if (q) window.history.replaceState(null, '', '/settings');
   }, []);
 

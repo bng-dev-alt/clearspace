@@ -3675,7 +3675,7 @@ body {
 .drive-preview-text { margin: 0.5rem 0 0 0; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem; line-height: 1.5; color: var(--dark-navy);
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; }
-.settings-page { max-width: 760px; margin: 0 auto; padding: 0 1.5rem 3rem; display: flex; flex-direction: column; gap: 1rem; }
+.settings-page { max-width: calc(760px + 6rem); margin: 0; padding: 0 3rem 3rem; display: flex; flex-direction: column; gap: 1rem; }
 .settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.1rem 1.25rem;
   display: flex; flex-direction: column; gap: 0.75rem; }
 .settings-card h2 { margin: 0; font-size: 1rem; color: var(--dark-navy); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

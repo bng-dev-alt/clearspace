@@ -208,4 +208,23 @@ describe('GoogleConnectionCard (Propojené účty)', () => {
     render(<GoogleConnectionCard returnOutcome="gmail_denied" />);
     expect((await screen.findByTestId('google-connection-message')).textContent).toMatch(/Ostatní propojení \(Google Disk\) zůstávají beze změny/);
   });
+
+  it('RUN 03C: a permanently deleted e-mail offers no preview (only refresh + the stored metadata)', async () => {
+    const gone = link({ id: '44444444-4444-4444-8444-444444444444', subject: 'Smazaná konverzace', state: 'deleted' });
+    h.list.mockResolvedValue([gone]);
+    h.status.mockResolvedValue(st({ drive: true, gmail: true }));
+    h.me.mockResolvedValue(ME);
+    render(<GmailLinksPanel projectId="p1" canEdit returnTo="/projects/p1" />);
+    const row = await screen.findByTestId(`gmail-link-${gone.id}`);
+    await waitFor(() => expect(within(row).getByTestId('gmail-refresh')).toBeTruthy());
+    expect(within(row).queryByTestId('gmail-preview')).toBeNull();
+    expect(within(row).getByTestId('gmail-link-problem').textContent).toMatch(/už ve schránce .* není/);
+  });
+
+  it('RUN 03C: a Google timeout during connect says nothing changed and to try again (manual retry, no replay)', async () => {
+    h.status.mockResolvedValue(st({ drive: true, gmail: false }));
+    render(<GoogleConnectionCard returnOutcome="unavailable" />);
+    expect((await screen.findByTestId('google-connection-message')).textContent).toMatch(/neodpověděl včas.*Nic se neuložilo.*zkuste to prosím znovu/);
+    expect(await screen.findByTestId('gmail-connect-settings')).toBeTruthy();
+  });
 });

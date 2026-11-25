@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
+import { gmailFeatureEnabled, googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -12,6 +12,10 @@ export const NO_STORE = { 'Cache-Control': 'no-store, private', Pragma: 'no-cach
 /** Czech messages the UI shows as-is. Stable codes for the client. */
 export const MSG = {
   not_configured: 'Propojení s Google Diskem není na serveru nastavené.',
+  gmail_not_configured: 'Propojení s Gmailem není na serveru nastavené.',
+  gmail_disabled: 'Propojení s Gmailem není na serveru zapnuté.',
+  /** the Google account / token endpoint (shared by Drive and Gmail), not a Drive API outage */
+  google_unavailable: 'Google je dočasně nedostupný. Zkuste to prosím později.',
   not_connected: 'Nejprve připojte svůj účet Google.',
   revoked: 'Přístup k účtu Google vypršel nebo byl zrušen. Připojte účet prosím znovu.',
   unavailable: 'Google Disk je dočasně nedostupný. Zkuste to prosím později.',
@@ -38,11 +42,11 @@ export function oauthLog(phase: string, fields: Record<string, LogValue> = {}): 
 }
 
 let configLogged = false;
-export function requireGoogle(): GoogleConfig {
+export function requireGoogle(notConfigured: string = MSG.not_configured): GoogleConfig {
   const cfg = googleConfig();
   if (!cfg.enabled) {
     if (!configLogged) { configLogged = true; oauthLog('config_disabled', { reason: cfg.reason }); }
-    throw new HttpError(503, MSG.not_configured, 'not_configured');
+    throw new HttpError(503, notConfigured, 'not_configured');
   }
   if (!configLogged) {
     configLogged = true;
@@ -126,7 +130,7 @@ export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts
         return { token: open(cfg.keys, row.access_token_enc!, tokenAad(row.user_id, 'access')), expiresAt: Date.parse(row.access_expires_at!), userId: row.user_id };
       }
     }
-    throw new HttpError(503, MSG.unavailable, 'unavailable');
+    throw new HttpError(503, MSG.google_unavailable, 'unavailable');
   }
   let refreshToken: string;
   try { refreshToken = open(cfg.keys, row.refresh_token_enc, tokenAad(row.user_id, 'refresh')); } catch {
@@ -154,7 +158,7 @@ export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts
     }
     if (err instanceof GoogleOAuthError) {
       await db.rpc('google_connection_mark', { p_server_secret: cfg.serverSecret, p_status: 'active', p_error_code: err.code });
-      throw new HttpError(503, MSG.unavailable, 'unavailable');
+      throw new HttpError(503, MSG.google_unavailable, 'unavailable');
     }
     throw err;
   }
@@ -183,16 +187,16 @@ export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig
       await db.rpc('google_connection_mark', { p_server_secret: cfg.serverSecret, p_status: 'revoked', p_error_code: err.code });
       throw new HttpError(409, MSG.revoked, 'revoked');
     }
-    if (err instanceof GoogleOAuthError) throw new HttpError(503, MSG.unavailable, 'unavailable');
+    if (err instanceof GoogleOAuthError) throw new HttpError(503, MSG.google_unavailable, 'unavailable');
     throw err;
   }
 }
 
 /** RUN 03: Gmail routes need the Google integration AND the Gmail feature switch (independent of Drive). */
 export function requireGmail(): GoogleConfig {
-  const cfg = requireGoogle();
-  if (process.env.GMAIL_INTEGRATION_ENABLED?.trim() !== '1') throw new HttpError(503, 'Propojení s Gmailem není na serveru zapnuté.', 'gmail_disabled');
-  return cfg;
+  // the switch first: with Gmail off (production default) every Gmail route says exactly that, whatever the Google config
+  if (!gmailFeatureEnabled()) throw new HttpError(503, MSG.gmail_disabled, 'gmail_disabled');
+  return requireGoogle(MSG.gmail_not_configured);
 }
 
 /** Run a Google call with the caller's own Gmail-capable token; one forced refresh when Google says the token is stale. */

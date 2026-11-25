@@ -50,7 +50,7 @@ profil s ručním přihlášením jiného syntetického účtu, nebo ho zapište
 ## D. Po PASS
 `git tag -a run03-complete -m "RUN 03 live acceptance PASS"` na commitu, kde akceptace proběhla; výsledky zapsat do `GMAIL.md` §5 (sloupec LIVE).
 
-## E. Výsledky RUN 03B (2026-11-25, skutečný Google, projekt `clearspace-dev-515810`, Testing, test user vlastníka)
+## E. Výsledky RUN 03B (2026-11-25, skutečný Google, projekt `clearspace-dev`, Testing, test user vlastníka)
 Prostředí: větev `feature/run03-gmail` po merge `run02c-complete`, aplikace `gmail-live.sh app` (3451, stack `cs-gmail-sb`, DEV identita alice).
 Testovací data: 3 syntetické e-maily „ClearSpace test 1–3“ odeslané z testovacího účtu sám sobě (1: čeština + HTML, 2: vlákno 2 zpráv, 3: ke smazání).
 

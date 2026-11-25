@@ -117,9 +117,11 @@ export default function GmailLinksPanel({ projectId, cardId, canEdit, returnTo, 
         <div className="drive-link-actions">
           {mine && gmailOn && (
             <>
-              <button type="button" className="drive-icon-btn" title="Náhled (jen pro vás)" aria-label={`Náhled e-mailu: ${l.subject}`} onClick={() => openPreview(l)} data-testid="gmail-preview">
-                <Eye size={14} />
-              </button>
+              {l.state !== 'deleted' && (   // permanently deleted at Gmail: nothing to preview, only the stored metadata remain
+                <button type="button" className="drive-icon-btn" title="Náhled (jen pro vás)" aria-label={`Náhled e-mailu: ${l.subject}`} onClick={() => openPreview(l)} data-testid="gmail-preview">
+                  <Eye size={14} />
+                </button>
+              )}
               <button type="button" className="drive-icon-btn" title="Obnovit informace" aria-label={`Obnovit informace: ${l.subject}`} onClick={() => refresh(l)} disabled={busy !== null} data-testid="gmail-refresh">
                 <RefreshCw size={14} />
               </button>

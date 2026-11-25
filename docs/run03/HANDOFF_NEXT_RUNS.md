@@ -5,14 +5,14 @@ Stav 2026-11-25 (po RUN 03B): větev `feature/run03-gmail` (obsahuje merge `run0
 Start: `GMAIL.md` (provoz + testy), `ARCHITECTURE_DECISION.md`, `PRIVACY_AND_SECURITY.md`, `LIVE_ACCEPTANCE.md`, `PRODUCTION_ROLLOUT.md`.
 
 ## RUN 03B – hotovo
-Dev projekt `clearspace-dev-515810`: Gmail API, `gmail.readonly`, redirect/origin 3451 a Picker referrer 3451 nastaveny. Živě ověřeno vč. kritické
+Dev projekt `clearspace-dev`: Gmail API, `gmail.readonly`, redirect/origin 3451 a Picker referrer 3451 nastaveny. Živě ověřeno vč. kritické
 brány: Google na refresh se `scope` skutečně vydá užší token (tokeninfo bez Gmailu, Gmail API 403) – vzor `getNarrowAccessToken` je pro další
 služby (Calendar) použitelný. Opakovatelné: `gmail-live.sh app|revoke-check`, `node supabase/tests/gmail_live_gate.mjs [expect-no-gmail]`.
 
 ## RUN 04 (Google Calendar) – připravenost: **GO**
 * Před startem RUN 04: nová větev z `run03-complete` (nebo z `main` po schváleném merge), nový worktree a stack (vzor `gmail-stack.sh`, port 3461).
 * Google Cloud dev: zapnout Calendar API, přidat scope (Phase 0: ověřit klasifikaci `calendar.events.readonly`/`calendar.readonly` = sensitive),
-  redirect/origin + Picker referrer pro nový port – vše jen v `clearspace-dev-515810`.
+  redirect/origin + Picker referrer pro nový port – vše jen v `clearspace-dev`.
 * Živá brána RUN 04: zkopírovat `gmail_live_gate.mjs` → Picker token nesmí nést Calendar ani Gmail.
 
 ## RUN 04 – Google Calendar: co znovu použít (bez přepisování)

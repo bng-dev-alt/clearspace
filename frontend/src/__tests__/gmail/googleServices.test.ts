@@ -109,6 +109,24 @@ describe('tokens are used only for the service the user enabled', () => {
     vi.stubEnv('GMAIL_INTEGRATION_ENABLED', '1');
     expect(requireGmail().enabled).toBe(true);
   });
+  it('RUN 03C: Gmail routes never answer with Drive wording; the switch fails closed by default', () => {
+    vi.stubEnv('GMAIL_INTEGRATION_ENABLED', '');
+    for (const k of Object.keys(ENV)) vi.stubEnv(k, '');            // Google not configured at all
+    const off = (() => { try { requireGmail(); } catch (e) { return e as HttpError; } })()!;
+    expect([off.code, off.message]).toEqual(['gmail_disabled', 'Propojení s Gmailem není na serveru zapnuté.']);
+    for (const v of ['0', 'true', 'yes', ' 1x', 'on']) { vi.stubEnv('GMAIL_INTEGRATION_ENABLED', v); expect(() => requireGmail()).toThrow(/Gmail/); }
+    vi.stubEnv('GMAIL_INTEGRATION_ENABLED', '1');
+    const nc = (() => { try { requireGmail(); } catch (e) { return e as HttpError; } })()!;
+    expect([nc.code, nc.message]).toEqual(['not_configured', 'Propojení s Gmailem není na serveru nastavené.']);
+    expect(nc.message).not.toMatch(/Disk/);
+  });
+  it('RUN 03C: a Google token-endpoint outage is reported service-neutrally (not as a Drive outage)', async () => {
+    const { db } = fakeDb(row(['openid', DRIVE, GMAIL_READONLY_SCOPE]));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
+    const e = (await getAccessToken(db, cfg, { force: true, service: 'gmail' }).catch((x) => x)) as HttpError;
+    expect(e.code).toBe('unavailable');
+    expect(e.message).toBe('Google je dočasně nedostupný. Zkuste to prosím později.');
+  });
 });
 
 describe('RUN 03B: network failures are logged by class only', () => {

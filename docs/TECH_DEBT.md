@@ -23,10 +23,13 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Mock `__control/fail` s `count: 0` nastaví 1 (testy používají přesné počty).
 
 ## RUN 03B (živá akceptace Gmailu) – zjištění
-* Výměna kódu za token nemá opakování: 2× vypršela (10 s bez odpovědi Google) při souběžném klikání v panelu; uživatel uvidí obecnou chybu a zkusí znovu (bezpečné – nic neuloženo/nerevokováno). Diagnostika: `complete_failed.reason`.
-* Gmail trasy bez Google konfigurace vrací 503 s textem o „Google Disku“ (sdílené `requireGoogle`); kosmetické.
-* U e-mailu ve stavu „smazáno“ zůstává tlačítko náhledu (vrací 404 a stav jen potvrdí).
-* Dev OAuth klient „ClearSpace Dev Web“ má 2 aktivní client secrets (z RUN 02B) – úklid na vlastníkovi (Keychain používá jeden z nich).
+* Výměna kódu za token nemá automatické opakování (záměrně: kód je jednorázový a mohl být u Google už uplatněn). RUN 03C: timeout má vlastní výsledek `unavailable` a srozumitelnou hlášku „Google neodpověděl včas … Nic se neuložilo … zkuste to znovu“; diagnostika `complete_failed.reason`.
+* ~~Gmail trasy bez Google konfigurace vrací 503 s textem o „Google Disku“~~ – opraveno v RUN 03C (Gmail trasy: vlastní texty, přepínač se kontroluje první; výpadek token endpointu je hlášen jako „Google“, ne „Google Disk“).
+* ~~U e-mailu ve stavu „smazáno“ zůstává tlačítko náhledu~~ – opraveno v RUN 03C (náhled se nenabízí, obnovení zůstává).
+* **Dev OAuth klient „ClearSpace Dev Web“ (projekt `clearspace-dev`) má 2 aktivní client secrets**, oba vytvořené 25. 11. 2026 (RUN 02B).
+  Lokální Keychain (`ClearSpace V1 - Google dev (live)`) používá jeden z nich; druhý je pravděpodobně pozůstatek rotace. **Nic se nerevokuje bez
+  výslovného souhlasu vlastníka.** Postup úklidu: v konzoli porovnat poslední 4 znaky secretu s Keychainem (`security find-generic-password … -w | tail -c 5`
+  v terminálu vlastníka), nepoužívaný secret „Disable“, ověřit `gmail-live.sh verify`, teprve potom „Delete“. Produkční klient (`clearspace-prod`) se netýká.
 * Živě NEOVĚŘENO: odškrtnutí checkboxu Gmailu (Google pro jediný scope checkbox neukázal), druhý Google účet, Workspace blokace, 7denní expirace Testing.
 * E2E se samotnou `DEV_AUTO_LOGIN=1` aplikací: `supabase-runtime:49` a `collaboration-01b` padají (host je automaticky přihlášen) – spouštět s `DEV_AUTO_LOGIN=0` (zdokumentováno od RUN 02).
 

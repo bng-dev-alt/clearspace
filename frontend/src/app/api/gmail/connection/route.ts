@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GMAIL_READONLY_SCOPE } from '../../../../lib/google/config';
-import { caller, dbError, errorResponse, NO_STORE, requireGoogle } from '../../../../lib/google/server';
+import { caller, dbError, errorResponse, MSG, NO_STORE, requireGoogle } from '../../../../lib/google/server';
 
 /**
  * DELETE /api/gmail/connection[?purge=1] -- turn Gmail OFF for the caller in ClearSpace: ClearSpace stops every Gmail call
@@ -11,7 +11,7 @@ import { caller, dbError, errorResponse, NO_STORE, requireGoogle } from '../../.
  */
 export async function DELETE(req: NextRequest) {
   try {
-    const cfg = requireGoogle();
+    const cfg = requireGoogle(MSG.gmail_not_configured);
     const { db } = await caller(req);
     const { data: removed, error } = await db.rpc('google_service_remove', { p_server_secret: cfg.serverSecret, p_scope: GMAIL_READONLY_SCOPE });
     if (error) throw dbError(error);

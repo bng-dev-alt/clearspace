@@ -15,6 +15,7 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
   expired: { kind: 'error', text: 'Požadavek na připojení vypršel nebo už byl použit. Zkuste to prosím znovu.' },
   conflict: { kind: 'error', text: 'Tento účet Google je už připojený k jinému účtu ClearSpace.' },
   error: { kind: 'error', text: 'Účet Google se nepodařilo připojit. Zkuste to prosím znovu.' },
+  unavailable: { kind: 'error', text: 'Google neodpověděl včas, takže se připojení nedokončilo. Nic se neuložilo ani nezměnilo – zkuste to prosím znovu stejným tlačítkem.' },
   not_configured: { kind: 'error', text: 'Propojení s Google Diskem není na serveru nastavené.' },
   // RUN 03
   gmail_connected: { kind: 'info', text: 'Gmail je připojený (jen čtení). E-maily do projektů připojujete vždy sami.' },

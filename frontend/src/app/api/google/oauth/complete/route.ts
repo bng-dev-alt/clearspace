@@ -4,7 +4,7 @@ import { open, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypt
 import { exchangeCode, GoogleOAuthError, hasDriveScope, hasService, parseIdToken, revokeToken } from '../../../../../lib/google/oauth';
 import { caller, errorResponse, NO_STORE, oauthLog, requireGoogle } from '../../../../../lib/google/server';
 
-type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied' | 'account_mismatch';
+type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied' | 'account_mismatch' | 'unavailable';
 
 /**
  * POST /api/google/oauth/complete -- finishes connecting a Google account, under the user's ClearSpace session.
@@ -105,7 +105,9 @@ export async function POST(req: NextRequest) {
       return reply('connected', row.return_to);
     } catch (err) {
       oauthLog('complete_failed', { stage: 'exchange_or_identity', code: err instanceof GoogleOAuthError ? err.code : (err as Error)?.name, httpStatus: err instanceof GoogleOAuthError ? err.status : undefined, reason: err instanceof GoogleOAuthError ? err.reason : undefined, mode: cfg.mock ? 'mock' : 'real', secretFormat: secretFormat(cfg.clientSecret) });
-      return reply('error', row.return_to);
+      // Google did not answer (timeout / network): nothing was stored or revoked. The authorization code is single-use and may
+      // already have been redeemed at Google, so it is NEVER replayed automatically -- the user simply connects again.
+      return reply(err instanceof GoogleOAuthError && err.code === 'unavailable' ? 'unavailable' : 'error', row.return_to);
     }
   } catch (err) {
     return errorResponse(err, 'google-oauth-complete');

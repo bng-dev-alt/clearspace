@@ -99,6 +99,8 @@ vrátil katalog přesně na stav 0900. Stejný skript `frontend/scripts/apply-co
 
 1. **Příprava (bez dopadu na uživatele):** oddíly 3–5 hotové, doména v Resend *Verified*. Commit větve je čistý.
    Připravte produkční build větve `feature/run01-collaboration` jako *staged* nasazení (bez přiřazení domény) – jen build, nepromovat.
+   **Build musí mít `--build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1`** (příznak se zapéká při buildu, není v proměnných projektu; RC2–RC5 s ním šly ven):
+   `vercel deploy --prod --skip-domain --scope bng-dev-alt-webadvisor --build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1 --meta releaseCommit=<sha>`.
 2. **Krátké okno (oznámit):** RC5 po migraci nemá živé aktualizace a zápis historie úkolu z RC5 databáze odmítne
    (RC5 ukáže chybový pruh „uložení aktivity“, data úkolu se uloží). Okno = kroky 3–5, cíl do 15 minut. RUN 00 v té době nesmí zapisovat.
 3. **Migrace + záloha + kontrola** (jedním skriptem; zastaví se před zápisem, pokud cokoli nesedí):
@@ -196,3 +198,12 @@ Okno, kdy produkce běžela na staré verzi RC5 s novou databází: **asi 2 minu
 3. Git: změny jsou jen lokálně ve větvi `feature/run01-collaboration` (commit + tag); nebylo pushováno ani mergováno do `main`. Plán konsolidace: [MAIN_CONSOLIDATION_PLAN.md](MAIN_CONSOLIDATION_PLAN.md). Produkce běží z buildu
    commitu `78c2b7b`, nasazeného přímo přes CLI. Merge do `main` (a případný push) čeká na vaše rozhodnutí.
 4. Rollback (oddíl 6) zůstává připraven; záloha a rollback skripty jsou beze změny.
+
+### Oprava 2026-11-25: chybějící design Monograph
+
+Staged build z oddílu 10 (`dpl_7RtvpN81…`) jsem postavil **bez** `--build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1`, takže po promote (07:57:47) produkce přestala zobrazovat
+styl Monograph (RC5 `dpl_HHk26E8s…` měl příznak v `build.env`; ověřeno přes API). Data, funkce ani zabezpečení to neovlivnilo, jde jen o vzhled.
+Oprava = nový build **téhož kódu** (`bc34de4`, ve zdrojích se od `78c2b7b` nic nezměnilo) s příznakem: `dpl_6x1fgFaAeJJ2CaU8WMfJYtwJsZhW`
+(`clearspace-9nczah0zw-bng-dev-alt-webadvisor.vercel.app`, READY, bez aliasu, `build.env` obsahuje `NEXT_PUBLIC_ENABLE_MONOGRAPH` i e-mailové proměnné).
+Stav: **staged, nepromotováno** (čeká na schválení). Zpět na verzi bez Monographu: `vercel promote dpl_7RtvpN81SKBk4UzMLA92G48g8kWc`.
+Ponaučení: před každým dalším nasazením porovnat `build.env` s předchozí produkcí (`vercel api /v13/deployments/<id>`).

@@ -11,6 +11,8 @@
 # Prints ONLY the SHA-256 of GOOGLE_SERVER_SECRET (for scripts/apply-drive-hosted.sh GOOGLE_SERVER_SECRET_SHA256=...).
 # Existing variables are left unchanged (delete them in Vercel first to replace). Deploys nothing.
 #   frontend/scripts/set-google-keys.sh
+#   frontend/scripts/set-google-keys.sh rotate-picker   # RUN 02C: replace ONLY GOOGLE_PICKER_API_KEY (hidden prompt); refuses the
+#                                                       # current value; effective with the next deployment (deploy-drive-staged.sh)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."                       # frontend/
 V=$(ls -d ~/.npm/_npx/*/node_modules/.bin/vercel 2>/dev/null | tail -1); [ -x "$V" ] || V=vercel
@@ -28,6 +30,21 @@ put() {  # $1 key, $2 type (sensitive|encrypted); value in $VAL
 # A pasted value often carries a trailing newline/space: strip all whitespace. Rejections never show the value (length + prefix only).
 trim() { local v=$1; printf '%s' "${v//[[:space:]]/}"; }
 why() { echo "  rejected: ${#1} characters, expected prefix '$2' $([[ "$1" == "$2"* ]] && echo present || echo ABSENT) -- nothing was stored"; }
+if [ "${1:-}" = rotate-picker ]; then
+  ID=$("$V" api /v10/projects/clearspace/env --raw 2>/dev/null | python3 -c 'import json,sys;print(next((e["id"] for e in json.load(sys.stdin)["envs"] if e["key"]=="GOOGLE_PICKER_API_KEY" and "production" in (e.get("target") or [])), ""))')
+  [ -n "$ID" ] || { echo "GOOGLE_PICKER_API_KEY (Production) not found"; exit 1; }
+  read -rsp "NEW GOOGLE_PICKER_API_KEY (hidden): " PKEY </dev/tty; echo; PKEY=$(trim "$PKEY")
+  [[ "$PKEY" =~ ^AIza[0-9A-Za-z_-]{30,}$ ]] || { echo "not a Google API key"; why "$PKEY" AIza; exit 1; }
+  [ "$PKEY" != "$(security find-generic-password -s "$DEVSVC" -a picker_key -w 2>/dev/null)" ] || { echo "refusing: this is the DEV Picker API key"; exit 1; }
+  CUR=$("$V" api "/v1/projects/clearspace/env/$ID" --raw 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("value",""))')
+  [ "$PKEY" != "$CUR" ] || { unset CUR PKEY; echo "refusing: this is the CURRENT key -- create a new one in Google Cloud first"; exit 1; }
+  unset CUR
+  VAL=$PKEY python3 -c 'import json,os;print(json.dumps({"value":os.environ["VAL"]}))' | "$V" api "/v9/projects/clearspace/env/$ID" -X PATCH --input - --silent >/dev/null
+  unset PKEY
+  echo "ok - GOOGLE_PICKER_API_KEY replaced (Production). Effective with the NEXT deployment: frontend/scripts/deploy-drive-staged.sh deploy/check, then promote."
+  echo "Only after the new deployment is live and the Picker works: delete the OLD key in Google Cloud (APIs & Services -> Credentials)."
+  exit 0
+fi
 read -rp "GOOGLE_OAUTH_CLIENT_ID (…apps.googleusercontent.com): " CID; CID=$(trim "$CID")
 [[ "$CID" =~ ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$ ]] || { echo "not a Web client id"; exit 1; }
 [ "$CID" != "$(security find-generic-password -s "$DEVSVC" -a client_id -w 2>/dev/null)" ] || { echo "refusing: this is the DEV project's client id -- production needs its own project (clearspace-prod)"; exit 1; }

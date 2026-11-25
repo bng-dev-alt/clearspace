@@ -330,3 +330,5 @@ live specs (`google-drive-live-ui` Classic + Monograph 4/4, `dev-login-stack` 3/
 * `/api/dev/login` returns 404 for every method (production previously answered 405 to GET).
 * Production rehearsal of 1200 on a faithful replica of the production schema: PASS (`scripts/rehearse-drive-prod.sh`).
 * Everything about the production rollout: `docs/run02/PRODUCTION_ACCEPTANCE.md`.
+* **2026-11-25: in production** (`https://clearspace.luffast.com`, deployment `dpl_26oNU69rEMtEazEZpMk1pgf7hV8k`, commit `32eb451`) as a limited pilot
+  (consent screen in Testing). Owner live acceptance PASS; details, evidence and NOT VERIFIED items: `PRODUCTION_ACCEPTANCE.md` §0, §12, §13.

@@ -18,3 +18,7 @@ aby je další RUN nepovažoval za regresi a aby se nepřehlédly. Opravovat je 
   klienta v Google Cloud (PRODUCTION_ACCEPTANCE.md §11).
 * Úplná sada Playwright testů potřebuje dva běhy: stack režim (`drive-stack.sh app`) a demo režim (build bez Supabase env); jeden běh proti stacku
   hlásí falešná selhání demo testů (`kanban`, `reflow`, `feature-updates`, `ios-zoom`).
+* **Vercel Hobby plán drží runtime logy jen ~1 hodinu** (`vercel logs --since 12h` → „does not retain runtime logs for the requested time range“):
+  kontrola citlivých dat v produkčních logách je možná jen krátce po akci. Pro audit delší historie by byl potřeba Log Drain nebo vyšší plán.
+* Zamítnutý souhlas (`access_denied`) se neaudituje do `integration_audit` (jen `scope_denied`); stačí pro pilot, případně doplnit událost `denied`.
+* Výměna produkčního Picker API klíče čeká na vlastníka (`set-google-keys.sh rotate-picker`, PRODUCTION_ACCEPTANCE.md §11a).

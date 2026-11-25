@@ -1,11 +1,24 @@
 # RUN 02C – Google Drive: produkční rollout a akceptace
 
-Stav **2026-11-25**: **příprava dokončena, produkce beze změny.** Všechny produkční zápisy (doména, DNS, Vercel env, migrace,
-deploy, promote, publikování OAuth aplikace) čekají na jedno souhrnné schválení (§10) a na Google Cloud kroky vlastníka (§4).
+Stav **2026-11-25 (večer)**: **NASAZENO A AKCEPTOVÁNO.** Google Drive běží v produkci na **https://clearspace.luffast.com** jako
+**omezený pilot** (OAuth v režimu *Testing*). Výsledek rolloutu: §0. Oddíly 1–12 níže jsou záznam přípravy (stav PŘED rolloutem).
 Kandidát: větev `release/run02-google-drive` (worktree `V1-drive-release`), z `run02-complete` (`ca6cd29`) + commity RUN 02C.
 Mock výsledky nejsou live důkaz; každá položka je označena **LIVE** / **MOCK** / **LOCAL** / **NOT RUN**.
 
-## 1. Skutečný produkční stav (read-only audit 2026-11-25)
+## 0. Výsledek rolloutu (2026-11-25)
+| Gate | Co se stalo | Důkaz |
+|---|---|---|
+| G1 | Google projekt `clearspace-prod` (Testing, test users vlastníka), Drive API + Picker API, Web klient, Picker API key | vlastník; `/o/oauth2/v2/auth` s produkčním klientem, redirect URI a 3 scopes → 302 na přihlášení (žádný `redirect_uri_mismatch`/`invalid_client`) |
+| G2 | doména připojena k projektu `clearspace`; Cloudflare `CNAME clearspace → …vercel-dns-017.com` (DNS only, jediný nový záznam) | `domain-cutover.sh verify`: HTTPS 200, platný certifikát, Vercel `misconfigured: false` |
+| G3 | `set-google-keys.sh` (skryté výzvy): `GOOGLE_*` (6) + `PRIVACY_CONTROLLER`, `PRIVACY_CONTACT_EMAIL` v Production; žádné DEV/mock proměnné | `deploy-drive-staged.sh preflight` PASS (jen názvy) |
+| G4 | migrace 1200 na `twjlnsxjtuntujarwner`: záloha `/Volumes/WORKSPACE/_G2_BACKUP/20261125-v1-pre-drive` (448 KB, SHA256SUMS), 1 transakce, počty řádků beze změny, `marker=1 rls=4 client_token_access=0 anon_exec=0 links=0 connections=0`, `server_trust('google')` | výstup `apply-drive-hosted.sh` |
+| G5 | `APP_BASE_URL=https://clearspace.luffast.com`; Supabase Auth allow-list obou `…/accept-invite?token=*` | `domain-cutover.sh plan` |
+| G6 | staged `dpl_26oNU69rEMtEazEZpMk1pgf7hV8k` z čistého `git archive` commitu `32eb451` (`--build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1`); `build.env` = předchozí produkce + jen nové `GOOGLE_*`/`PRIVACY_*` | `check-deployment.sh` (EXPECT_DRIVE=1) **100/100** (první běh skončil souhrnným FAIL bez konkrétní položky – přechodná chyba `vercel curl`; dva další běhy PASS) |
+| G7 | promote → produkce = `dpl_26oNU69r…`; Supabase Site URL = nová doména; `clearspace-ai.vercel.app` a `cearspace.vercel.app` → **308** na novou doménu (cesta i dotaz zachovány) | `check-deployment.sh https://clearspace.luffast.com` **100/100**; `hosted-verify.sh` **16/16** + realtime check PASS (3 jednorázové účty smazány, 0 zbytků); firewall `/api/ai/*` 403 na obou doménách |
+| G8 | živá akceptace (§12) | vlastník: všech 11 ručních testů PASS; read-only kontrola DB + logů (§12) |
+| G10 | merge `release/run02-google-drive` → `main` (fast-forward), push, tag `run02c-complete` | §13 |
+
+## 1. Skutečný produkční stav (read-only audit 2026-11-25, PŘED rolloutem)
 | Oblast | Stav | Odpovídá RUN 01? |
 |---|---|---|
 | Git | `origin/main` = `ebeaa70` = tag `run01-complete`; `feature/run02-google-drive` je čistý fast-forward (merge-base = `ebeaa70`, 15 commitů, 1 nová migrace) | ano |
@@ -112,7 +125,7 @@ transakci). Ve skutečném režimu (oddělené požadavky) smazání účtu i pr
 Kontrolní body bezpečnosti (state, PKCE, session binding, CSRF, RLS, role, server trust, izolace účtů, šifrování, zámek obnovy, revokace, bezpečné
 logování, výstup, CSP, origin, URL) – beze změny proti RUN 02/02B; kandidát přidal jen statické stránky, hlášku a 404 trasy.
 
-## 8. Staged deployment (připraveno, **NOT RUN** – čeká na schválení a Google kroky)
+## 8. Staged deployment (provedeno, viz §0 G6)
 `frontend/scripts/deploy-drive-staged.sh preflight` (dnes správně FAIL: chybí `GOOGLE_*`, `PRIVACY_*`, migrace 1200) → `deploy` (čistý `git archive`,
 `vercel deploy --prod --skip-domain --build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1 --meta releaseCommit=<sha>`) → `check <staged-url>` (porovnání `build.env`
 s produkcí, `check-deployment.sh` s `EXPECT_DRIVE=1`: firewall, hlavičky, DEV login 404, `/privacy` s kontaktem, `/about`, Google trasy 401/405, žádný mock, bundle).
@@ -153,22 +166,40 @@ s produkcí, `check-deployment.sh` s `EXPECT_DRIVE=1`: firewall, hlavičky, DEV 
   Pokud už existují skutečná data: **migraci ponechat, funkci vypnout, aplikaci vrátit** – destruktivní rollback není první volba. Záloha z G4
   v `/Volumes/WORKSPACE/_G2_BACKUP/<datum>-v1-pre-drive`.
 
-## 12. Produkční živá akceptace (G8) – **NOT RUN**
-| # | Test | Kdo | Výsledek |
+## 12. Produkční živá akceptace (G8) – **PASS (pilot, Testing)**
+| # | Test | Výsledek | Důkaz |
 |---|---|---|---|
-| 1–6 | stránka, přihlášení, projekty/úkoly, spolupráce, realtime, Google nakonfigurovaný (`check-deployment.sh`, `hosted-verify.sh`) | agent | NOT RUN |
-| 7–8 | připojení Google (souhlas na skutečné obrazovce), identita ClearSpace beze změny | vlastník | NOT RUN |
-| 9–16 | Picker, výběr, projekt, úkol, duplicita, náhled nativního Dokumentu, obnova metadat po přejmenování, otevření originálu | vlastník + agent (DB/log read-only) | NOT RUN |
-| 17–18 | role (editor/čtenář; druhý účet ClearSpace), izolace účtů (**druhý skutečný Google účet – jen pokud je k dispozici**) | vlastník | NOT RUN |
-| 19–21 | odpojení, revokace (starý token → `invalid_grant`), znovupřipojení | vlastník + agent | NOT RUN |
-| 22 | zamítnutý souhlas („Zrušit“ na Google obrazovce) → „Připojení bylo zrušeno…“ | vlastník | NOT RUN |
-| 23–24 | mobil + desktop, Classic + Monograph | agent | NOT RUN |
-| 25–26 | žádný DEV login (všechny metody 404), žádná citlivá data v logách Vercelu | agent | NOT RUN |
-Krátký ruční checklist pro vlastníka: §14 finálního reportu RUN 02C a `PRODUCTION_ROLLOUT.md` §5.
+| 1–6 | stránka, přihlášení, projekty/úkoly, spolupráce, realtime, Google nakonfigurovaný | **LIVE PASS** | `check-deployment.sh` 100/100, `hosted-verify.sh` 16/16, realtime check |
+| 7–8 | připojení Google na skutečné obrazovce, identita ClearSpace beze změny | **LIVE PASS** | vlastník; logy: `state_consumed → exchange_ok (refresh, id_token, driveGranted, 3 scopes) → identity_ok → saved → connected` |
+| 9–13 | Picker, výběr, připojení k projektu i úkolu, duplicita | **LIVE PASS** (vlastník) | DB po testech: 1 odkaz (úkol, nativní Dokument, `docs.google.com`), 1 událost `drive_file_linked`. Projektové odkazy a duplicitní pokus v DB **nezůstaly** (žádná `drive_file_unlinked` událost → s největší pravděpodobností testovací projekt smazán kaskádou; z DB nelze nezávisle potvrdit) |
+| 14–16 | náhled nativního Dokumentu, obnova metadat po přejmenování, otevření originálu | **LIVE PASS** (vlastník) | runtime logy z doby testu již nejsou k dispozici (Hobby plán drží ~1 h) |
+| 17 | role (editor/čtenář) | **LIVE PASS** v RUN 02B (dev Google) + DB suite na produkčním DDL; v produkci samostatně **NOT VERIFIED** | – |
+| 18 | izolace účtů s **druhým skutečným Google účtem** | **NOT VERIFIED** | druhý účet nebyl k dispozici |
+| 19–21 | odpojení, revokace, znovupřipojení | **LIVE PASS** (vlastník) | audit: `connected=2, disconnected=1`; jedno aktivní připojení; vlastník ověřil zmizení z myaccount.google.com/permissions |
+| 22 | zamítnutý souhlas („Zrušit“) | **LIVE PASS** (vlastník) | aplikace zamítnutí neaudituje (jen `scope_denied`); hláška ověřena vlastníkem |
+| 23–24 | mobil + desktop, Classic + Monograph | **LIVE PASS** (vlastník) | – |
+| 25 | žádný DEV login | **LIVE PASS** | `/api/dev/login` 404 pro GET/POST/PUT/PATCH/DELETE |
+| 26 | žádná citlivá data v logách | **PASS (částečně)** | dostupné runtime logy (posledních ~60 min, 12 záznamů): 0× `code=`, `state=`, `GOCSPX`, `AIza`, `ya29.`, `1//`, JWT, e-mail, cookie; jen fázové řádky `{"evt":"google",…}`. Starší logy Vercel (Hobby) neuchovává – **nelze ověřit zpětně** |
+DB po akceptaci (read-only): 1 připojení `active`, scopes přesně `drive.file`, `openid`, `userinfo.email`; refresh i access token jen jako `v1.…`
+obálky (0 hodnot vypadajících jako token v čitelné podobě); 2 OAuth stavy (0 neprošlých neplatných); `server_trust`: email, google, stt;
+markery končí 1200; projekty 18, karty 183, uživatelé 3 (beze změny proti stavu před rolloutem).
 
-## 13. Známé problémy a omezení
-TD-1, TD-2 (baseline, `docs/TECH_DEBT.md`). Testing: 7denní autorizace, max. 100 test users, souhlas ukazuje doménu (bez ověření značky).
-NOT VERIFIED: druhý skutečný Google účet, 7denní expirace, zamítnutý souhlas na skutečné obrazovce, Workspace účty a sdílené disky, produkční běh.
+## 13. Známé problémy, omezení, otevřené body
+* TD-1, TD-2 (baseline, `docs/TECH_DEBT.md`).
+* **Pilot (Testing):** připojit se mohou jen test users v `clearspace-prod`; autorizace vyprší po 7 dnech (pak „Znovu připojit účet“); max. 100 test users;
+  souhlas ukazuje doménu místo názvu. Veřejné publikování / ověření značky = samostatné rozhodnutí (G9, neschváleno).
+* **NOT VERIFIED:** druhý skutečný Google účet (izolace účtů naživo), 7denní expirace refresh tokenu, Workspace účty a sdílené disky, role editor/čtenář
+  v produkci, zpětná kontrola logů starších ~1 h (retence Vercel Hobby).
+* **Picker API key** produkce se dostal do lokální historie shellu (řádek už odstraněn; klíč je omezený na Picker API + domény a je z principu
+  doručován prohlížeči). Výměna připravena (`set-google-keys.sh rotate-picker`), **čeká na vlastníka** – postup ve finálním reportu RUN 02C / §11a.
+* Rollback stále připraven (§11): předchozí build `dpl_6x1fgFaAeJJ2CaU8WMfJYtwJsZhW`, `domain-cutover.sh rollback`, záloha DB z G4.
+
+## 11a. Výměna Picker API klíče (vlastník + agent)
+1. Google Cloud → `clearspace-prod` → APIs & Services → Credentials → **Create credentials → API key**; stejná omezení jako původní
+   (Websites: `https://clearspace.luffast.com/*`, `https://docs.google.com/*`; API: jen Google Picker API).
+2. `frontend/scripts/set-google-keys.sh rotate-picker` → vložit NOVÝ klíč do skryté výzvy (skript odmítne DEV i současný klíč).
+3. Agent: `deploy-drive-staged.sh deploy` z aktuálního `main` + `check` + promote (env se projeví až novým buildem).
+4. Ověřit Picker na produkci; teprve pak v Google Cloud **smazat starý klíč**.
 
 ## 14. Handoff pro RUN 03 (Gmail)
 Viz `docs/run02/HANDOFF_NEXT_RUNS.md` §RUN 02C – seznam změn, které RUN 03 musí převzít (RUN 02C je **neintegruje** do RUN 03 sám).

@@ -57,7 +57,6 @@ async function consent(page: Page, sub: string, { calendar = true, allow = true 
   await page.getByTestId(allow ? 'mock-allow' : 'mock-deny').click();
 }
 const shot = async (page: Page, name: string) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${STYLE}-${name}.png`, fullPage: false }); };
-const filesModal = (page: Page) => page.getByTestId('project-files-modal');
 /** Project calendar view on December 2026 (the synthetic events' month), whatever today is. */
 async function calendarDecember(page: Page, P: string) {
   await page.evaluate(() => localStorage.setItem('board_view_mode', 'calendar'));

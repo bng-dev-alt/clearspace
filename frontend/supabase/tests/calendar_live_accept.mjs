@@ -9,7 +9,7 @@ const { E2E_SUPABASE_URL: API, E2E_SUPABASE_ANON_KEY: ANON, E2E_BASE_URL: APP, E
 for (const u of [API, APP]) if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(u ?? '')) { console.error('refusing: loopback only'); process.exit(2); }
 const phase = process.argv[2] ?? 'link';
 const STATE = `${process.env.TMPDIR ?? '/tmp/'}cs-calendar-live-state.json`;
-const P = 'project-collab-demo', CARD_TITLE_HINT = null;
+const P = 'project-collab-demo';
 const j = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return {}; } };
 const session = async (email) => (await j(await fetch(`${API}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PW }) }))).access_token;
 const [A, B, V] = [await session('alice@collab.test'), await session('bob@collab.test'), await session('vera@collab.test')];

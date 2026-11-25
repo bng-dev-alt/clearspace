@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { HardDrive, Mail, Link2 } from 'lucide-react';
+import { CalendarDays, HardDrive, Mail, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { driveService, serviceActive, DriveError, type GoogleServiceName, type GoogleStatus } from '../../services/driveService';
 import { gmailService } from '../../services/gmailService';
+import { calendarService } from '../../services/calendarService';
 import { ACCESS_TEXT, PILOT_TEXT } from '../../lib/google/labels';
 
 /** Outcome of Google's redirect back to ClearSpace (?google=...). */
@@ -20,10 +21,13 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
   // RUN 03
   gmail_connected: { kind: 'info', text: 'Gmail je připojený (jen čtení). E-maily do projektů připojujete vždy sami.' },
   gmail_denied: { kind: 'error', text: 'Přístup ke Gmailu nebyl povolen. Ostatní propojení (Google Disk) zůstávají beze změny.' },
-  account_mismatch: { kind: 'error', text: 'Gmail je potřeba připojit ze stejného účtu Google, který už máte připojený. Nic se nezměnilo.' },
+  account_mismatch: { kind: 'error', text: 'Gmail nebo Google Kalendář je potřeba připojit ze stejného účtu Google, který už máte připojený. Nic se nezměnilo.' },
+  // RUN 04
+  calendar_connected: { kind: 'info', text: 'Google Kalendář je připojený (jen čtení). Události do projektů připojujete vždy sami; vaše ostatní události vidíte jen vy.' },
+  calendar_denied: { kind: 'error', text: 'Přístup ke Google Kalendáři nebyl povolen. Ostatní propojení (Google Disk, Gmail) zůstávají beze změny.' },
 };
 
-/** Integration settings: ONE Google account, per-service state (Drive / Gmail). Extends into the RUN 07 Integrations Hub. */
+/** Integration settings: ONE Google account, per-service state (Drive / Gmail / Calendar). Extends into the RUN 07 Integrations Hub. */
 export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?: string | null }) {
   const [status, setStatus] = useState<GoogleStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,7 +49,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   };
 
   const disconnect = async () => {
-    if (!confirm('Odpojit účet Google? Google zruší celé oprávnění ClearSpace najednou – Google Disk i Gmail. Soubory připojené k projektům a úkolům v ClearSpace zůstanou; nikdo z týmu tím nezíská ani neztratí přístup k souborům v Google Disku. U připojených e-mailů zůstanou jen základní údaje (předmět, odesílatel, datum).')) return;
+    if (!confirm('Odpojit účet Google? Google zruší celé oprávnění ClearSpace najednou – Google Disk i Gmail a také Google Kalendář. Soubory připojené k projektům a úkolům v ClearSpace zůstanou; nikdo z týmu tím nezíská ani neztratí přístup k souborům v Google Disku. U připojených e-mailů a událostí zůstanou jen základní údaje.')) return;
     setBusy(true);
     try {
       const r = await driveService.disconnect();
@@ -76,7 +80,24 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
     }
   };
 
+  const disableCalendar = async () => {
+    if (!confirm('Vypnout Google Kalendář v ClearSpace? ClearSpace přestane kalendář číst; Google Disk a Gmail zůstanou připojené. Oprávnění u Googlu zůstane, dokud neodpojíte celý účet Google (to ukončí i Disk a Gmail) nebo ho neodeberete v nastavení účtu Google.')) return;
+    const purge = confirm('Odebrat také všechny události, které jste připojili k projektům a úkolům? (OK = odebrat, Zrušit = ponechat základní údaje v projektech)');
+    setBusy(true);
+    try {
+      const r = await calendarService.disable(purge);
+      setStatus(await driveService.status(true));
+      const p = r.purged;
+      setMessage({ kind: 'info', text: `Google Kalendář je v ClearSpace vypnutý.${p ? ` Odebráno připojených událostí: ${p.removed}.${p.skipped ? ` U ${p.skipped} jste jen čtenář – požádejte editora projektu o odebrání.` : ''}` : ''}` });
+    } catch (e) {
+      setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Google Kalendář se nepodařilo vypnout.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const c = status?.connection;
+  const calendarOn = serviceActive(status, 'calendar');
   const driveOn = serviceActive(status, 'drive');
   const gmailOn = serviceActive(status, 'gmail');
   const active = c?.status === 'active';
@@ -104,7 +125,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {!active && <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => connect(c.services?.gmail && !c.services.drive ? 'gmail' : 'drive')} disabled={busy} data-testid="google-reconnect">Znovu připojit účet</button>}
+                {!active && <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => connect(c.services?.drive ? 'drive' : c.services?.gmail ? 'gmail' : c.services?.calendar ? 'calendar' : 'drive')} disabled={busy} data-testid="google-reconnect">Znovu připojit účet</button>}
                 <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={disconnect} disabled={busy} data-testid="google-disconnect">Odpojit Google účet</button>
               </div>
             </div>
@@ -136,13 +157,28 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
                 <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => connect('gmail')} disabled={busy} data-testid="gmail-connect-settings">{busy ? 'Přesměrování…' : 'Připojit Gmail'}</button>
               ))}
             </li>
+            <li className="settings-service" data-testid="calendar-service">
+              <div>
+                <strong><CalendarDays size={13} aria-hidden="true" /> Google Kalendář</strong>
+                <p data-testid="calendar-service-state">
+                  {!status.calendarAvailable ? 'Na tomto serveru není zapnutý.' : calendarOn ? 'Povoleno – jen čtení vašeho hlavního kalendáře.' : 'Nepovoleno.'}{' '}
+                  Své události vidíte v kalendáři projektu jen vy; k projektu se připojí jen ty, které sami vyberete. ClearSpace v kalendáři nic nevytváří ani nemění.
+                </p>
+              </div>
+              {status.calendarAvailable && (!c || active) && (calendarOn ? (
+                <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={disableCalendar} disabled={busy} data-testid="calendar-disable">Vypnout Kalendář v ClearSpace</button>
+              ) : (
+                <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => connect('calendar')} disabled={busy} data-testid="calendar-connect-settings">{busy ? 'Přesměrování…' : 'Připojit Google Kalendář'}</button>
+              ))}
+            </li>
           </ul>
 
           <ul data-testid="google-privacy">
             <li>ClearSpace vidí jen soubory, které sami vyberete v okně Google Disku – ne celý váš Disk. Odkazy na ně uvidí členové projektu; otevřít je mohou jen ti, komu je zpřístupníte v Google Disku.</li>
             <li>U e-mailů uvidí členové projektu jen předmět, odesílatele (jméno nebo doménu), datum a počet zpráv. Obsah, adresy a přílohy zůstávají ve vaší schránce; náhled vidíte jen vy.</li>
             <li>Obsah souborů a e-mailů se čte jen na vaši žádost (náhled), neukládá se a nic se automaticky neposílá AI.</li>
-            <li><strong>Vypnout Gmail</strong> = ClearSpace Gmail přestane používat (Disk zůstane). <strong>Odpojit Google účet</strong> = Google zruší celé oprávnění ClearSpace (Disk i Gmail najednou); jednotlivé služby Google zvlášť zrušit neumí.</li>
+            {status.calendarAvailable && <li data-testid="google-privacy-calendar">U událostí z Google Kalendáře uvidí členové projektu jen název, čas, počet účastníků a organizátora (jméno nebo doménu). Popis, místo, adresy účastníků a odkazy na schůzky se neukládají; soukromé a důvěrné události připojit nelze.</li>}
+            <li><strong>Vypnout Gmail / Kalendář</strong> = ClearSpace danou službu přestane používat (ostatní zůstanou). <strong>Odpojit Google účet</strong> = Google zruší celé oprávnění ClearSpace (všechny služby najednou); jednotlivé služby Google zvlášť zrušit neumí.</li>
             <li>Podrobnosti: <Link href="/privacy#google">Ochrana osobních údajů – Google</Link>.</li>
           </ul>
         </>

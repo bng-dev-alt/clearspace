@@ -2856,6 +2856,30 @@ body {
   .calendar-chip-title { font-size: 0.65rem; }
 }
 
+
+/* RUN 04: Google Calendar layers in the project calendar (linked events: shared; "my calendar": viewer only). Tokens only. */
+.calendar-layers { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.6rem 1.5rem; border-bottom: 1px solid var(--border); font-size: 0.78rem; }
+.calendar-layer-toggle { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--text); }
+.calendar-layer-toggle input { accent-color: var(--accent); }
+.calendar-layer-note { color: var(--text-muted); }
+.calendar-legend { display: inline-flex; gap: 0.4rem; margin-left: auto; }
+.calendar-legend .calendar-event-chip { width: auto; pointer-events: none; font-size: 0.68rem; }
+.calendar-event-chip {
+  display: flex; align-items: center; gap: 0.35rem; width: 100%; padding: 2px 6px; cursor: pointer; text-align: left;
+  border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  background-color: var(--accent-soft); color: var(--text); transition: var(--spring-transition);
+}
+.calendar-event-chip.is-mine { background-color: transparent; border-style: dashed; border-left-style: solid; border-left-color: var(--text-muted); }
+.calendar-event-chip.is-private .calendar-chip-title { font-style: italic; }
+.calendar-event-chip.is-deleted .calendar-chip-title { text-decoration: line-through; color: var(--text-muted); }
+.calendar-event-chip:hover, .calendar-event-chip:focus-visible { border-color: var(--accent); }
+.calendar-event-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.calendar-event-dot { background-color: var(--accent); }
+@media (max-width: 767px) {
+  .calendar-layers { padding: 0.5rem 0.75rem; }
+  .calendar-legend { margin-left: 0; }
+}
+
 /* ============================================================
    Team page (workspace members)
    ============================================================ */

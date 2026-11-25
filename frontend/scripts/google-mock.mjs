@@ -184,7 +184,7 @@ function calendarView(box) {
 const evStart = (e) => Date.parse(e.start.dateTime ?? `${e.start.date}T00:00:00Z`);
 const evEnd = (e) => Date.parse(e.end.dateTime ?? `${e.end.date}T00:00:00Z`);
 function renderEvent(e, sub) {
-  const { listedTwice, deletedOnGet, instanceOf, series, ...pub } = e;
+  const { listedTwice: _l, deletedOnGet: _d, instanceOf: _i, series: _s, ...pub } = e;   // mock-internal flags never leave the mock
   const email = ACCOUNTS.find((a) => a.sub === sub)?.email ?? '';
   return { kind: 'calendar#event', etag: '"1"', ...pub, htmlLink: `https://www.google.com/calendar/event?eid=${Buffer.from(`${e.id} ${email}`).toString('base64url')}`, iCalUID: `${e.recurringEventId ?? e.id}@google.com` };
 }

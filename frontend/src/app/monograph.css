@@ -280,6 +280,9 @@ html[data-style="monograph"] .calendar-day { background: var(--surface); }
 html[data-style="monograph"] .calendar-day.is-outside { background: var(--surface-2); }
 html[data-style="monograph"] .calendar-month-title { font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; }
 html[data-style="monograph"] .calendar-card-chip { background: var(--surface-2); border: 0; border-left: 2px solid var(--mg-olive); border-radius: 0; }
+html[data-style="monograph"] .calendar-event-chip { background: transparent; border: 1px solid var(--text); border-left-width: 3px; border-radius: 0; }
+html[data-style="monograph"] .calendar-event-chip.is-mine { border-style: dashed; border-left-style: solid; border-color: var(--text-muted); }
+html[data-style="monograph"] .calendar-layers { border-bottom: 1px solid var(--border); background: var(--mg-sunken); }
 html[data-style="monograph"] :is(.calendar-nav-btn, .calendar-today-btn) { border-radius: 2px; background: transparent; border: 1px solid var(--text); color: var(--text); }
 html[data-style="monograph"] .board-view-switch-row { justify-content: flex-start; }
 

@@ -22,7 +22,6 @@ const run = Date.now().toString(36);
 let passed = 0;
 const ok = (m) => { passed++; console.log(`ok - ${m}`); };
 const CAL = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
-const GMAIL = 'https://www.googleapis.com/auth/gmail.readonly';
 
 async function http(url, { method = 'GET', headers = {}, body, raw } = {}) {
   const res = await fetch(url, { method, headers, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)), redirect: 'manual' });

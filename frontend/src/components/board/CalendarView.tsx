@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Column, Card } from '../../types/kanban';
 import { getPriorityColor } from '../../utils/kanban';
+import type { CalendarEventChip } from '../calendar/useProjectCalendarLayers';
 
 interface CalendarViewProps {
   columns: Column[];
@@ -13,7 +14,13 @@ interface CalendarViewProps {
   onNextMonth: () => void;
   onToday: () => void;
   onCardClick: (columnId: string, card: Card) => void;
+  /** RUN 04: Google Calendar events (linked to the project; the viewer's own layer). Optional, tasks render as before without them. */
+  events?: CalendarEventChip[];
+  /** RUN 04: controls of the Calendar layers, shown under the header. */
+  toolbar?: React.ReactNode;
 }
+
+const EVENT_CLASS: Record<CalendarEventChip['variant'], string> = { linked: 'is-linked', deleted: 'is-linked is-deleted', mine: 'is-mine', private: 'is-mine is-private' };
 
 interface DatedCard {
   card: Card;
@@ -38,7 +45,14 @@ export default function CalendarView({
   onNextMonth,
   onToday,
   onCardClick,
+  events = [],
+  toolbar,
 }: CalendarViewProps) {
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalendarEventChip[]>();
+    for (const e of events) for (const k of e.days) { if (!map.has(k)) map.set(k, []); map.get(k)!.push(e); }
+    return map;
+  }, [events]);
   // Mapa den -> karty s termínem na daný den
   const { cardsByDay, undatedCount } = useMemo(() => {
     const map = new Map<string, DatedCard[]>();
@@ -88,6 +102,7 @@ export default function CalendarView({
   const activeKey =
     selectedKey && weeks.some((w) => w.some((d) => localKey(d) === selectedKey)) ? selectedKey : null;
   const activeCards = activeKey ? cardsByDay.get(activeKey) || [] : [];
+  const activeEvents = activeKey ? eventsByDay.get(activeKey) || [] : [];
   const activeLabel = activeKey
     ? new Date(`${activeKey}T00:00:00`).toLocaleDateString('cs-CZ', {
         weekday: 'long',
@@ -101,7 +116,7 @@ export default function CalendarView({
       <div className="calendar-header">
         <div className="calendar-title-group">
           <h2 className="calendar-month-title">{monthLabel}</h2>
-          <span className="calendar-subtitle">Termíny úkolů projektu</span>
+          <span className="calendar-subtitle">{events.length ? 'Termíny úkolů a události' : 'Termíny úkolů projektu'}</span>
         </div>
         <div className="calendar-nav">
           <button type="button" className="calendar-today-btn" onClick={onToday} data-testid="calendar-today">
@@ -115,6 +130,8 @@ export default function CalendarView({
           </button>
         </div>
       </div>
+
+      {toolbar}
 
       <div className="calendar-weekdays">
         {WEEKDAYS.map((d) => (
@@ -130,8 +147,10 @@ export default function CalendarView({
               const inMonth = day.getMonth() === month.getMonth();
               const isToday = key === todayKey;
               const dayCards = cardsByDay.get(key) || [];
+              const dayEvents = eventsByDay.get(key) || [];
               const shown = dayCards.slice(0, MAX_CARDS_PER_DAY);
-              const extra = dayCards.length - shown.length;
+              const shownEvents = dayEvents.slice(0, Math.max(0, MAX_CARDS_PER_DAY - shown.length));
+              const extra = dayCards.length + dayEvents.length - shown.length - shownEvents.length;
 
               return (
                 <div
@@ -147,7 +166,7 @@ export default function CalendarView({
                     className="calendar-day-tap"
                     onClick={() => setSelectedKey(activeKey === key ? null : key)}
                     aria-pressed={activeKey === key}
-                    aria-label={`${day.getDate()}. ${day.getMonth() + 1}. — ${dayCards.length} úkolů`}
+                    aria-label={`${day.getDate()}. ${day.getMonth() + 1}. — ${dayCards.length} úkolů${dayEvents.length ? `, ${dayEvents.length} událostí` : ''}`}
                     data-testid={`calendar-day-tap-${key}`}
                   />
                   <span className="calendar-day-number">{day.getDate()}</span>
@@ -167,6 +186,9 @@ export default function CalendarView({
                       )}
                     </span>
                   )}
+                  {dayCards.length === 0 && dayEvents.length > 0 && (
+                    <span className="calendar-day-dots" aria-hidden="true"><span className="calendar-chip-dot calendar-event-dot" /></span>
+                  )}
                   <div className="calendar-day-cards">
                     {shown.map(({ card, columnId }) => (
                       <button
@@ -182,6 +204,12 @@ export default function CalendarView({
                           style={{ backgroundColor: getPriorityColor(card.priority) }}
                         />
                         <span className="calendar-chip-title">{card.title}</span>
+                      </button>
+                    ))}
+                    {shownEvents.map((ev) => (
+                      <button key={ev.key} type="button" className={`calendar-event-chip ${EVENT_CLASS[ev.variant]}`} onClick={ev.onClick}
+                        title={ev.label} aria-label={ev.label} data-testid={`calendar-event-${ev.key}`}>
+                        <span className="calendar-chip-title">{ev.title}</span>
                       </button>
                     ))}
                     {extra > 0 && (
@@ -210,8 +238,14 @@ export default function CalendarView({
               <X size={16} />
             </button>
           </div>
+          {activeEvents.map((ev) => (
+            <button key={ev.key} type="button" className={`calendar-event-chip calendar-detail-chip ${EVENT_CLASS[ev.variant]}`} onClick={ev.onClick}
+              aria-label={ev.label} data-testid={`calendar-detail-event-${ev.key}`}>
+              <span className="calendar-chip-title">{ev.title}</span>
+            </button>
+          ))}
           {activeCards.length === 0 ? (
-            <p className="calendar-detail-empty">Na tento den nemá termín žádný úkol.</p>
+            activeEvents.length === 0 && <p className="calendar-detail-empty">Na tento den nemá termín žádný úkol.</p>
           ) : (
             activeCards.map(({ card, columnId }) => (
               <button

@@ -84,6 +84,11 @@ export function describeActivity(log: ProjectActivityLog): { text: string; kind:
       const what = d.kind === 'thread' ? 'e-mailovou konverzaci' : 'e-mail';
       return d.title ? { text: `odebral(a) ${what} z Gmailu od úkolu ${title}`, kind: 'file' } : { text: `odebral(a) z projektu ${what} z Gmailu`, kind: 'file' };
     }
+    // RUN 04: Google Calendar events. The event carries no title (privacy: removing the link leaves nothing behind).
+    case 'event_linked':
+      return d.title ? { text: `připojil(a) událost z Google Kalendáře k úkolu ${title}`, kind: 'file' } : { text: 'připojil(a) k projektu událost z Google Kalendáře', kind: 'file' };
+    case 'event_unlinked':
+      return d.title ? { text: `odebral(a) událost z Google Kalendáře od úkolu ${title}`, kind: 'file' } : { text: 'odebral(a) z projektu událost z Google Kalendáře', kind: 'file' };
     default: return { text: 'provedl(a) akci', kind: 'other' };
   }
 }

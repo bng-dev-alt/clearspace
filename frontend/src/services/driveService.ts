@@ -12,7 +12,7 @@ export interface GoogleConnection {
   status: 'active' | 'revoked' | 'error';
   connectedAt: string;
   /** RUN 03: services ClearSpace uses from this one Google grant (absent from an older server = Drive only). */
-  services?: { drive: boolean; gmail: boolean };
+  services?: { drive: boolean; gmail: boolean; calendar?: boolean };
 }
 export interface GoogleStatus {
   configured: boolean;
@@ -20,16 +20,18 @@ export interface GoogleStatus {
   simulated?: boolean;
   /** RUN 03: Gmail feature switch on the server. */
   gmailAvailable?: boolean;
+  /** RUN 04: Calendar feature switch on the server. */
+  calendarAvailable?: boolean;
   /** Google consent screen in Testing mode: only approved test users can connect */
   pilot?: boolean;
   connection: GoogleConnection | null;
 }
-export type GoogleServiceName = 'drive' | 'gmail';
+export type GoogleServiceName = 'drive' | 'gmail' | 'calendar';
 /** Whether the caller's connection is active AND has this service. */
 export function serviceActive(s: GoogleStatus | null | undefined, service: GoogleServiceName): boolean {
   const c = s?.connection;
   if (!c || c.status !== 'active') return false;
-  return c.services ? c.services[service] : service === 'drive';
+  return c.services ? Boolean(c.services[service]) : service === 'drive';
 }
 export interface DriveLink {
   id: string;

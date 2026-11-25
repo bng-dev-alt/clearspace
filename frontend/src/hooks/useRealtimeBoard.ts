@@ -11,7 +11,9 @@ export type ChangeSignal =
   | { t: 'card'; op: 'removed'; id: string }
   | { t: 'column'; op: 'upsert'; id: string; name: string; position: number; role?: string | null }
   | { t: 'column'; op: 'removed'; id: string }
-  | { t: 'membership'; op: string };
+  | { t: 'membership'; op: string }
+  /** RUN 02: external file links of the project (card = task link, null = project link); ids only. */
+  | { t: 'links'; op: string; card: string | null };
 
 export interface DbActivityRow {
   id: string;

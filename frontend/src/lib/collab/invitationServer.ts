@@ -10,10 +10,10 @@ export class HttpError extends Error {
 }
 
 /** Signed-in caller from the Bearer token; the returned client acts under that user's RLS. */
-export async function authenticateCaller(authorization: string | null): Promise<{ db: SupabaseClient; userId: string }> {
+export async function authenticateCaller(authorization: string | null, unavailableMessage = 'Pozvánky vyžadují připojenou databázi.'): Promise<{ db: SupabaseClient; userId: string }> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (process.env.NEXT_PUBLIC_FORCE_DEMO === '1' || !url || !anon) throw new HttpError(503, 'Pozvánky vyžadují připojenou databázi.', 'unavailable');
+  if (process.env.NEXT_PUBLIC_FORCE_DEMO === '1' || !url || !anon) throw new HttpError(503, unavailableMessage, 'unavailable');
   const m = /^Bearer\s+([A-Za-z0-9._~+/=-]{20,4096})$/.exec(authorization ?? '');
   if (!m) throw new HttpError(401, 'Přihlaste se prosím.', 'unauthenticated');
   const db = createClient(url, anon, {

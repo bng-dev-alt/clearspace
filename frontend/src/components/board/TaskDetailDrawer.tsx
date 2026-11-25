@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { X, Trash2, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, AlignRight, Maximize2 } from 'lucide-react';
 import MultiAssigneeSelect from './MultiAssigneeSelect';
 import TaskResourcesSection from './TaskResourcesSection';
+import DriveLinksPanel from '../drive/DriveLinksPanel';
 import type { Card, Column, TeamMember } from '../../types/kanban';
 import { useAuth } from '../../hooks/useAuth';
 import { aiClient } from '../../services/ai/aiClient';
@@ -821,6 +822,13 @@ export default function TaskDetailDrawer({
               uploadedBy={profile?.display_name || 'Uživatel'}
               onAddSubtaskToChecklist={(text) => onAddChecklistItem(columnId, card.id, text)}
             />
+          )}
+
+          {card && projectId && hasSupabaseConfig && (
+            <>
+              <div className="drawer-divider" />
+              <DriveLinksPanel projectId={projectId} cardId={card.id} canEdit={!readOnly} returnTo={`/projects/${projectId}`} />
+            </>
           )}
 
           <div className="drawer-divider" />

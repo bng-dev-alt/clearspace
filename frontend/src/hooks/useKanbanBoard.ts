@@ -4,6 +4,7 @@ import { kanbanService } from '../services/kanbanService';
 import { collaborationService } from '../services/collaborationService';
 import { detectConflicts, pickBase, isNewer, type EditableField } from '../lib/collab/conflicts';
 import type { SyncStatus, ChangeSignal } from './useRealtimeBoard';
+import { emitLinksChanged } from '../services/driveService';
 import { workspaceService, ownerMemberFromProfile } from '../services/workspaceService';
 import { persistenceStatus } from '../services/persistence';
 import { toPrimaryAssignee, legacyAssigneeToMember, resolveBoardAssignees } from '../utils/assignees';
@@ -989,9 +990,10 @@ export function useKanbanBoard(projectId?: string) {
     if (sig.t === 'card') onCardSignal(sig.id, sig.op === 'removed', sig.op === 'upsert' ? sig.v : undefined, sig.op === 'upsert' ? sig.r : undefined);
     else if (sig.t === 'column') onColumnSignal(sig);
     else if (sig.t === 'membership') onMembershipChange();
-  }, [onCardSignal, onColumnSignal, onMembershipChange]);
+    else if (sig.t === 'links') emitLinksChanged(activeProjectId, sig.card);
+  }, [onCardSignal, onColumnSignal, onMembershipChange, activeProjectId]);
 
-  const onResync = useCallback(() => { void reloadBoard({ silent: true }); }, [reloadBoard]);
+  const onResync = useCallback(() => { void reloadBoard({ silent: true }); emitLinksChanged(activeProjectId, null); }, [reloadBoard, activeProjectId]);
 
   // Presence identity: the name/colour teammates know from the roster.
   const meMember = user?.id ? roster.find((r) => r.member.profileId === user.id)?.member : undefined;

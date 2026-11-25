@@ -33,7 +33,7 @@ export function isLoopbackHost(host: string): boolean {
   return LOOPBACK.test(host.trim());
 }
 
-function isProductionRuntime(env: NodeJS.ProcessEnv): boolean {
+export function isProductionRuntime(env: NodeJS.ProcessEnv): boolean {
   return env.VERCEL_ENV === 'production' || (env.NODE_ENV === 'production' && Boolean(env.VERCEL));
 }
 

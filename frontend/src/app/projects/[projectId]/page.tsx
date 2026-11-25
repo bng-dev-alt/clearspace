@@ -23,6 +23,9 @@ const AiDailyBriefModal = dynamic(() => import('../../../components/board/AiDail
 const AiCapacityPlannerModal = dynamic(() => import('../../../components/board/AiCapacityPlannerModal'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('../../../components/search/GlobalSearchModal'), { ssr: false });
 const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
+const DriveLinksPanel = dynamic(() => import('../../../components/drive/DriveLinksPanel'), { ssr: false });
+import ModalShell from '../../../components/ui/ModalShell';
+import { RETURN_TEXT } from '../../../components/drive/GoogleConnectionCard';
 const ProjectDashboardView = dynamic(() => import('../../../components/dashboardStats/ProjectDashboardView'), { ssr: false });
 const AiVoiceCopilotBar = dynamic(() => import('../../../components/ai/AiVoiceCopilotBar'), { ssr: false });
 
@@ -162,6 +165,18 @@ export default function ProjectBoardPage() {
   const [isCapacityPlannerOpen, setIsCapacityPlannerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isActivityFeedOpen, setIsActivityFeedOpen] = useState(false);
+  // RUN 02: project files (Google Drive). Google's redirect back lands here with ?google=<outcome>.
+  const [isFilesOpen, setIsFilesOpen] = useState(false);
+  const [filesNotice, setFilesNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const outcome = new URLSearchParams(window.location.search).get('google');
+    if (!outcome) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setFilesNotice(RETURN_TEXT[outcome]?.text ?? null);
+    setIsFilesOpen(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const [isVoiceCopilotOpen, setIsVoiceCopilotOpen] = useState(false);
 
   // Global Keyboard shortcut listeners (Cmd+K for search, Cmd+Shift+V for Voice Copilot)
@@ -591,6 +606,7 @@ export default function ProjectBoardPage() {
         teamMembers={teamMembers}
         onManageTeam={() => setIsProjectMembersModalOpen(true)}
         onOpenActivityFeed={() => setIsActivityFeedOpen(true)}
+        onOpenFiles={hasSupabaseConfig && !accessRevoked ? () => setIsFilesOpen(true) : undefined}
         activeUsers={activeUsers}
         syncStatus={syncStatus}
       />
@@ -1056,6 +1072,18 @@ export default function ProjectBoardPage() {
           onChangeMembers={setProjectMembers}
           onManageWorkspace={() => router.push('/team')}
         />
+      )}
+
+      {isFilesOpen && !accessRevoked && (
+        <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory projektu" maxWidth={720} testId="project-files-modal">
+          <DriveLinksPanel
+            projectId={projectId}
+            canEdit={!readOnly}
+            returnTo={`/projects/${projectId}`}
+            notice={filesNotice}
+            cardTitle={(id) => columns.flatMap((c) => c.cards).find((c) => c.id === id)?.title}
+          />
+        </ModalShell>
       )}
 
       {isActivityFeedOpen && (

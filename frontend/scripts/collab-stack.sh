@@ -16,7 +16,9 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DIR=${COLLAB_STACK_DIR:-${TMPDIR:-/tmp}/cs-collab-sb}
-SOCK=/tmp/cs-collab-docker.sock; PIDF=$DIR/loopback-proxy.pid; NAME=cs-collab-sb; PORT=${PORT:-3431}
+# RUN 02: name / socket / mail ports overridable so a second isolated stack (scripts/drive-stack.sh) can run beside this one.
+NAME=${COLLAB_STACK_NAME:-cs-collab-sb}; SOCK=${COLLAB_STACK_SOCK:-/tmp/cs-collab-docker.sock}; PIDF=$DIR/loopback-proxy.pid; PORT=${PORT:-3431}
+SMTP_PORT=${COLLAB_SMTP_PORT:-55535}; MAIL_UI=${COLLAB_MAIL_UI:-55534}
 REAL=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null | sed 's|^unix://||'); REAL=${REAL:-/var/run/docker.sock}
 keys() { (cd "$DIR" && supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY|API_URL)='); }
 psql_db() { docker exec -i -e PGPASSWORD=postgres -e PGOPTIONS='-c client_min_messages=warning' "supabase_db_$NAME" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
@@ -56,14 +58,14 @@ case "${1:-}" in
     . "$DIR/collab-accounts.env"
     # E-mail goes ONLY to the stack's Mailpit (loopback, capture only); reserved/test domains allowed there and nowhere else.
     cd "$HERE" && NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY \
-      EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=55535 SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
+      EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=$SMTP_PORT SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
       APP_BASE_URL="http://127.0.0.1:$PORT" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET" \
       exec npx next dev -p "$PORT" -H 127.0.0.1;;
   mail)
-    curl -s "http://127.0.0.1:55534/api/v1/messages?limit=${2:-10}";;
+    curl -s "http://127.0.0.1:$MAIL_UI/api/v1/messages?limit=${2:-10}";;
   env)
     eval "$(keys)"
-    echo "export E2E_SUPABASE_URL=$API_URL E2E_SUPABASE_ANON_KEY=$ANON_KEY E2E_SUPABASE_SERVICE_KEY=$SERVICE_ROLE_KEY RT_URL=$API_URL RT_ANON=$ANON_KEY E2E_MAILPIT_URL=http://127.0.0.1:55534";;
+    echo "export E2E_SUPABASE_URL=$API_URL E2E_SUPABASE_ANON_KEY=$ANON_KEY E2E_SUPABASE_SERVICE_KEY=$SERVICE_ROLE_KEY RT_URL=$API_URL RT_ANON=$ANON_KEY E2E_MAILPIT_URL=http://127.0.0.1:$MAIL_UI";;
   down) (cd "$DIR" && supabase stop --no-backup 2>&1 | tail -1); [ -f "$PIDF" ] && kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF" "$SOCK";;
   *) echo "usage: $0 up|seed|app|env|mail|down"; exit 2;;
 esac

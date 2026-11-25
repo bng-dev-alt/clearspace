@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History } from 'lucide-react';
+import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History, HardDrive } from 'lucide-react';
 import { Column, TeamMember } from '../../types/kanban';
 import TagDropdown from './TagDropdown';
 import { PresenceStack, SyncIndicator } from '../collab/PresenceStack';
@@ -39,6 +39,8 @@ interface ToolbarProps {
   teamMembers: TeamMember[];
   onManageTeam: () => void;
   onOpenActivityFeed: () => void;
+  /** RUN 02: project files (Google Drive links); absent = no button (demo mode). */
+  onOpenFiles?: () => void;
   /** Other people currently on this project (realtime presence). */
   activeUsers?: PresenceUser[];
   syncStatus?: SyncStatus;
@@ -64,6 +66,7 @@ export default function Toolbar({
   teamMembers,
   onManageTeam,
   onOpenActivityFeed,
+  onOpenFiles,
   activeUsers = [],
   syncStatus = 'off',
 }: ToolbarProps) {
@@ -307,6 +310,22 @@ export default function Toolbar({
           >
             <History size={18} />
           </button>
+
+          {onOpenFiles && (
+            <button
+              type="button"
+              onClick={onOpenFiles}
+              className="toolbar-settings-btn"
+              title="Soubory projektu"
+              aria-label="Soubory projektu"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', color: 'var(--gray-text)', transition: 'color 0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--dark-navy)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gray-text)'; }}
+              data-testid="project-files-btn"
+            >
+              <HardDrive size={18} />
+            </button>
+          )}
 
           {/* Jeden inteligentní vstupní bod místo seznamu AI tlačítek.
               Pulse dot nese živý stav zdraví projektu (ambientní inteligence).

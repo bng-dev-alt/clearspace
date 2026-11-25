@@ -8,7 +8,7 @@ import NotificationBell from '../collab/NotificationBell';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useTheme, ThemeChoice } from '../../contexts/ThemeContext';
 import { deriveInitials } from '../../services/workspaceService';
-import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, LayoutDashboard, Search } from 'lucide-react';
+import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, LayoutDashboard, Search, Link2 } from 'lucide-react';
 import AiModelSelector from '../ai/AiModelSelector';
 import { MONOGRAPH_ENABLED, type DesignStyle } from '../../lib/designStyle';
 import { MonographRail, MonographBottomNav, MonographSubNav, type NavEntry, type SubNavItem } from './MonographNav';
@@ -344,6 +344,16 @@ export default function Navbar({ boardActions }: NavbarProps) {
 
             <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '0.25rem 0' }} />
 
+            <Link
+              href="/settings"
+              onClick={() => setIsDropdownOpen(false)}
+              style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--dark-navy)', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: 'var(--radius-sm)', textDecoration: 'none' }}
+              data-testid="navbar-settings-link"
+            >
+              <Link2 size={14} />
+              Propojené účty
+            </Link>
+
             <button
               type="button"
               onClick={handleLogout}
@@ -501,6 +511,9 @@ export default function Navbar({ boardActions }: NavbarProps) {
               <span className="mobile-menu-label">Profil</span>
               <span className="mobile-menu-name">{displayName}</span>
               {displayEmail && <span className="mobile-menu-email">{displayEmail}</span>}
+              <Link href="/settings" className="mobile-menu-item" onClick={closeMenu} data-testid="mobile-menu-settings">
+                <Link2 size={16} /> Propojené účty
+              </Link>
               <button
                 type="button"
                 className="mobile-menu-item is-danger"

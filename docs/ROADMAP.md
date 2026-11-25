@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 02C a RUN 03)
+# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 03C)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -9,10 +9,11 @@
 | 01C | Produkční připravenost (Resend, nodemailer, rollout, DMARC, Monograph build) | **hotovo, v produkci** | `PRODUCTION_ROLLOUT.md` |
 | **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **dokončeno lokálně, tag `run02-complete`** (nepushnuto, nenasazeno): RUN 02B živě ověřeno proti skutečnému Googlu (dev projekt, režim Testing) včetně náhledu nativního Dokumentu, obnovy po přejmenování a **prokázané revokace u Googlu**; NOT VERIFIED: druhý Google účet, 7denní expirace refresh tokenu, odmítnutý souhlas naživo | `docs/run02/GOOGLE_DRIVE.md` §13–14, `docs/run02/PRODUCTION_ROLLOUT.md` |
 | **02C** | **Production Rollout** Google Drive | **HOTOVO 2026-11-25, tag `run02c-complete`**: produkce `https://clearspace.luffast.com` (308 ze `clearspace-ai.vercel.app`), migrace 1200, Google projekt `clearspace-prod` v režimu **Testing = omezený pilot** (jen test users), živá akceptace vlastníka PASS; Monograph výchozí vzhled. Otevřené: výměna Picker API klíče (připraveno), veřejné publikování / ověření značky (samostatné rozhodnutí); NOT VERIFIED: druhý Google účet, 7denní expirace | `docs/run02/PRODUCTION_ACCEPTANCE.md` |
-| **03** | **Gmail Integration** (inkrementální `gmail.readonly` vedle Disku, vlastní výběr e-mailů/konverzací, připojení k projektům a úkolům, soukromé zdroje + sdílená metadata, náhled jen pro vlastníka, realtime, aktivita bez předmětu, přepínač funkce) | **HOTOVO lokálně, tag `run03-complete`** (nepushnuto, nenasazeno): mock tag `run03-mock-complete`; RUN 03B živá akceptace proti skutečnému Googlu (dev projekt, Testing) **PASS 20/20** vč. kritické brány zúžení Picker tokenu. Produkční Gmail **vypnutý** (rozhodnutí vlastníka; restricted scope) | `docs/run03/GMAIL.md`, `ARCHITECTURE_DECISION.md`, `LIVE_ACCEPTANCE.md` §E |
+| **03** | **Gmail Integration** (inkrementální `gmail.readonly` vedle Disku, vlastní výběr e-mailů/konverzací, připojení k projektům a úkolům, soukromé zdroje + sdílená metadata, náhled jen pro vlastníka, realtime, aktivita bez předmětu, přepínač funkce) | **HOTOVO, tag `run03-complete`; v `main` a v produkci s Gmailem VYPNUTÝM (RUN 03C)**: mock tag `run03-mock-complete`; RUN 03B živá akceptace proti skutečnému Googlu (dev projekt, Testing) **PASS 20/20** vč. kritické brány zúžení Picker tokenu. Produkční Gmail **vypnutý** (rozhodnutí vlastníka; restricted scope) | `docs/run03/GMAIL.md`, `ARCHITECTURE_DECISION.md`, `LIVE_ACCEPTANCE.md` §E |
 | 03B | Upstream merge `run02c-complete` + Gmail live acceptance (dev projekt, Testing) | **HOTOVO 2026-11-25** (PASS 20/20; NOT VERIFIED: druhý Google účet, Workspace blokace, 7denní expirace, odškrtnutí checkboxu) | `docs/run03/LIVE_ACCEPTANCE.md` §E |
+| **03C** | Konsolidace do `main` + produkční nasazení s Gmailem vypnutým (migrace 1300 před kódem) | **HOTOVO 2026-11-25, tag `run03c-complete`**: `dpl_3wGY3njT…` z `e9aefbc`, produkční brány 110/110 + hosted 17/17, Gmail containment ověřen | `docs/run03/PRODUCTION_ACCEPTANCE.md` |
 | později | **Veřejná syntetická ukázka Gmailu** pro návštěvníky portfolia (bez připojení vlastní schránky; syntetická schránka na serveru, jasně označená) | návrh, neimplementováno | `docs/run03/HANDOFF_NEXT_RUNS.md` |
-| 04 | Google Calendar | **další**; základ z RUN 02/03 ověřen živě | `docs/run03/HANDOFF_NEXT_RUNS.md` |
+| 04 | Google Calendar | **další**; větev z `main` po RUN 03C; základ z RUN 02/03 ověřen živě | `docs/run03/HANDOFF_NEXT_RUNS.md` |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
 * Webhooky Resend (stav *Delivered/Bounced* v `invitation_deliveries`) – dnes je znám jen „server převzal“.

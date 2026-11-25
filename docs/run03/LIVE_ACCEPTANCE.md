@@ -85,3 +85,13 @@ OAuth klient „ClearSpace Dev Web“ + redirect `http://127.0.0.1:3451/api/goog
 
 **Zjištění během akceptace:** 2× vypršela výměna kódu za token (10 s bez odpovědi Google, `httpStatus 0`) při souběžném klikání
 v panelu; aplikace selhala bezpečně (nic neuložila ani nerevokovala), třetí pokus 337 ms. Doplněna diagnostika `reason` (jen třída síťové chyby).
+
+## F. Neověřené živé okrajové případy (stav po RUN 03C, evidovat zvlášť; nic z toho se nepočítá z mocku)
+| Případ | Proč neověřeno | Kdy ověřit |
+|---|---|---|
+| Odškrtnutí checkboxu Gmail na obrazovce Google (granulární souhlas) | Google pro jediný nový scope checkbox nezobrazil | až bude Gmail žádán spolu s jinou službou |
+| Druhý skutečný Google účet (`account_mismatch`, izolace dvou schránek) | jeden testovací účet | před jakýmkoli zapnutím Gmailu mimo dev |
+| Workspace účet s Gmailem zakázaným správcem (403) | žádný Workspace účet | varianta C (interní aplikace) |
+| 7denní expirace autorizace v režimu Testing | vyžaduje čekání 7 dní | při dalším live běhu po ≥ 7 dnech |
+| Realtime u druhého uživatele ve skutečném druhém prohlížeči | DEV login = 1 identita na proces (ověřeno kanálem + E2E proti mocku) | volitelně |
+| Gmail v produkci | záměrně vypnutý (varianta A) | jen po novém rozhodnutí vlastníka |

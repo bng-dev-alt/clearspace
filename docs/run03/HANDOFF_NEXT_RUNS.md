@@ -9,8 +9,15 @@ Dev projekt `clearspace-dev`: Gmail API, `gmail.readonly`, redirect/origin 3451 
 brány: Google na refresh se `scope` skutečně vydá užší token (tokeninfo bez Gmailu, Gmail API 403) – vzor `getNarrowAccessToken` je pro další
 služby (Calendar) použitelný. Opakovatelné: `gmail-live.sh app|revoke-check`, `node supabase/tests/gmail_live_gate.mjs [expect-no-gmail]`.
 
+## RUN 03C – hotovo (produkce)
+`main` = merge `e9aefbc` (+ dokumentace), produkce `dpl_3wGY3njT…`, DB markery do 1300, Gmail **vypnutý**. Záznam: `PRODUCTION_ACCEPTANCE.md`.
+Nástroje pro další migrace téhož typu: `rehearse-gmail-prod.sh` + `apply-gmail-hosted.sh` (vzor pro 1400), `deploy-drive-staged.sh`
+(`RELEASE_BRANCH`, `EXPECT_GMAIL_MIGRATION`), `check-deployment.sh` (`EXPECT_GMAIL_OFF`), `hosted-verify.sh` (`E2E_EXPECT_GMAIL=off`).
+
 ## RUN 04 (Google Calendar) – připravenost: **GO**
-* Před startem RUN 04: nová větev z `run03-complete` (nebo z `main` po schváleném merge), nový worktree a stack (vzor `gmail-stack.sh`, port 3461).
+* Před startem RUN 04: nová větev z **`main` (tag `run03c-complete`)**, nový worktree a stack (vzor `gmail-stack.sh`, port 3461).
+* Produkční migrace 1400 (Calendar) půjde stejným pořadím jako 1300: nácvik na replice → apply se zálohou → starý build ověřit → staged → promote.
+  Calendar kód nesmí rozbít Gmail-off produkci: `check-deployment.sh EXPECT_GMAIL_OFF=1` musí dál projít.
 * Google Cloud dev: zapnout Calendar API, přidat scope (Phase 0: ověřit klasifikaci `calendar.events.readonly`/`calendar.readonly` = sensitive),
   redirect/origin + Picker referrer pro nový port – vše jen v `clearspace-dev`.
 * Živá brána RUN 04: zkopírovat `gmail_live_gate.mjs` → Picker token nesmí nést Calendar ani Gmail.

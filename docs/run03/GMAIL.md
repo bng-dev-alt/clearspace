@@ -89,6 +89,11 @@ Po merge `run02c-complete` znovu: Vitest **1334/1334**, DB **2301** PASS (upgrad
 `collab_realtime` 64/64, `realtime_check` PASS, `invite_email` 41/41, E2E Gmail + Drive PASS Klasika i Monograph, RUN 01 E2E jen TD-1/TD-2,
 demo Playwright 27/118/0, build + guard **65/65**, `/api/dev/login` 404. `real_stack.sh` v 03B znovu nespuštěn (DB beze změny od RUN 03 PASS).
 
+## 5c. Produkce (RUN 03C)
+Kód RUN 03 je v produkci s **vypnutým** Gmailem (`dpl_3wGY3njT…`, `e9aefbc`, migrace 1300); všechny Gmail trasy 503 `gmail_disabled`. Detail a důkazy:
+`PRODUCTION_ACCEPTANCE.md`. Opravy RUN 03C: Gmail trasy mají vlastní texty (přepínač kontrolován první), smazaný e-mail nenabízí náhled, timeout při
+připojení = výsledek `unavailable` s ručním opakováním (kód se nikdy automaticky neopakuje). Unit testy **1338/1338**.
+
 ## 6. Známá omezení
 1. Restricted scope ⇒ veřejně jen po ověření + CASA; produkční Gmail je dle rozhodnutí vlastníka vypnutý (`PRODUCTION_ROLLOUT.md` §0).
 2. Odkaz „Otevřít v Gmailu“ (`/mail/u/0/#all/<threadId>`) není oficiálně dokumentovaný; živě funguje (Gmail přepíše id), otevírá účet 0 prohlížeče.

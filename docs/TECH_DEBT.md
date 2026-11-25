@@ -22,6 +22,13 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Rotace `GOOGLE_SERVER_SECRET` mění HMAC klíč odkazů (nové připojení téhož e-mailu se nepozná jako duplicita).
 * Mock `__control/fail` s `count: 0` nastaví 1 (testy používají přesné počty).
 
+## RUN 03C (produkce s Gmailem vypnutým) – stav
+* Produkce běží kód RUN 03 + migraci 1300; **Gmail vypnutý** (`GMAIL_INTEGRATION_ENABLED=0`). Rollback kódu = promote `dpl_26oNU69r…` (funguje s 1300).
+* `monograph-prodcheck.mjs` předpokládá přihlášenou stránku (demo auth): na produkci odhlášeně kontroluje jen `data-style`/fonty/motiv; přepínač stylu a rail
+  v navbaru se na produkci tímto skriptem neověří (doplnit variantu s jednorázovým účtem, až to bude potřeba).
+* `hosted-verify.sh` vyžaduje `frontend/.env.local` s hostovanou URL a veřejným anon klíčem (v RUN 03C vytvořen dočasně jen s těmito 2 hodnotami a smazán).
+* Vercel Hobby: runtime logy jen ~1 h (`--since 1h` už mimo retenci) – kontrola logů je možná jen hned po nasazení.
+
 ## RUN 03B (živá akceptace Gmailu) – zjištění
 * Výměna kódu za token nemá automatické opakování (záměrně: kód je jednorázový a mohl být u Google už uplatněn). RUN 03C: timeout má vlastní výsledek `unavailable` a srozumitelnou hlášku „Google neodpověděl včas … Nic se neuložilo … zkuste to znovu“; diagnostika `complete_failed.reason`.
 * ~~Gmail trasy bez Google konfigurace vrací 503 s textem o „Google Disku“~~ – opraveno v RUN 03C (Gmail trasy: vlastní texty, přepínač se kontroluje první; výpadek token endpointu je hlášen jako „Google“, ne „Google Disk“).

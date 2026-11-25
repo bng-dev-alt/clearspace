@@ -47,7 +47,7 @@ Calendar = **třetí služba na existujícím Google připojení**, stejný vzor
 |---|---|---|
 | Projektový pohled **Kalendář** (`components/board/CalendarView.tsx`, měsíční mřížka, karty podle `cards.due_date`, klik → `TaskDetailDrawer`) | jen úkoly | + vrstva připojených událostí (sdílená) + přepínač osobní vrstvy (soukromá). Úkoly a jejich logika beze změny |
 | **Úkoly** (`cards.due_date DATE`) | – | žádná automatická změna termínu z Googlu ani do Googlu |
-| **Porady** (`meetings`: `project_id`, `title`, `occurred_at`, `source_kind text|audio`, Soniox přes `/api/ai/meetings/*`) | existuje | beze změny; jen se navrhne LATER vazba (výše) |
+| **Porady** (`meetings`: `project_id`, `title`, `occurred_at`, `source_kind text|audio`, Soniox přes `/api/intelligence/meetings/*` (owner-only; `/api/ai/*` blokuje produkční firewall)) | existuje | beze změny; jen se navrhne LATER vazba (výše) |
 | **Zdroje** (`external_resource_links` + soukromé tabulky) | Drive, Gmail | + provider `google_calendar_event` + `calendar_link_sources` |
 | **Projekty / role** (`owner/admin/member/viewer`, `is_project_member`, viewer guard) | existuje | stejná matice jako Gmail (§6) |
 

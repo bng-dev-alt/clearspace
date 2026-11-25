@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run after `npm run build`: the PUBLIC client bundle (.next/static) must not contain the dev-login helper, a
-# privileged Supabase key, a Google API key, Google OAuth secrets/tokens/server RPC names (RUN 02), Gmail server RPCs / API host / scope / feature switch (RUN 03), a speech-to-text provider key/host/test seam, or the retired Supabase project. Also decodes every JWT in the bundle:
+# privileged Supabase key, a Google API key, Google OAuth secrets/tokens/server RPC names (RUN 02), Gmail server RPCs / API host / scope / feature switch (RUN 03), Calendar server RPCs / API host / scope / feature switch / fields (RUN 04), a speech-to-text provider key/host/test seam, or the retired Supabase project. Also decodes every JWT in the bundle:
 # only the `anon` role may appear. Exit 1 on any finding.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -11,7 +11,9 @@ for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_
   'oauth2.googleapis.com/token' 'google_credentials_get' 'google_oauth_complete' 'google_refresh_store' 'drive_link_add' 'refresh_token_enc' 'mock-at.' '__control/' \
   'GMAIL_INTEGRATION_ENABLED' 'gmail.googleapis.com' 'auth/gmail.readonly' '/gmail/v1/users' 'metadataHeaders' 'gmail_link_add' 'gmail_link_source' \
   'gmail_link_refresh' 'gmail_links_purge_mine' 'gmail_link_sources' 'google_service_remove' 'google_service_audit' 'google_connection_sub' \
-  'gmail_caller_sub' 'mock-rt.' 'mock-code.' 'mock-grant-gmail'; do
+  'gmail_caller_sub' 'mock-rt.' 'mock-code.' 'mock-grant-gmail' \
+  'CALENDAR_INTEGRATION_ENABLED' 'auth/calendar' 'www.googleapis.com/calendar' '/calendar/v3' 'calendar_link_add' 'calendar_link_source' \
+  'calendar_link_refresh' 'calendar_links_purge_mine' 'calendar_link_sources' 'calendar_caller_sub' 'mock-grant-calendar' 'attendees(responseStatus)'; do
   n=$(grep -rlF -- "$pat" .next/static 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" != 0 ]; then echo "FAIL: '$pat' found in $n client file(s)"; bad=1; else echo "ok - no '$pat' in the client bundle"; fi
 done

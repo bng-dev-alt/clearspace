@@ -387,6 +387,39 @@ test('Gmail containment (E2E_EXPECT_GMAIL=off): no Gmail consent, no Gmail scope
   expect(privacy.text).not.toContain('data-testid="privacy-gmail"');
 });
 
+// RUN 04: a build that contains the Calendar code but runs with CALENDAR_INTEGRATION_ENABLED off (public production). Same proof for
+// Google Calendar: no Calendar consent can start, no Calendar scope in any consent, every Calendar route closed, nothing Calendar-capable.
+test('Calendar containment (E2E_EXPECT_CALENDAR=off): no Calendar consent, no Calendar scope, every Calendar route closed', async () => {
+  test.skip(process.env.E2E_EXPECT_CALENDAR !== 'off', 'only for a build with the Calendar code and the switch off');
+  const base = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://127.0.0.1:3410';
+  const call = async (method: string, path: string, body?: unknown, auth = true) => {
+    const res = await fetch(new URL(path, base), { method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...(auth ? { Authorization: `Bearer ${tokenA}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, json, text };
+  };
+  const calStart = await call('POST', '/api/google/oauth/start', { returnTo: '/settings', service: 'calendar' });
+  expect([calStart.status, calStart.json?.error]).toEqual([503, 'calendar_disabled']);
+  expect(calStart.text).not.toContain('accounts.google.com');
+  const driveStart = await call('POST', '/api/google/oauth/start', { returnTo: '/settings' });
+  expect(driveStart.status).toBe(200);
+  expect(new URL(driveStart.json.url).searchParams.get('scope') ?? '').not.toMatch(/calendar/);
+  const id = '11111111-1111-4111-8111-111111111111';
+  for (const [m, p, b] of [['GET', '/api/calendar/events?from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z'], ['POST', '/api/calendar/links', { projectId: 'x', eventIds: [] }],
+    ['POST', `/api/calendar/links/${id}/refresh`], ['GET', `/api/calendar/links/${id}/open`]] as [string, string, unknown?][]) {
+    const r = await call(m, p, b);
+    expect([r.status, r.json?.error], `${m} ${p}`).toEqual([503, 'calendar_disabled']);
+    expect((await call(m, p, b, false)).status, `anonymous ${m} ${p}`).toBe(503);
+  }
+  const status = await call('GET', '/api/google/connection');
+  expect(status.json?.calendarAvailable).toBe(false);
+  const privacy = await call('GET', '/privacy', undefined, false);
+  expect(privacy.text).toContain('privacy-calendar-off');
+  expect(privacy.text).not.toContain('data-testid="privacy-calendar"');
+});
+
 test('every browser request to Supabase went to the NEW project only', async () => {
   expect([...supabaseHosts]).toEqual([`${EXPECTED_REF}.supabase.co`]);
 });

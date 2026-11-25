@@ -2770,7 +2770,7 @@ body {
 
 .calendar-weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));   /* RUN 04: long event titles must not widen a column */
   border-bottom: 1px solid var(--border);
 }
 .calendar-weekday {
@@ -2785,7 +2785,7 @@ body {
 .calendar-grid { display: flex; flex-direction: column; }
 .calendar-week {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 .calendar-day {
   min-height: 116px;
@@ -2867,7 +2867,7 @@ body {
 .calendar-event-chip {
   display: flex; align-items: center; gap: 0.35rem; width: 100%; padding: 2px 6px; cursor: pointer; text-align: left;
   border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
-  background-color: var(--accent-soft); color: var(--text); transition: var(--spring-transition);
+  background-color: var(--accent-soft); color: var(--text); transition: var(--spring-transition); min-width: 0; overflow: hidden;
 }
 .calendar-event-chip.is-mine { background-color: transparent; border-style: dashed; border-left-style: solid; border-left-color: var(--text-muted); }
 .calendar-event-chip.is-private .calendar-chip-title { font-style: italic; }

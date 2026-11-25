@@ -2,8 +2,8 @@
 
 Branch `feature/run01-collaboration`, cut from `release/rc2-monograph` @ `5a34ed4` (RC5). Migrations
 `20261124001000_collaboration.sql` (RUN 01) and `20261125001100_collab_hardening.sql` (RUN 01B), rollbacks in
-`frontend/supabase/rollback/`. **Neither is applied to any hosted project.** Production rollout:
-[PRODUCTION_ROLLOUT.md](PRODUCTION_ROLLOUT.md).
+`frontend/supabase/rollback/`. **Both are applied to the hosted production project (2026-11-25) and the build is live**;
+record and results: [PRODUCTION_ROLLOUT.md](PRODUCTION_ROLLOUT.md) §10.
 
 ## 1. Shape
 
@@ -196,6 +196,7 @@ Rollback in reverse order:
 | Hosted-style realtime check | `supabase/tests/realtime_check.mjs` (used by `scripts/hosted-verify.sh`) | 9/9 |
 | Invitation e-mail lifecycle (real SMTP -> Mailpit) | `supabase/tests/invite_email.mjs` | 41/41 (01C, nodemailer) |
 | New person with e-mail confirmation ON (as hosted) | `e2e/collaboration-01c-confirm.spec.ts` | PASS |
+| Production, live (2026-11-25): staged + promoted build; realtime 9/9, presence, public channels refused, 16/16 hosted UI, invitation acceptance with two disposable accounts | `scripts/hosted-verify.sh`, `scripts/hosted-collab-accept.sh` (`e2e/collaboration-01c-hosted.spec.ts`) | PASS |
 | Production copy: 0900 schema identical, 1000+1100 as `postgres`, rollback to 0900, RUN 00 verify/dry-run | `scripts/apply-collab-hosted.sh` rehearsal | PASS |
 | Browser, two/three users | `e2e/collaboration.spec.ts`, `e2e/collaboration-01b.spec.ts` | PASS (repeated) |
 | Unit | `src/__tests__/**` | 1205/1205 |
@@ -208,8 +209,8 @@ Local stack: `frontend/scripts/collab-stack.sh up|seed|app|env|mail|down` (Realt
    the sender address; provider webhooks (delivered/bounced) are an extension point (add statuses to
    `invitation_deliveries`).
 2. Presence: a removed, non-cooperative client keeps the snapshot it had (§8).
-3. Hosted Realtime currently allows public channels (read-only probe, 2026-11-24). Our data never uses public topics
-   and private/public isolation was verified locally, but it is **not verified on hosted** -- see the rollout plan.
+3. Hosted Realtime: "Allow public access" was switched off on 2026-11-25 (`private_only = true`). Private/public isolation and
+   presence are verified on hosted (PRODUCTION_ROLLOUT.md §10). Re-check after any Supabase platform change to Realtime settings.
 4. Workspace-level (Team page) invitations still use copy-the-link (no e-mail); project invitations send e-mail.
 5. Card moves between columns, checklist toggles and column roles are last-writer-wins by design.
 6. Rate limit of the RELEASED 0100 function (50 pending workspace invitations) still raises `54000` (HTTP 500 in the

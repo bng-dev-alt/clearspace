@@ -1,7 +1,7 @@
 # ClearSpace V1 – spolupráce a pozvánky e-mailem: produkční nasazení (RUN 01C)
 
-Stav: **připraveno, nic nebylo na produkci změněno.** Produkce byla jen čtena (SELECT a `pg_dump` v režimu jen pro čtení).
-Každý krok, který mění produkci, DNS nebo účty, potřebuje vaše výslovné schválení (jedno souhrnné schválení je v oddílu 9).
+Stav (2026-11-25): **nasazeno na produkci a ověřeno** – záznam a výsledky v oddílu 10. Zbývá živý test s vašimi skutečnými adresami (oddíl 7).
+Oddíly 1–9 zůstávají jako postup a podklad pro případný rollback (oddíl 6).
 
 ## 1. Zjištěný stav (2026-11-24, jen čtení)
 
@@ -162,3 +162,36 @@ Lokálně tato cesta prošla (Mailpit místo skutečné schránky): `e2e/collabo
 > (3) smoke test na staged nasazení a jeho promote; (4) vypnutí „Allow public access“ v Realtime; (5) živý test pozvánek na adresy
 > A = ________, B = ________ (případně C = ________); (6) [volitelně] založení a smazání dvou jednorázových testovacích účtů pro `hosted-verify.sh`.
 > Resend, DNS, Vercel proměnné a Supabase Auth SMTP nastavím sám/sama podle oddílů 3–5.
+
+## 10. Záznam nasazení (2026-11-25, schváleno vlastníkem)
+
+**Časová osa (místní čas):** 07:55:19 start skriptu → 07:55:56 migrace 1000 + 1100 hotové (37 s včetně zálohy) → 07:57:47 promote.
+Okno, kdy produkce běžela na staré verzi RC5 s novou databází: **asi 2 minuty**. Realtime „Allow public access“ vypnuto po promote.
+
+| Krok | Výsledek |
+|---|---|
+| DNS | TXT `_dmarc.notify` = `v=DMARC1; p=none;` přidán (jediná změna DNS; ostatní záznamy nedotčeny); DKIM/odesílací záznamy Resend již byly |
+| Supabase Auth | česká šablona *Confirm signup* (předmět „Potvrďte svůj účet ClearSpace“); vlastní SMTP Resend; redirect jen `…/accept-invite?token=*`; limit 30 e-mailů/h |
+| Staged build | `dpl_7RtvpN81SKBk4UzMLA92G48g8kWc`, commit `78c2b7b`, z čistého `git archive`, bez aliasu; `check-deployment.sh` PASS (77 kontrol: hlavičky, 403 na `/api/ai/*`, bundle bez tajemství) |
+| Záloha | `/Volumes/WORKSPACE/_G2_BACKUP/20261125-v1-pre-collab/public.dump` (316 kB, SHA-256 ověřen); firewall před rolloutem: `/Volumes/WORKSPACE/_G2_BACKUP/fw-before-collab-rollout.json` |
+| Migrace | 1000 + 1100, každá v jedné transakci jako `postgres`; počty řádků beze změny; 2 značky, 2 politiky Realtime, prázdná publikace, každý projekt má klíč kanálu, 0 e-mailů v zrcadle řešitelů, 0 notifikací; otisk tajemství v `server_trust('email')` |
+| Staged smoke | Realtime 9/9, UI 16/16 (jednorázové účty `@example.test`, po testu smazány) |
+| Promote | produkce obsluhuje `dpl_7RtvpN81…`; `/api/ai/*` → 403 |
+| Realtime | `private_only` null → **true** (ostatní hodnoty beze změny); anon i přihlášený: veřejný kanál odmítnut; privátní téma funguje; presence funguje (dvě relace vidí obě) |
+| Produkce po promote | `check-deployment.sh` PASS; `hosted-verify.sh` 16/16 + Realtime 9/9 (první běh: 1 test spadl na síťovém `ConnectTimeoutError`, opakování bez změny kódu prošlo); `hosted-collab-accept.sh` PASS (pozvánka → přijetí přihlášeným pozvaným → přístup → živý úkol → presence → použitý odkaz neplatí → odebrání ruší přístup) |
+| Pozvánka přes živou trasu | adresa `@example.test` → `suppressed` (e-mail se neodesílá); anonym 401; špatné serverové tajemství → 42501 `Tato operace je vyhrazena serveru.`; tajemství ve Vercelu odpovídá otisku v DB |
+| Data | po všech testech shodné počty jako před migrací (17 projektů, 182 úkolů, 89 členů projektů, 42 komentářů, 297 záznamů historie, 2 uživatelé, 0 pozvánek); RUN 00 `verify`: všech 10 tabulek present = expected, integrita 0, cizí vlastnictví 0; české názvy úkolů zachovány (175 z 182 obsahuje diakritiku) |
+| Bezpečnost | všechny tabulky `public` mají RLS; `anon` nemá žádná práva k tabulkám `public`; serverové funkce (`email_delivery_*`, `stt_*`) nejsou pro `anon`; Realtime politiky: jen `clearspace_topic_read` a `clearspace_topic_presence_write` pro `authenticated` |
+| Firewall | shodný s pořízeným stavem před rolloutem (jediné pravidlo `Block legacy AI API`, `/api/ai` deny); `ssoProtection` beze změny |
+
+**Nedělal se skutečný e-mail ven.** Všechny testovací adresy byly `@example.test` (potlačeno serverem), Supabase Auth neposlal žádné potvrzení.
+
+**Zbývá / rizika:**
+1. **Bypass secret ve Vercelu** (Protection Bypass for Automation, vytvořen 2026-11-23, nevytvořil ho tento rollout): použit pro staged smoke a jeho hodnota se omylem
+   vypsala do tohoto sezení. Pokus o zrušení byl zablokován (mimo rozsah schválení). **Doporučeno ho vyměnit:** Vercel → projekt `clearspace` →
+   Settings → Deployment Protection → *Protection Bypass for Automation* → *Regenerate*/*Revoke*.
+2. Živý akceptační test se skutečnými adresami (oddíl 7) – čeká na vaše adresy. Doručení skutečného e-mailu, hlavičky `dkim/spf/dmarc=pass`
+   a potvrzovací e-mail Supabase přes Resend zatím nebyly ověřeny. Pozn.: předmět potvrzovacího e-mailu je teď česky („Potvrďte…“).
+3. Git: změny jsou jen lokálně ve větvi `feature/run01-collaboration` (commit + tag); nebylo pushováno ani mergováno do `main`. Produkce běží z buildu
+   commitu `78c2b7b`, nasazeného přímo přes CLI. Merge do `main` (a případný push) čeká na vaše rozhodnutí.
+4. Rollback (oddíl 6) zůstává připraven; záloha a rollback skripty jsou beze změny.

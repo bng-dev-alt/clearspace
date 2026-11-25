@@ -238,10 +238,10 @@ Test files: dedicated harmless files in the owner's own Drive (one JPEG, one Wor
 | 3 | ClearSpace identity unchanged | **LIVE PASS** | session still the DEV owner; Google connection separate |
 | 4 | Real Google Picker | **LIVE PASS** | owner opened the real Picker (picker-token 200 → attach 201 twice) |
 | 5 | Select a real Drive file | **LIVE PASS** | a JPEG and a Word document picked |
-| 6 | Attach to project | **LIVE PASS (server path)** / manual project-level Picker pick **NOT DONE** | automated test attached the real, already-picked file at project level through the real Drive API (201, real metadata) |
+| 6 | Attach to project | **LIVE PASS** | server path through the real Drive API (201) **and** (closeout) a manual project-level pick of a native Google Doc in the real Picker |
 | 7 | Attach to task | **LIVE PASS** | two real task-level attaches via Picker (events `entity=task`) |
-| 8 | Metadata + link | **LIVE PASS** (clicking through to the original **NOT DONE**) | real size, modified time, MIME; link host `docs.google.com`, `rel=noopener noreferrer` |
-| 9 | Text preview | **PARTIAL** | real unsupported-format answer for the Word file (415, Czech text) ✔; preview of a native Google Doc **NOT VERIFIED** |
+| 8 | Metadata + link | **LIVE PASS** (closeout: opening the original verified – host `docs.google.com`) | real size, modified time, MIME; link host `docs.google.com`, `rel=noopener noreferrer` |
+| 9 | Text preview | **LIVE PASS** | native Google Doc: text loaded (files.export, caller's own token; 1834 characters, content never recorded); Word file → real unsupported-format answer (415, Czech) |
 | 10 | Duplicate protection | **LIVE PASS** | same real file again → `duplicate: true`, still 1 row |
 | 11 | Realtime between members | **LIVE PASS** | editor + viewer on the dialog, no reload: attach seen after ≈540 ms (incl. the real Drive call), removal after ≈115 ms |
 | 12 | Activity events | **LIVE PASS** | `drive_file_linked/unlinked` per persisted change, actor verified, none for duplicates/refreshes; timeline shows the Czech sentence |
@@ -253,11 +253,11 @@ Test files: dedicated harmless files in the owner's own Drive (one JPEG, one Wor
 | 18 | Disconnect + reconnect | **LIVE PASS** | audit `connected`/`disconnected`/`connected`; links stayed; after reconnect Google still served the earlier-picked file (`refresh` → ok) |
 | 19 | Errors | **PARTIAL** | real Drive 404 → „Přístup k souboru není dostupný…“ ✔; the `invalid_client` incident now logs the phase; **denied consent / Drive unticked on the real Google screen NOT VERIFIED live** (mock only) |
 | 20 | Classic + Monograph | **LIVE PASS** | DOM assertions, desktop light + mobile dark, no horizontal overflow, no „simulace“ label |
-| – | Rename in Drive → *Obnovit informace* | **NOT VERIFIED live** | mock only |
+| – | Rename in Drive → *Obnovit informace* | **LIVE PASS** (closeout) | renamed in Drive → stored name now differs from the name recorded in the link event; `metadata_checked_at` advanced |
 | – | 7-day refresh-token expiry (Testing) | **NOT VERIFIED** | needs ≥ 7 days; documented behaviour |
 | – | Revocation at Google on disconnect | **LIVE PASS** (closeout, §14) | `google-live.sh revoke-check`: old refresh token live (200) → product disconnect (`revokedAtGoogle:true`) → same token now `invalid_grant` |
 
-**Verdict: CONDITIONAL PASS** – the core real-Google path (OAuth, Picker, Drive API, refresh, attach, realtime, events, roles, disconnect/
+**Verdict (before closeout): CONDITIONAL PASS** – the core real-Google path (OAuth, Picker, Drive API, refresh, attach, realtime, events, roles, disconnect/
 reconnect, UI in both styles) is live-verified; the items marked NOT VERIFIED remain open. Mock results are never counted as live.
 
 ### 13.3 Live helper commands
@@ -304,3 +304,20 @@ Still **NOT VERIFIED live: a second real Google account** (an editor who connect
 
 ### 14.4 Known baseline E2E failures
 Recorded in `docs/TECH_DEBT.md` (TD-1, TD-2); both fail identically on `run01-complete`.
+
+### 14.5 Closeout live results and final verdict
+Reconnect (real consent), manual project-level Picker pick of a native Google Doc, text preview, rename in Drive + *Obnovit informace*, and
+opening the original were verified by the owner manually and re-checked read-only by `google-live.sh doc-check` (spec `e2e/google-drive-live-doc.spec.ts`:
+preview 1834 characters, rename picked up, original opens on `docs.google.com`). DB after reconnect: one `active` connection, scopes exactly
+`userinfo.email`, `drive.file`, `openid`, refresh token only as `v1.…` envelope; audit trail contains `connected/disconnected/reconnected`.
+The real-Google dev log of this run has no `code=`/`state=`/token.
+
+**Final RUN 02B verdict: PASS for the live scope below; NOT VERIFIED items stay open (never counted from mock).**
+
+| LIVE PASS | NOT VERIFIED |
+|---|---|
+| OAuth connect (PKCE/state/session binding), reconnect, disconnect **with proven revocation at Google**, Picker (task + project level), native Doc + JPEG + Word, metadata, text preview, rename + refresh, open original, duplicates, access-token refresh, realtime (editor/viewer), events, roles, errors (real 404), persistence, Classic + Monograph UI | **second real Google account** (ClearSpace vs Google permission separation with two Google identities; editor connecting their own Google) · **7-day refresh-token expiry** in Testing mode · **denied consent / Drive unticked on the real Google screen** (mock only) · behaviour for Google *Workspace* accounts / shared drives · production Google project, production run |
+
+Regression at closeout: unit 1266/1266, `tsc` 0, lint 0 errors (3 old warnings), production build with DEV flags set → bundle guard 48/48 and `/api/dev/login` 404,
+live specs (`google-drive-live-ui` Classic + Monograph 4/4, `dev-login-stack` 3/3, `google-drive-live-doc` 1/1). DB harness and mock suites were **not** re-run
+(migration and server code unchanged since their last green run: DB harness 2231 assertions, `drive_http` 28/28, `collab_realtime` 64/64, `invite_email` 41/41).

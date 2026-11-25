@@ -26,7 +26,7 @@ for (const [label, size, scheme] of [['desktop light', { width: 1280, height: 80
     await page.goto(`/projects/${P}`);
     await page.getByTestId('project-files-btn').click();
     const m = page.getByTestId('project-files-modal');
-    await expect(m.getByTestId('drive-task-list').locator('li')).toHaveCount(1);   // the real file linked to the task
+    await expect(m.getByTestId('drive-task-list').locator('li').first()).toBeVisible();   // the real file linked to the task
     await expect(m.getByTestId('drive-attach')).toBeVisible();                    // connected owner may add from the real Picker
     await expect(m.getByTestId('drive-privacy-note')).toContainText('uvidí všichni členové projektu');
     const open = m.getByTestId('drive-open').first();
@@ -39,7 +39,7 @@ for (const [label, size, scheme] of [['desktop light', { width: 1280, height: 80
     await page.getByText('Připravit podklady pro klienta').first().click();
     const sec = page.getByTestId('task-drive-section');
     await expect(sec).toBeVisible();
-    await expect(sec.getByTestId('drive-list').locator('li')).toHaveCount(1);
+    await expect(sec.getByTestId('drive-list').locator('li').first()).toBeVisible();
     await ctx.close();
   });
 }

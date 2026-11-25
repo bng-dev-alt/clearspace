@@ -1,7 +1,7 @@
 # RUN 02 – Google Drive: produkční rollout (runbook)
 
 Stav 2026-11-25: **nic z tohoto dokumentu ještě neproběhlo.** Implementace je na větvi `feature/run02-google-drive`
-(lokálně, nepushnuto). Produkce = stav RUN 01 (`clearspace-ai.vercel.app`, Supabase `twjlnsxjtuntujarwner`,
+(lokálně, nepushnuto, tag `run02-complete`). Produkce = stav RUN 01 (`clearspace-ai.vercel.app`, Supabase `twjlnsxjtuntujarwner`,
 migrace 0100–0700, 0900, 1000, 1100). Vzor: `docs/collaboration/PRODUCTION_ROLLOUT.md` (RUN 01).
 Architektura a bezpečnost: `docs/run02/GOOGLE_DRIVE.md`.
 
@@ -98,3 +98,23 @@ soubory nevybírejte – aplikace stejně uvidí jen vybrané.
 * Skutečné ověření OAuth + Picker + Drive API proti Googlu: **provedeno v dev projektu** (RUN 02B, `GOOGLE_DRIVE.md` §13, CONDITIONAL PASS); produkční Google projekt a produkční živá akceptace (§5) zbývají.
 * Režim *Testing*: 7denní platnost refresh tokenu – akceptovat, nebo vlastní doména + ověření značky.
 * Nácvik na kopii produkce (vyžaduje schválení read-only přístupu).
+
+## 9. RUN 02C – plán produkčního rolloutu (konkrétní)
+Předpoklady (vlastník, mimo kód): **(a)** rozhodnutí *Testing* vs. *In production* (vlastní doména + ověření značky; `vercel.app` nelze ověřit), **(b)** založení
+produkčního Google projektu `clearspace-prod` (§2: Drive API + Picker API, consent screen, Web klient, redirect URI
+`https://clearspace-ai.vercel.app/api/google/oauth/callback`, Picker API key omezený na Picker API + referrer), **(c)** souhrnné schválení z §6.
+
+| Fáze | Obsah | Kdo | Brána (musí být splněna, jinak STOP) |
+|---|---|---|---|
+| 0 | Preflight: čistý strom/tag `run02-complete`, `check-production-bundle.sh` na buildu, produkce read-only: markery končí 1100, vlastník tabulek `postgres` | agent | markery + vlastnictví sedí |
+| 1 | Nácvik migrace 1200 na kopii produkčních dat (lokální kontejner), rollback, porovnání katalogu | agent | katalog po rollbacku = katalog 1100; počty řádků beze změny |
+| 2 | Tajemství: `frontend/scripts/set-google-keys.sh` (skryté výzvy, Vercel Sensitive; `GOOGLE_*` jen server, nic `NEXT_PUBLIC_*`) | vlastník (zadání), agent (ověření SHA-256) | proměnné existují, tajemství nikdy v chatu |
+| 3 | Migrace 1200 na `twjlnsxjtuntujarwner`: `CONFIRM_DRIVE=… apply-drive-hosted.sh` (záloha `pg_dump`, jedna transakce) | agent po schválení | 4 tabulky s RLS, žádné anonymní RPC, 0 odkazů; RUN 01 build migraci ignoruje |
+| 4 | Staged build `vercel deploy --prod --skip-domain --build-env NEXT_PUBLIC_ENABLE_MONOGRAPH=1`, porovnat `build.env` s předchozí produkcí | agent | `build.env` shodný; bundle guard 48/48; `check-deployment.sh`; `hosted-verify.sh` (RUN 01 regrese) |
+| 5 | Promote | agent po schválení | smoke: přihlášení, projekty, realtime |
+| 6 | Živá akceptace (§5) jen s účty vlastníka a testovací složkou; navíc scénáře NOT VERIFIED z §14.5, které lze provést: **druhý skutečný Google účet**, odmítnutý souhlas | vlastník + agent | všech 9 kroků §5 PASS |
+| 7 | Záznam do dokumentace, tag `run02c-complete`; push/merge do `main` až samostatným rozhodnutím | agent | – |
+
+Rollback: §7 (kód: `vercel promote` předchozí; DB: odpojit účty → rollback skript; vypnutí: smazat `GOOGLE_OAUTH_CLIENT_ID`).
+Rizika: režim *Testing* (7denní refresh token, max. 100 testovacích uživatelů, varování o neověřené aplikaci) · Google odvolává grant celého *projektu*
+(proto oddělený dev/prod projekt) · staged URL není v redirect URI (OAuth se testuje až po promote) · zapomenutý `NEXT_PUBLIC_ENABLE_MONOGRAPH`.

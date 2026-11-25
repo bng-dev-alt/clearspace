@@ -7,8 +7,9 @@
 | 01 | Týmová spolupráce a realtime (role, přítomnost, živé úpravy, komentáře s @zmínkami, notifikace, pozvánky) | **PASS v rozsahu ověřených funkcí**, v produkci | `docs/collaboration/COLLABORATION.md`, `PRODUCTION_ROLLOUT.md` §11 |
 | 01B | Zabezpečení a spolehlivost, pozvánky e-mailem | **hotovo, v produkci** | tamtéž |
 | 01C | Produkční připravenost (Resend, nodemailer, rollout, DMARC, Monograph build) | **hotovo, v produkci** | `PRODUCTION_ROLLOUT.md` |
-| **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **implementováno lokálně, CONDITIONAL PASS po RUN 02B**: hlavní cesta ověřena proti **skutečnému Googlu** (dev projekt, režim Testing): OAuth, Picker, Drive API, obnova tokenu, připojení souborů, realtime, události, role; otevřené: náhled nativního Google Dokumentu, přejmenování+obnova, odmítnutý souhlas naživo, druhý Google účet; nenasazeno, nepushnuto | `docs/run02/GOOGLE_DRIVE.md`, `docs/run02/PRODUCTION_ROLLOUT.md` |
-| 03 | Gmail & Email Intelligence | další; staví na sdíleném Google připojení (inkrementální autorizace) | `docs/run02/GOOGLE_DRIVE.md` §12 |
+| **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **dokončeno lokálně, tag `run02-complete`** (nepushnuto, nenasazeno): RUN 02B živě ověřeno proti skutečnému Googlu (dev projekt, režim Testing) včetně náhledu nativního Dokumentu, obnovy po přejmenování a **prokázané revokace u Googlu**; NOT VERIFIED: druhý Google účet, 7denní expirace refresh tokenu, odmítnutý souhlas naživo | `docs/run02/GOOGLE_DRIVE.md` §13–14, `docs/run02/PRODUCTION_ROLLOUT.md` |
+| **02C** | **Production Rollout** Google Drive (produkční Google projekt, migrace 1200, staged build, živá akceptace) | **další, vyžaduje rozhodnutí vlastníka** (Testing vs. ověření značky) | `docs/run02/PRODUCTION_ROLLOUT.md` §9 |
+| 03 | Gmail & Email Intelligence | další; staví na sdíleném Google připojení (inkrementální autorizace) | `docs/run02/GOOGLE_DRIVE.md` §12, `docs/run02/HANDOFF_NEXT_RUNS.md` |
 | 04 | Google Calendar | plánováno; stejný základ | tamtéž |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
@@ -17,6 +18,9 @@
 * Zpřísnění DMARC `p=none` → `quarantine` po několika týdnech provozu; přísnější CSP s noncí (dnes úzká CSP, viz `next.config.ts`).
 * Automatizace nasazení: skript pro staged build, který porovná `build.env` s předchozí produkcí (příčina chybějícího Monographu 2026-11-25).
 * Začlenění RUN 00 seederu do `main` (rozhodnutí o UUID účtu v manifestu, viz plán).
+
+## Technický dluh
+* Viz `docs/TECH_DEBT.md` (TD-1, TD-2: dva známé E2E testy, které padají i na `run01-complete`).
 
 ## Poznámky z RUN 02
 * Před nasazením RUN 02: Google Cloud (dev + prod projekt), rozhodnutí Testing vs. ověření značky (vlastní doména), migrace 1200 (`apply-drive-hosted.sh`).

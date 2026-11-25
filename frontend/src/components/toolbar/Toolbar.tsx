@@ -316,8 +316,8 @@ export default function Toolbar({
               type="button"
               onClick={onOpenFiles}
               className="toolbar-settings-btn"
-              title="Soubory a e-maily projektu"
-              aria-label="Soubory a e-maily projektu"
+              title="Soubory, e-maily a události projektu"
+              aria-label="Soubory, e-maily a události projektu"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', color: 'var(--gray-text)', transition: 'color 0.2s' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--dark-navy)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gray-text)'; }}

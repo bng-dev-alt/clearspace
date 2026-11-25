@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -76,6 +76,20 @@ if [ "${EXPECT_GMAIL_OFF:-0}" = 1 ]; then
   P=$(get /privacy); echo "$P" | grep -q 'privacy-gmail-off' && ! echo "$P" | grep -q 'data-testid="privacy-gmail"' && ok "/privacy: Gmail stated as NOT enabled" || bad "/privacy does not state that Gmail is off"
 fi
 
+# RUN 04 (EXPECT_CALENDAR_OFF=1, a build with the Calendar code and CALENDAR_INTEGRATION_ENABLED off): every Calendar route is closed
+# BEFORE any auth or Google config (503 calendar_disabled), the privacy policy says Calendar is off. Authenticated: supabase-hosted.spec.ts.
+if [ "${EXPECT_CALENDAR_OFF:-0}" = 1 ]; then
+  id=11111111-1111-4111-8111-111111111111
+  for mp in "GET /api/calendar/events?from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z" "POST /api/calendar/links" "POST /api/calendar/links/$id/refresh" "GET /api/calendar/links/$id/open"; do
+    m=${mp%% *}; p=${mp#* }
+    b=$(get "$p" -X "$m" -H 'Content-Type: application/json' -d '{}' -w ' HTTP%{http_code}')
+    case "$b" in *'"error":"calendar_disabled"'*' HTTP503') ok "$m ${p%%\?*} -> 503 calendar_disabled";; *) bad "$m ${p%%\?*} -> ${b: -7} (expected 503 calendar_disabled)";; esac
+  done
+  code=$(status POST /api/google/oauth/start -H 'Content-Type: application/json' -d '{"service":"calendar"}'); [ "$code" = 401 ] && ok "anonymous POST /api/google/oauth/start (calendar) -> 401" || bad "anonymous oauth/start calendar -> $code"
+  P=$(get /privacy); echo "$P" | grep -q 'privacy-calendar-off' && ! echo "$P" | grep -q 'data-testid="privacy-calendar"' && ok "/privacy: Calendar stated as NOT enabled" || bad "/privacy does not state that Calendar is off"
+  A=$(get /about); echo "$A" | grep -q 'about-calendar' && bad "/about presents Calendar although it is off" || ok "/about: no Calendar section"
+fi
+
 echo "== client bundle"
 CHUNKS=$(get /login | grep -oE '/_next/static/[^"]+\.js' | sort -u)
 [ -n "$CHUNKS" ] && ok "found $(echo "$CHUNKS" | wc -l | tr -d ' ') script chunks" || bad "no script chunks found (blocked by protection?)"
@@ -86,7 +100,8 @@ has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
 for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini' \
-           'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL' 'auth/gmail' 'gmail.googleapis.com' 'GMAIL_INTEGRATION_ENABLED' 'gmail_link_source'; do
+           'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL' 'auth/gmail' 'gmail.googleapis.com' 'GMAIL_INTEGRATION_ENABLED' 'gmail_link_source' \
+           'auth/calendar' 'www.googleapis.com/calendar' 'CALENDAR_INTEGRATION_ENABLED' 'calendar_link_source' 'attendees(responseStatus)'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

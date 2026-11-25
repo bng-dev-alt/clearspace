@@ -13,7 +13,7 @@ import type { GmailContent } from '../google/gmail';
  *    "Analyzovat obsah" action must obtain an explicit per-use consent, re-check Google's Limited Use rules (no transfer
  *    to train generalized models) and go through the existing AI gateway (owner policy, quota, rate limits).
  */
-export type ResourceProvider = 'google_drive' | 'gmail_message' | 'gmail_thread';
+export type ResourceProvider = 'google_drive' | 'gmail_message' | 'gmail_thread' | 'google_calendar_event';
 
 export interface ResourceSegment {
   /** Stable citation anchor: `<provider>:<linkId>#<n>` (n = 1-based message / section). */
@@ -52,6 +52,23 @@ export function fromGmail(linkId: string, c: GmailContent): ResourceDocument {
     title: c.subject,
     segments: c.messages.map((m, i) => ({ ref: ref(c.provider, linkId, c.omittedMessages + i + 1), author: m.from.name || undefined, date: m.date, text: m.text })),
     truncated: c.omittedMessages > 0 || c.messages.some((m) => m.truncated),
+    trust: 'untrusted',
+    aiUse: 'not_consented',
+  };
+}
+
+/**
+ * RUN 04 Calendar: only the SHARED metadata of a linked event (the same fields every project member sees). There is no event
+ * content: description, location, attendees and conference data are never fetched. Future Meeting / Project Intelligence refers
+ * to the event by its link id (provider neutral), never by a Google id.
+ */
+export function fromCalendarEvent(linkId: string, e: { title: string; start: string; end: string; allDay: boolean; organizer: string | null; attendees: number; retrievedAt: string }): ResourceDocument {
+  const when = e.allDay ? `${e.start.slice(0, 10)} – ${e.end.slice(0, 10)} (celý den, konec exkluzivně)` : `${e.start} – ${e.end}`;
+  return {
+    source: { provider: 'google_calendar_event', linkId, retrievedAt: e.retrievedAt, retrievedFor: 'requesting_user' },
+    title: e.title,
+    segments: [{ ref: ref('google_calendar_event', linkId, 1), author: e.organizer ?? undefined, date: e.start, text: `${e.title}\n${when}\nÚčastníků: ${e.attendees}` }],
+    truncated: false,
     trust: 'untrusted',
     aiUse: 'not_consented',
   };

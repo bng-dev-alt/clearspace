@@ -13,6 +13,7 @@
 #   frontend/scripts/google-live.sh revoke-check  # disconnects the owner for real and proves the grant is dead AT GOOGLE (reconnect after)
 #   frontend/scripts/google-live.sh doc-check     # read-only live check of the native Doc preview / refresh / open-original (after the manual steps)
 #   frontend/scripts/google-live.sh forget    # delete the Keychain items
+#   frontend/scripts/google-live.sh node <script>.mjs [args]   # RUN 04: a supabase/tests live script with the same env as revoke-check
 # Mock mode stays available: frontend/scripts/drive-stack.sh mock + app (the two never run at the same time).
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -111,8 +112,16 @@ case "${1:-}" in
       PW_CHROMIUM_PATH=${PW_CHROMIUM_PATH:-$(find "$HOME/Library/Caches/ms-playwright" -path '*chromium_headless_shell*' -name chrome-headless-shell -type f 2>/dev/null | head -1)} \
       exec npx playwright test e2e/google-drive-live-doc.spec.ts --reporter=line
     ;;
+  node)  # RUN 04: run one live gate script (supabase/tests/<name>.mjs) with the real-Google env; prints only what the script prints
+    [[ "${2:-}" =~ ^[a-z_]+\.mjs$ ]] && [ -f "$HERE/supabase/tests/$2" ] || { echo "usage: $0 node <supabase/tests script>.mjs [args]"; exit 2; }
+    load_env
+    export $STACK_ENV
+    eval "$("$HERE/scripts/collab-stack.sh" env)"
+    export E2E_BASE_URL=$BASE E2E_PASSWORD=$(acc COLLAB_PASSWORD) COLLAB_PASSWORD=$(acc COLLAB_PASSWORD)
+    exec node "$HERE/supabase/tests/$2" "${@:3}"
+    ;;
   forget)
     for a in "${ACCOUNTS[@]}"; do security delete-generic-password -s "$SVC" -a "$a" >/dev/null 2>&1 && echo "deleted $a" || echo "$a: nothing to delete"; done
     ;;
-  *) echo "usage: $0 setup|status|verify|app|revoke-check|doc-check|forget"; exit 2;;
+  *) echo "usage: $0 setup|status|verify|app|revoke-check|doc-check|node|forget"; exit 2;;
 esac

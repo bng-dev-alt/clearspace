@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { gmailFeatureEnabled, googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
+import { calendarFeatureEnabled, gmailFeatureEnabled, googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -24,7 +24,12 @@ export const MSG = {
   forbidden: 'K této akci nemáte oprávnění.',
   drive_not_granted: 'Účet Google nemá povolený přístup ke Google Disku. Připojte prosím Google Disk.',
   gmail_not_granted: 'Účet Google nemá povolený přístup ke Gmailu. Připojte prosím Gmail v Propojených účtech.',
+  calendar_not_configured: 'Propojení s Google Kalendářem není na serveru nastavené.',
+  calendar_disabled: 'Propojení s Google Kalendářem není na serveru zapnuté.',
+  calendar_not_granted: 'Účet Google nemá povolený přístup ke Google Kalendáři. Připojte prosím Kalendář v Propojených účtech.',
 } as const;
+/** The refusal when the stored grant lacks the service a route needs (RUN 03/04). */
+const NOT_GRANTED: Record<GoogleService, string> = { drive: MSG.drive_not_granted, gmail: MSG.gmail_not_granted, calendar: MSG.calendar_not_granted };
 
 /**
  * Structured server log of the Google integration (RUN 02B). One JSON line per event, WHITELISTED fields only: phases, booleans,
@@ -110,7 +115,7 @@ export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts
   // RUN 03: one Google grant, several services. A route asks for ITS service; a token never serves a service the user
   // did not enable in ClearSpace (e.g. Gmail removed in ClearSpace while Google still holds the grant).
   if (opts.service && !row.scopes?.includes(SERVICE_SCOPE[opts.service])) {
-    throw new HttpError(409, opts.service === 'gmail' ? MSG.gmail_not_granted : MSG.drive_not_granted, `${opts.service}_not_granted`);
+    throw new HttpError(409, NOT_GRANTED[opts.service], `${opts.service}_not_granted`);
   }
   const fresh = (r: CredRow) => r.access_token_enc && r.access_expires_at && Date.parse(r.access_expires_at) > Date.now() + 60_000;
   if (!opts.force && fresh(row)) {
@@ -173,7 +178,7 @@ export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig
   const row = await readCreds(db, cfg, 1);
   if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
   if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
-  if (!row.scopes?.includes(SERVICE_SCOPE[service])) throw new HttpError(409, service === 'gmail' ? MSG.gmail_not_granted : MSG.drive_not_granted, `${service}_not_granted`);
+  if (!row.scopes?.includes(SERVICE_SCOPE[service])) throw new HttpError(409, NOT_GRANTED[service], `${service}_not_granted`);
   let refreshToken: string;
   try { refreshToken = open(cfg.keys, row.refresh_token_enc, tokenAad(row.user_id, 'refresh')); } catch { throw new HttpError(409, MSG.revoked, 'revoked'); }
   try {
@@ -199,11 +204,21 @@ export function requireGmail(): GoogleConfig {
   return requireGoogle(MSG.gmail_not_configured);
 }
 
-/** Run a Google call with the caller's own Gmail-capable token; one forced refresh when Google says the token is stale. */
-export async function withGmailToken<T extends { ok: boolean; reason?: string }>(db: SupabaseClient, cfg: GoogleConfig, cost: number, call: (token: string) => Promise<T>): Promise<T> {
-  const first = await call((await getAccessToken(db, cfg, { cost, service: 'gmail' })).token);
-  if (first.ok || first.reason !== 'auth') return first;
-  return call((await getAccessToken(db, cfg, { cost: 1, force: true, service: 'gmail' })).token);
+/** RUN 04: Calendar routes need the Google integration AND the Calendar feature switch (independent of Drive and Gmail). */
+export function requireCalendar(): GoogleConfig {
+  // the switch first: with Calendar off (production default) every Calendar route says exactly that, whatever the Google config
+  if (!calendarFeatureEnabled()) throw new HttpError(503, MSG.calendar_disabled, 'calendar_disabled');
+  return requireGoogle(MSG.calendar_not_configured);
 }
+
+/** Run a Google call with the caller's own token for `service`; one forced refresh when Google says the token is stale. */
+export async function withServiceToken<T extends { ok: boolean; reason?: string }>(service: GoogleService, db: SupabaseClient, cfg: GoogleConfig, cost: number, call: (token: string) => Promise<T>): Promise<T> {
+  const first = await call((await getAccessToken(db, cfg, { cost, service })).token);
+  if (first.ok || first.reason !== 'auth') return first;
+  return call((await getAccessToken(db, cfg, { cost: 1, force: true, service })).token);
+}
+/** RUN 03 name, unchanged behaviour (Gmail routes call it). */
+export const withGmailToken = <T extends { ok: boolean; reason?: string }>(db: SupabaseClient, cfg: GoogleConfig, cost: number, call: (token: string) => Promise<T>) =>
+  withServiceToken('gmail', db, cfg, cost, call);
 
 export const GMAIL_STATUS: Record<string, number> = { not_found: 404, auth: 409, rate_limited: 429, forbidden: 403, unavailable: 503, too_large: 413 };

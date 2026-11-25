@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
-import { gmailFeatureEnabled } from '../../lib/google/config';
+import { calendarFeatureEnabled, gmailFeatureEnabled } from '../../lib/google/config';
 
 export const metadata: Metadata = { title: 'Ochrana osobních údajů – ClearSpace' };
 // The controller's identity and contact come from SERVER env (PRIVACY_CONTROLLER, PRIVACY_CONTACT_EMAIL): never hard-coded in the
@@ -14,6 +14,7 @@ export default function PrivacyPage() {
   const controller = process.env.PRIVACY_CONTROLLER?.trim();
   const email = process.env.PRIVACY_CONTACT_EMAIL?.trim();
   const gmail = gmailFeatureEnabled();
+  const calendar = calendarFeatureEnabled();
   const contact = email && /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(email) ? email : null;
 
   return (
@@ -65,6 +66,23 @@ export default function PrivacyPage() {
         )}
       </section>
 
+      <section className="settings-card" id="calendar">
+        <h2>3b. Google Kalendář (volitelné propojení)</h2>
+        {!calendar ? (
+          <p data-testid="privacy-calendar-off">Propojení s Google Kalendářem není na tomto serveru zapnuté. ClearSpace zde k vašemu kalendáři nepřistupuje a o povolení přístupu ke Kalendáři nežádá.</p>
+        ) : (
+          <ul data-testid="privacy-calendar">
+            <li><strong>Oprávnění:</strong> jen čtení událostí v kalendářích, které vlastníte (<code>calendar.events.owned.readonly</code>), o které žádáte zvlášť tlačítkem „Připojit Google Kalendář“. ClearSpace čte jen váš hlavní kalendář; události nevytváří, nemění, nemaže, nikoho nezve a kalendář nesynchronizuje.</li>
+            <li><strong>Vaše vrstva v kalendáři projektu:</strong> vaše události se načítají jen na vaši žádost pro zobrazené období, vidíte je jen vy a neukládají se.</li>
+            <li><strong>Co ukládáme u připojené události:</strong> název, začátek a konec, zda jde o celodenní nebo opakovanou událost, časové pásmo události, počet účastníků, jméno organizátora (nebo jen doménu), kdo a kdy událost připojil. Odděleně a nepřístupně pro ostatní uživatele ukládáme identifikátor události a vašeho účtu Google, aby šla událost obnovit. <strong>Neukládáme</strong> popis, místo, adresy ani jména účastníků, odkazy na online schůzky (Google Meet) ani přílohy – ClearSpace je od Google vůbec nepožaduje.</li>
+            <li><strong>Soukromé a důvěrné události</strong> nelze k projektu připojit. Odkaz „Otevřít v Google Kalendáři“ dostane jen ten, kdo událost připojil.</li>
+            <li><strong>Vypnout Kalendář</strong> (Nastavení → Propojené účty) zastaví čtení kalendáře a volitelně smaže vaše připojené události. Google neumí odebrat jen Kalendář: úplné zrušení oprávnění = odpojení účtu Google (všechny služby).</li>
+            <li><strong>AI a porady:</strong> ClearSpace údaje z Google Kalendáře <strong>neposílá žádnému poskytovateli umělé inteligence</strong> ani službě přepisu (Soniox), nepřipojuje se ke schůzkám a nic nenahrává. Údaje z Kalendáře nepoužívá k trénování obecných modelů AI.</li>
+            <li>Pro údaje z Google Kalendáře platí požadavky Limited Use zásad Google API Services User Data Policy (viz bod 3).</li>
+          </ul>
+        )}
+      </section>
+
       <section className="settings-card" id="retention">
         <h2>4. Uchování a výmaz</h2>
         <ul>
@@ -82,7 +100,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Supabase – databáze, přihlášení a úložiště souborů (region EU – Irsko).</li>
           <li>Vercel – provoz webové aplikace.</li>
-          <li>Google – propojení s Google Diskem{gmail ? ' a Gmailem' : ''} (jen pokud ho zapnete).</li>
+          <li>Google – propojení s Google Diskem{gmail ? ', Gmailem' : ''}{calendar ? ' a Google Kalendářem' : ''} (jen pokud ho zapnete).</li>
           <li>Resend – odesílání e-mailů (potvrzení účtu, pozvánky do projektů).</li>
           <li>U volitelných AI funkcí a přepisu záznamů porad (jsou-li pro váš účet zapnuté) zpracovávají text nebo zvuk, který do nich sami vložíte, poskytovatelé Google (Gemini) a Soniox. Obsah souborů z Google Disku se jim neposílá.</li>
         </ul>

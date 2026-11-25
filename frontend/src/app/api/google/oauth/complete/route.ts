@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, type GoogleService } from '../../../../../lib/google/config';
+import { CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, type GoogleService } from '../../../../../lib/google/config';
 import { open, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { exchangeCode, GoogleOAuthError, hasDriveScope, hasService, parseIdToken, revokeToken } from '../../../../../lib/google/oauth';
 import { caller, errorResponse, NO_STORE, oauthLog, requireGoogle } from '../../../../../lib/google/server';
 
-type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied' | 'account_mismatch' | 'unavailable';
+type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied'
+  | 'calendar_connected' | 'calendar_denied' | 'account_mismatch' | 'unavailable';
 
 /**
  * POST /api/google/oauth/complete -- finishes connecting a Google account, under the user's ClearSpace session.
@@ -44,11 +45,11 @@ export async function POST(req: NextRequest) {
     if (typeof result.code !== 'string' || !result.code) return reply('error', row.return_to);
 
     // RUN 03: which service did THIS round trip ask for (stored with the state at start; never from the client)
-    const service: GoogleService = row.scopes?.includes(GMAIL_READONLY_SCOPE) ? 'gmail' : 'drive';
+    const service: GoogleService = row.scopes?.includes(GMAIL_READONLY_SCOPE) ? 'gmail' : row.scopes?.includes(CALENDAR_READONLY_SCOPE) ? 'calendar' : 'drive';
     try {
       const t = await exchangeCode(cfg, result.code, open(cfg.keys, row.code_verifier_enc, tokenAad(state, 'pkce')));
       const granted = t.scopes.includes(SERVICE_SCOPE[service]);
-      oauthLog('exchange_ok', { service, hasRefresh: Boolean(t.refreshToken), hasIdToken: Boolean(t.idToken), driveGranted: hasDriveScope(t.scopes), gmailGranted: hasService(t.scopes, 'gmail'), scopeCount: t.scopes.length, expiresIn: t.expiresIn });
+      oauthLog('exchange_ok', { service, hasRefresh: Boolean(t.refreshToken), hasIdToken: Boolean(t.idToken), driveGranted: hasDriveScope(t.scopes), gmailGranted: hasService(t.scopes, 'gmail'), calendarGranted: hasService(t.scopes, 'calendar'), scopeCount: t.scopes.length, expiresIn: t.expiresIn });
       const id = parseIdToken(cfg, t.idToken);
       oauthLog('identity_ok', { subLength: id.sub.length });
       const { data: subData, error: subErr } = await db.rpc('google_connection_sub', { p_server_secret: cfg.serverSecret, p_candidate_sub: id.sub });
@@ -60,8 +61,8 @@ export async function POST(req: NextRequest) {
       // we do not keep is revoked only when nothing else depends on that grant.
       const dropUnused = async () => { if (!sub?.candidate_in_use) await revokeToken(cfg, t.refreshToken ?? t.accessToken); };
 
-      if (service === 'gmail' && existing && existing !== id.sub) {
-        // Adding Gmail must not silently switch the connected Google account (Drive links / earlier e-mails belong to it).
+      if (service !== 'drive' && existing && existing !== id.sub) {
+        // Adding Gmail / Calendar must not silently switch the connected Google account (Drive links / earlier e-mails / events belong to it).
         oauthLog('account_mismatch', { service });
         await dropUnused();
         return reply('account_mismatch', row.return_to);
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
         await db.rpc('google_service_audit', { p_server_secret: cfg.serverSecret, p_event: 'scope_denied', p_service: service });
         if (service === 'drive') await db.rpc('google_oauth_audit_denied', { p_server_secret: cfg.serverSecret, p_state_sha256: stateHash });
         if (!existing) await dropUnused();
-        return reply(service === 'gmail' ? 'gmail_denied' : 'scope_denied', row.return_to);
+        return reply(service === 'gmail' ? 'gmail_denied' : service === 'calendar' ? 'calendar_denied' : 'scope_denied', row.return_to);
       }
       // Store what ClearSpace uses: identity + the services the user enabled HERE (before, or just now). Google answers with
       // the union of everything ever granted (include_granted_scopes), which may still contain a service the user removed
@@ -98,9 +99,9 @@ export async function POST(req: NextRequest) {
         await dropUnused();   // nothing stored: no orphaned live grant
         return reply('error', row.return_to);
       }
-      if (service === 'gmail') {
-        await db.rpc('google_service_audit', { p_server_secret: cfg.serverSecret, p_event: 'service_added', p_service: 'gmail' });
-        return reply('gmail_connected', row.return_to);
+      if (service !== 'drive') {
+        await db.rpc('google_service_audit', { p_server_secret: cfg.serverSecret, p_event: 'service_added', p_service: service });
+        return reply(service === 'gmail' ? 'gmail_connected' : 'calendar_connected', row.return_to);
       }
       return reply('connected', row.return_to);
     } catch (err) {

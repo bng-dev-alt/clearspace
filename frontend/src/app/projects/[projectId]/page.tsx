@@ -9,7 +9,7 @@ import Toolbar from '../../../components/toolbar/Toolbar';
 import StatsRow from '../../../components/toolbar/StatsRow';
 import BoardPanel from '../../../components/board/BoardPanel';
 import Column from '../../../components/board/Column';
-import CalendarView from '../../../components/board/CalendarView';
+import { ProjectCalendarView } from '../../../components/calendar/useProjectCalendarLayers';
 import AddCardModal from '../../../components/AddCardModal';
 import TaskDetailDrawer from '../../../components/board/TaskDetailDrawer';
 
@@ -25,6 +25,7 @@ const GlobalSearchModal = dynamic(() => import('../../../components/search/Globa
 const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
 const DriveLinksPanel = dynamic(() => import('../../../components/drive/DriveLinksPanel'), { ssr: false });
 const GmailLinksPanel = dynamic(() => import('../../../components/gmail/GmailLinksPanel'), { ssr: false });
+const CalendarLinksPanel = dynamic(() => import('../../../components/calendar/CalendarLinksPanel'), { ssr: false });
 import ModalShell from '../../../components/ui/ModalShell';
 import { RETURN_TEXT } from '../../../components/drive/GoogleConnectionCard';
 const ProjectDashboardView = dynamic(() => import('../../../components/dashboardStats/ProjectDashboardView'), { ssr: false });
@@ -711,7 +712,10 @@ export default function ProjectBoardPage() {
           teamMembers={teamMembers}
         />
       ) : viewMode === 'calendar' ? (
-        <CalendarView
+        <ProjectCalendarView
+          projectId={projectId}
+          canEdit={!readOnly}
+          returnTo={`/projects/${projectId}`}
           columns={processedColumns}
           month={calendarMonth}
           onPrevMonth={() => setCalendarMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
@@ -1076,7 +1080,7 @@ export default function ProjectBoardPage() {
       )}
 
       {isFilesOpen && !accessRevoked && (
-        <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory a e-maily projektu" maxWidth={720} testId="project-files-modal">
+        <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory, e-maily a události projektu" maxWidth={720} testId="project-files-modal">
           <DriveLinksPanel
             projectId={projectId}
             canEdit={!readOnly}
@@ -1086,6 +1090,12 @@ export default function ProjectBoardPage() {
           />
           <div className="drawer-divider" />
           <GmailLinksPanel
+            projectId={projectId}
+            canEdit={!readOnly}
+            returnTo={`/projects/${projectId}`}
+            cardTitle={(id) => columns.flatMap((c) => c.cards).find((c) => c.id === id)?.title}
+          />
+          <CalendarLinksPanel
             projectId={projectId}
             canEdit={!readOnly}
             returnTo={`/projects/${projectId}`}

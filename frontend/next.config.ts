@@ -27,7 +27,7 @@ export const securityHeaders = [
  * do not print request URLs this way; this only concerns development.
  */
 // RUN 03: Gmail search URLs carry the user's search terms (private) -- never printed either.
-export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/, /\/api\/gmail\//];
+export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/, /\/api\/gmail\//, /\/api\/calendar\//];
 
 const nextConfig: NextConfig = {
   logging: { incomingRequests: { ignore: noRequestLogPaths } },

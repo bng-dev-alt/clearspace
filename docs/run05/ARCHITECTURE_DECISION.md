@@ -23,10 +23,11 @@ mimo aplikaci (Slack, Telegram) bez změny in-app chování, s vypnutými přep�
    * Vlastnosti nezávislé na plánovači: dispatch je idempotentní (outbox s unikátním klíčem, `due_soon` `ON CONFLICT DO NOTHING`), souběh řeší
      `FOR UPDATE SKIP LOCKED` + lease, retry přes `next_attempt_at`, zotavení po výpadku = další tick dožene vše podle pravidel M4 (nic se neztrácí,
      staré připomínky po termínu se zahodí). Ruční tick (`notify-stack.sh tick`) dělá totéž.
-3. **Autorizace serveru bez service-role klíče.** Dispatch nemá uživatele. RPC `notify_dispatch_*` jsou `SECURITY DEFINER`, `EXECUTE` pro `anon`
-   i `authenticated`, první příkaz `require_server_secret('notify', p_server_secret)` (hash v `server_trust`). Úzká odchylka od vzoru (jinde jen
-   `authenticated`), testovaná (anon bez/s chybným tajemstvím → 42501). Endpoint dispatch přijímá tajemství v hlavičce `x-notify-secret`
-   (porovnání SHA-256 v konstantním čase).
+3. **Doručovací logika v DB, aplikace bez DB práv pro dispatch (revize v Phase 1).** `notify_scheduler_tick()` je interní funkce (žádný
+   `EXECUTE` pro klientské role – strážní test `40_definer_hardening` zůstává beze změny): (1) vyzvedne odpovědi předchozích dávek z `net._http_response`
+   a zapíše výsledek každého doručení, (2) `prepare`, (3) `claim` + `net.http_post` dávky (obálky s šifrovanými údaji, jména pro text) na
+   `/api/notify/dispatch` s hlavičkou `x-notify-secret` (porovnání SHA-256 v konstantním čase). Aplikace dešifruje, odešle a v odpovědi vrátí
+   `[{id, outcome, code, retryAfter}]`. Ztracená odpověď ⇒ lease (5 min) vyprší ⇒ `ambiguous`.
 4. **Telegram propojení přes `getUpdates` na vyžádání – bez webhooku.** Uživatel otevře `t.me/<bot>?start=<token>`, stiskne Start, v ClearSpace
    klikne „Zkontrolovat“ (UI to krátce dělá samo). Server zavolá `getUpdates`, zpracuje jen `/start <token>` v `private` chatu (token jednorázový,
    10 min, v DB jen SHA-256), potvrdí offset. Kanál přejde do stavu `confirm`; **odesílat se začne až po potvrzení v ClearSpace** („Je to váš účet

@@ -264,3 +264,82 @@ echo "ok - Drive + Gmail links and Gmail sources survive the 1400 rollback byte-
 apply cs_kc "$CAL"
 [ "$(psql_admin -d cs_kc -At -c "select count(*) from public.clearspace_migrations where version = '20261128001400_google_calendar'")" = "1" ] || { echo "FAIL: re-apply 1400 after rollback"; exit 1; }
 echo "ok - 20261128001400 applies again after its rollback"
+
+# ---------------------------------------------------------------- RUN 05: notifications outside the app (Slack / Telegram)
+echo "== Scenario K6: notification channels (no client access, linking, enqueue, preferences, dispatcher, due dates / DST, cascades) -- committed transactions"
+newdb cs_k6
+apply cs_k6 "$BASELINE" "${MIGRATIONS[@]}"
+out="$(mktemp)"
+if psql_admin -d cs_k6 -f - < "$HERE/collab/95_notification_channels.sql" >"$out" 2>&1; then
+  k=$(grep -cE "NOTICE:  ok" "$out" || true); TOTAL=$((TOTAL + k))
+  grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //'
+  echo "    ($k assertions)"; rm -f "$out"
+else
+  cat "$out"; rm -f "$out"; echo "FAIL: collab/95_notification_channels.sql"; exit 1
+fi
+
+echo "--- N12 parity: the same RUN 01 actions on 1400 and on 1500 (every user with an active channel) leave identical in-app notifications"
+UPTO_1400=(); for f in "${MIGRATIONS[@]}"; do [[ "$(basename "$f")" > "20261128001400~" ]] || UPTO_1400+=("$f"); done
+newdb cs_kp4; apply cs_kp4 "$BASELINE" "${UPTO_1400[@]}"
+newdb cs_kp5; apply cs_kp5 "$BASELINE" "${MIGRATIONS[@]}"
+P4=$(psql_admin -d cs_kp4 -At -f - < "$HERE/collab/95_parity_scenario.sql" | grep '^parity:')
+P5=$(psql_admin -d cs_kp5 -At -f - < "$HERE/collab/95_parity_scenario.sql" | grep '^parity:')
+[ -n "$P4" ] && [ "$P4" = "$P5" ] || { echo "FAIL: in-app notifications differ: 1400 $P4 / 1500 $P5"; exit 1; }
+QUEUED=$(psql_admin -d cs_kp5 -At -c "select count(*) from public.notification_deliveries")
+[ "$QUEUED" -gt 0 ] || { echo "FAIL: parity run on 1500 queued nothing (triggers did not run)"; exit 1; }
+echo "ok - in-app notifications identical on 1400 and 1500 ($P5); on 1500 the same actions also queued $QUEUED external deliveries"
+
+echo "--- upgrade from run04-complete (1400 with Drive + Gmail + Calendar data and notifications) -> 1500: existing rows unchanged"
+newdb cs_kn; apply cs_kn "$BASELINE" "${UPTO_1400[@]}"
+S1400=$(psql_admin -d cs_kn -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+EXT_BEFORE=$(psql_admin -d cs_kn -At -c "select string_agg(extname, ',' order by extname) from pg_extension")
+psql_admin -d cs_kn -At -f - < "$HERE/collab/95_parity_scenario.sql" >/dev/null
+psql_admin -d cs_kn -q >/dev/null <<'SQL'
+DO $$ DECLARE a uuid := (select id from auth.users where email = 'p-own@example.test'); BEGIN
+  INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('google', encode(sha256(convert_to(repeat('g', 40), 'UTF8')), 'hex'))
+  ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256;
+  INSERT INTO public.google_connections (user_id, google_sub, google_email, scopes, refresh_token_enc) VALUES (a, '995', 'n@example.test', ARRAY['openid', 'https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/calendar.events.owned.readonly'], 'v1.0000aaaa.a.b.c');
+  INSERT INTO public.integration_audit (user_id, provider, event) VALUES (a, 'google', 'connected');
+  PERFORM test.act_as(a, 'p-own@example.test');
+  PERFORM public.drive_link_add(repeat('g', 40), 'pP', null, 'fileUpgrade0005', 'Soubor', 'application/pdf', 'https://drive.google.com/file/d/fileUpgrade0005/view', 1, now(), 'ok');
+  PERFORM public.gmail_link_add(repeat('g', 40), 'pP', null, 'thread', 'refUpgradeGmail00000005', '995', '18c3a5e000000005', '18c3a5e000000005', 'S', 'F', now(), 2, null, 'ok');
+  PERFORM public.calendar_link_add(repeat('g', 40), 'pP', null, 'refUpgradeCal0000000005', '995', 'evtupgrade05', null, 'T', now(), now(), false, null, false, 0, null, now(), 'ok');
+END $$;
+SQL
+FPN="select md5(string_agg(t::text, '|' order by t::text)) from (select * from public.notifications) t"
+FPL="select md5(string_agg(t::text, '|' order by t::text)) from (select * from public.external_resource_links) t"
+FPG="select md5(string_agg(t::text, '|' order by t::text)) from (select user_id, google_sub, scopes, status, refresh_token_enc from public.google_connections) t"
+FPX="select md5(string_agg(t::text, '|' order by t::text)) from (select id, project_id, card_id, action_type, details from public.activity_logs) t"
+FPT="select md5(string_agg(t::text, '|' order by t::text)) from (select * from public.server_trust) t"
+BEFORE6="$(psql_admin -d cs_kn -At -c "$FPN")/$(psql_admin -d cs_kn -At -c "$FPL")/$(psql_admin -d cs_kn -At -c "$FPG")/$(psql_admin -d cs_kn -At -c "$FPX")/$(psql_admin -d cs_kn -At -c "$FPT")"
+NTF="$FRONTEND/supabase/migrations/20261129001500_notification_channels.sql"
+apply cs_kn "$NTF"
+apply cs_kn "$NTF"      # idempotent
+AFTER6="$(psql_admin -d cs_kn -At -c "$FPN")/$(psql_admin -d cs_kn -At -c "$FPL")/$(psql_admin -d cs_kn -At -c "$FPG")/$(psql_admin -d cs_kn -At -c "$FPX")/$(psql_admin -d cs_kn -At -c "$FPT")"
+[ "$BEFORE6" = "$AFTER6" ] || { echo "FAIL: notifications / links / connections / activity / trust changed by the 1500 upgrade"; exit 1; }
+echo "ok - upgrade 1400 -> 1500 keeps notifications, Drive/Gmail/Calendar links, connections, activity and server_trust byte-identical; re-apply is a no-op"
+[ "$(psql_admin -d cs_kn -At -c "select count(*) from public.notification_channels")" = "0" ] && [ "$(psql_admin -d cs_kn -At -c "select string_agg(extname, ',' order by extname) from pg_extension")" = "$EXT_BEFORE" ] \
+  || { echo "FAIL: 1500 created channels or installed extensions"; exit 1; }
+echo "ok - 1500 installs no extension and schedules nothing (scheduler only via supabase/ops, switched on by the owner)"
+
+echo "--- notification rollback (1500): refused while channels / preferences / deliveries exist; otherwise restores the 1400 catalog exactly"
+DOWN6="$FRONTEND/supabase/rollback/20261129001500_notification_channels.down.sql"
+psql_admin -d cs_kn -q -c "insert into public.notification_channels (user_id, provider, status, secret_enc, label) select id, 'telegram', 'active', 'v1.0000beef.aaaa.bbbb.cccc', 'R' from auth.users where email = 'p-ed@example.test'" >/dev/null
+if out=$(psql_admin -d cs_kn --single-transaction -f - < "$DOWN6" 2>&1); then echo "FAIL: 1500 rollback ran although channels exist"; exit 1; fi
+echo "$out" | grep -q "notification channels would be lost" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+[ "$(psql_admin -d cs_kn -At -c "select count(*) from public.notification_channels")" = "1" ] || { echo "FAIL: refused rollback changed data"; exit 1; }
+echo "ok - 1500 rollback refused while channels exist, nothing changed"
+psql_admin -d cs_kn -q -c "delete from public.notification_channels; insert into public.notification_preferences (user_id) select id from auth.users where email = 'p-ed@example.test'" >/dev/null
+if out=$(psql_admin -d cs_kn --single-transaction -f - < "$DOWN6" 2>&1); then echo "FAIL: 1500 rollback ran although preferences exist"; exit 1; fi
+echo "$out" | grep -q "preference / delivery rows would be lost" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+echo "ok - 1500 rollback refused while preferences exist"
+{ echo "SET clearspace.rollback_allow_data_loss = 'on';"; cat "$DOWN6"; } | psql_admin -d cs_kn --single-transaction -f - >/dev/null
+SR6=$(psql_admin -d cs_kn -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+[ "$SR6" = "$S1400" ] || { echo "FAIL: catalog after 1500 rollback ($SR6) differs from 1400 ($S1400)"; exit 1; }
+echo "ok - catalog after 1500 rollback == catalog at 1400 ($SR6)"
+AFTER_RB6="$(psql_admin -d cs_kn -At -c "$FPN")/$(psql_admin -d cs_kn -At -c "$FPL")/$(psql_admin -d cs_kn -At -c "$FPG")/$(psql_admin -d cs_kn -At -c "$FPX")/$(psql_admin -d cs_kn -At -c "$FPT")"
+[ "$AFTER_RB6" = "$BEFORE6" ] || { echo "FAIL: rollback changed existing rows"; exit 1; }
+echo "ok - existing rows survive the 1500 rollback byte-identical"
+apply cs_kn "$NTF"
+[ "$(psql_admin -d cs_kn -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = "1" ] || { echo "FAIL: re-apply 1500 after rollback"; exit 1; }
+echo "ok - 20261129001500 applies again after its rollback"

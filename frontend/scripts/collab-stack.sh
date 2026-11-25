@@ -3,7 +3,8 @@
 # Never hosted, never the cs-intel-sb stack, never ClearSpace V2.
 #   frontend/scripts/collab-stack.sh up      # start (loopback-only), apply baseline + migrations
 #   frontend/scripts/collab-stack.sh seed    # 3 synthetic accounts + one shared project (owner / editor / viewer)
-#   frontend/scripts/collab-stack.sh app     # next dev on http://127.0.0.1:3431 against this stack (no Gemini key: AI fails closed)
+#   frontend/scripts/collab-stack.sh app     # next dev on http://127.0.0.1:3431 against this stack (no Gemini key: AI fails closed);
+#                                            # starts the stack + seeds if needed and enables the DEV LOGIN (auto, as alice; DEV_LOGIN_AS=bob|vera)
 #   eval "$(frontend/scripts/collab-stack.sh env)"   # E2E_SUPABASE_* / RT_* for the specs
 #   frontend/scripts/collab-stack.sh down    # stop and delete the stack
 # Stack project dir: $COLLAB_STACK_DIR (default $TMPDIR/cs-collab-sb; ports 55530-55539). One-time creation:
@@ -53,14 +54,26 @@ case "${1:-}" in
     API_URL=$API_URL ANON_KEY=$ANON_KEY SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY COLLAB_PASSWORD=$COLLAB_PASSWORD node "$HERE/scripts/collab-seed.mjs"
     echo "accounts: alice@collab.test (owner), bob@collab.test (editor), vera@collab.test (viewer); password in $ACC";;
   app)
+    # DEV LOGIN STANDARD (docs/LOCAL_DEV.md): every isolated-stack app gets a working one-click/auto login, whatever the port,
+    # worktree or stack. The stack is started and the synthetic accounts are (re)created idempotently BEFORE the app starts, so a
+    # reset or brand-new stack never leaves you without a login. Real Supabase Auth session (password grant on the server),
+    # RLS unchanged. DEV_LOGIN_AS=alice|bob|vera picks the identity (alice = owner of the seeded project); DEV_AUTO_LOGIN=0 = button only.
+    [ -n "$(docker ps -q --filter name=supabase_db_$NAME)" ] || "$0" up
+    "$0" seed >/dev/null
     eval "$(keys)"
     # shellcheck disable=SC1090
     . "$DIR/collab-accounts.env"
+    AS=${DEV_LOGIN_AS:-alice}; case "$AS" in alice|bob|vera) ;; *) echo "DEV_LOGIN_AS must be alice, bob or vera"; exit 2;; esac
+    export NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
+    export CLEARSPACE_DEV_LOGIN=1 NEXT_PUBLIC_DEV_LOGIN=1 DEV_LOGIN_EMAIL=$AS@collab.test DEV_LOGIN_PASSWORD=$COLLAB_PASSWORD
+    if [ "${DEV_AUTO_LOGIN:-1}" = 1 ]; then export CLEARSPACE_DEV_AUTO_LOGIN=1 NEXT_PUBLIC_DEV_AUTO_LOGIN=1; else unset CLEARSPACE_DEV_AUTO_LOGIN NEXT_PUBLIC_DEV_AUTO_LOGIN; fi
+    unset NEXT_PUBLIC_FORCE_DEMO VERCEL VERCEL_ENV
     # E-mail goes ONLY to the stack's Mailpit (loopback, capture only); reserved/test domains allowed there and nowhere else.
-    cd "$HERE" && NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY \
-      EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=$SMTP_PORT SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
-      APP_BASE_URL="http://127.0.0.1:$PORT" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET" \
-      exec npx next dev -p "$PORT" -H 127.0.0.1;;
+    export EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=$SMTP_PORT SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
+      APP_BASE_URL="http://127.0.0.1:$PORT" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET"
+    cd "$HERE" && node scripts/local-auth-preflight.mjs   # refuses non-loopback Auth, demo mode, dead stack or a broken identity
+    echo ">>> ONE-CLICK LOGIN: open http://127.0.0.1:$PORT/?login=auto  (signed in automatically as $DEV_LOGIN_EMAIL; real Auth session)"
+    exec npx next dev -p "$PORT" -H 127.0.0.1;;
   mail)
     curl -s "http://127.0.0.1:$MAIL_UI/api/v1/messages?limit=${2:-10}";;
   env)

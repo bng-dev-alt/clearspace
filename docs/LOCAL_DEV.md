@@ -50,3 +50,26 @@ The default local stack runs without Realtime. For collaboration work use the se
 alice/bob/vera accounts and a shared project; the password is generated into `$COLLAB_STACK_DIR/collab-accounts.env`),
 `app` (http://127.0.0.1:3431). Open two browser profiles (or one normal + one private window) and sign in as two
 different accounts. Details: [collaboration/COLLABORATION.md](collaboration/COLLABORATION.md).
+
+## DEV LOGIN STANDARD for every isolated RUN stack (binding for all future ClearSpace development RUNs)
+
+**Rule:** a person must never need a hunted-down password, a temporary credentials file or a manual login form to open a local
+ClearSpace app. Every isolated app started for a RUN ships with a working login, whatever the worktree, port or Supabase stack.
+
+| Need | How |
+|---|---|
+| Start the app of any isolated collab/drive-style stack | `scripts/collab-stack.sh app` (also used by `drive-stack.sh app` and `google-live.sh app`). It starts the stack if it is down, **re-creates the synthetic accounts idempotently** (`seed`), enables the DEV login for that server process only, runs `local-auth-preflight.mjs` and prints the one link. |
+| Link | `http://127.0.0.1:<port>/?login=auto` (any loopback port; deep links such as `/settings?login=auto` work too). Signed in automatically as `alice@collab.test`, the **owner** of the seeded project `project-collab-demo`. |
+| Other identity | `DEV_LOGIN_AS=bob` (editor) or `vera` (viewer) before the command; one server = one dev identity. For multi-user tests open `/login?login=manual` in another profile. |
+| Button instead of auto | `DEV_AUTO_LOGIN=0` (the "Dev přihlášení (jen lokálně)" button stays). |
+| Credentials | Generated once per stack into `$COLLAB_STACK_DIR/collab-accounts.env` (mode 600, outside the repository) and passed to the server process as env; never printed, never in the client bundle. You do not need to read them. |
+| New RUN / new worktree / new stack | Copy nothing: branch from a commit that contains `scripts/collab-stack.sh` (or merge it) and run the same command; give the stack its own `COLLAB_STACK_DIR`, ports and `COLLAB_STACK_NAME` (see `drive-stack.sh` as the template). A reset stack heals itself on the next `app`. |
+
+It is the **existing** mechanism (`lib/devLogin.ts`, `lib/devAutoLogin.ts`, `/api/dev/login`, guards above) -- no new auth layer: the server
+performs a normal password grant against the isolated local GoTrue, the browser holds an ordinary JWT session, RLS, Realtime, project
+roles and the later Google OAuth flow behave exactly as for a typed login. All guards above apply unchanged: development build only,
+explicit env enablement (set by the launcher for that process only, never in `.env.local`), never on Vercel/previews, loopback Host/Origin
+only, tunnel headers refuse, Auth must be a loopback instance. Verified by `e2e/dev-login-stack.spec.ts` (fresh browser context, one link,
+real session + RLS + Realtime, spoofed host / tunnel header / missing marker -> 404).
+
+**Production builds:** never build with these flags in the environment; `scripts/check-production-bundle.sh` fails on the dev-login strings.

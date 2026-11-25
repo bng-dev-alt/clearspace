@@ -164,7 +164,8 @@ prefixes, server RPC names and mock seams in `.next/static`.
 ```
 frontend/scripts/drive-stack.sh up && frontend/scripts/drive-stack.sh seed   # isolated stack cs-drive-sb (55540-55549)
 frontend/scripts/drive-stack.sh mock                                         # Google MOCK on 127.0.0.1:55590 (SIMULACE)
-frontend/scripts/drive-stack.sh app                                          # http://127.0.0.1:3441
+frontend/scripts/drive-stack.sh app                                          # http://127.0.0.1:3441/?login=auto  (DEV login, no credentials: docs/LOCAL_DEV.md)
+frontend/scripts/google-live.sh setup|verify|app                             # RUN 02B: the same app against REAL Google (Keychain credentials)
 eval "$(frontend/scripts/drive-stack.sh env)"
 ```
 | Layer | Command | Result (2026-11-25) |

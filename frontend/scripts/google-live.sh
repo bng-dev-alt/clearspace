@@ -26,10 +26,15 @@ kc_has() { security find-generic-password -s "$SVC" -a "$1" >/dev/null 2>&1; }
 kc_put() {  # $1 account; value in $2 -- through stdin of `security -i` (not argv); the value was regex-validated (no quotes)
   printf 'add-generic-password -U -s "%s" -a "%s" -w "%s"\n' "$SVC" "$1" "$2" | security -i >/dev/null 2>&1
 }
-ask() {  # $1 label, $2 regex, $3 hidden(1/0) -> value on stdout
+ask() {  # $1 label, $2 regex, $3 hidden(1/0), $4 expected prefix -> value on stdout
   local v
   if [ "$3" = 1 ]; then read -rsp "$1 (hidden): " v </dev/tty; echo >&2; else read -rp "$1: " v </dev/tty; fi
-  [[ "$v" =~ $2 ]] || { echo "  that does not look like the expected value -- nothing was stored" >&2; return 1; }
+  v=${v//[[:space:]]/}                                   # a pasted value often carries a newline / spaces
+  if ! [[ "$v" =~ $2 ]]; then
+    # diagnostics WITHOUT revealing the value: its length and whether it starts with the documented prefix
+    echo "  rejected: ${#v} characters, expected prefix '$4' $([[ "$v" == "$4"* ]] && echo present || echo ABSENT) -- nothing stored for this item" >&2
+    return 1
+  fi
   printf '%s' "$v"
 }
 load_env() {
@@ -47,13 +52,12 @@ load_env() {
 }
 case "${1:-}" in
   setup)
-    echo "Stores 3 items in the macOS Keychain ('$SVC'). Nothing is written to a file or echoed."
-    cid=$(ask 'OAuth Client ID (…apps.googleusercontent.com)' '^[0-9]{6,20}-[a-z0-9]{20,40}\.apps\.googleusercontent\.com$' 0)
-    sec=$(ask 'OAuth Client Secret (the NEW one, GOCSPX-…)' '^GOCSPX-[A-Za-z0-9_-]{20,}$' 1)
-    key=$(ask 'Picker API key (AIza…)' '^AIza[0-9A-Za-z_-]{30,}$' 1)
-    kc_put client_id "$cid" && kc_put client_secret "$sec" && kc_put picker_key "$key" || { echo "Keychain write failed"; exit 1; }
-    unset sec key
-    echo "ok - stored. Project number derived from the client id: …${cid%%-*}  (must equal your project number; 'verify' checks it against Google)"
+    echo "Stores 3 items in the macOS Keychain ('$SVC'). Each item is stored as soon as it is valid; existing items are kept"
+    echo "(use 'forget' first to replace one). Nothing is written to a file or echoed."
+    kc_has client_id || { cid=$(ask 'OAuth Client ID (…apps.googleusercontent.com)' '^[0-9]{6,20}-[a-z0-9]{20,40}\.apps\.googleusercontent\.com$' 0 '') && kc_put client_id "$cid" && echo "  stored client_id (project number …$(kc_get client_id | cut -d- -f1 | tail -c 5))"; }
+    kc_has client_secret || { sec=$(ask 'OAuth Client Secret (the NEW one, GOCSPX-…)' '^GOCSPX-[A-Za-z0-9_-]{20,}$' 1 'GOCSPX-') && kc_put client_secret "$sec" && echo "  stored client_secret"; unset sec; }
+    kc_has picker_key || { key=$(ask 'Picker API key (AIza…)' '^AIza[0-9A-Za-z_-]{30,}$' 1 'AIza') && kc_put picker_key "$key" && echo "  stored picker_key"; unset key; }
+    "$0" status
     ;;
   status)
     for a in "${ACCOUNTS[@]}"; do kc_has "$a" && echo "keychain $a: present" || echo "keychain $a: MISSING"; done

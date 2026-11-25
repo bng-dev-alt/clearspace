@@ -1,0 +1,207 @@
+# RUN 02 – Google Drive integration (architecture, security, operations)
+
+Status 2026-11-25: implemented on `feature/run02-google-drive` (base `run01-complete` = `ebeaa70`), verified locally
+against a real Supabase stack, the real Next.js app and a **deterministic Google mock**. **Not verified against real
+Google** (no Google Cloud project / OAuth client exists yet) – see §12. Rollout: `docs/run02/PRODUCTION_ROLLOUT.md`.
+
+## 1. What users get
+
+* **Propojené účty** (`/settings`, user menu → „Propojené účty“): connect / reconnect / disconnect a Google account,
+  see which account is connected, what was granted and what disconnecting means. Separate from ClearSpace login.
+* **Soubory projektu** (toolbar icon on the board): project-level Drive files + an overview of task-level files.
+* **Task drawer → Google Disk**: task-level Drive files, next to the unchanged Storage attachments („Resources“).
+* Picking happens in **Google Picker** (Google's own UI: browse, search, recent, multi-select up to 20, folders).
+* Per link: type icon + Czech type, name, last modified, who linked it, *Otevřít na Disku*, *Náhled textu*
+  (Docs/Sheets/Slides/text, the viewer's own access), *Odebrat přílohu* (association only), *Obnovit informace*.
+* Live for every member (realtime), recorded in the project timeline, read-only for *Čtenář*.
+
+## 2. Scopes and why (least privilege)
+
+| Scope | Classification | Why |
+|---|---|---|
+| `openid`, `email` | non-sensitive (sign-in) | show which Google account is connected; `sub` = stable account id |
+| `https://www.googleapis.com/auth/drive.file` | **non-sensitive, Google-recommended** | per-file access to files the user picks in the Picker (and files the app created – none). Enough for metadata refresh and text preview of picked files |
+
+**Not requested:** `drive`, `drive.readonly`, `drive.metadata.readonly` (restricted → security assessment), Gmail,
+Calendar. Consequences of `drive.file`, stated honestly in the UI:
+* ClearSpace never sees the whole Drive. Browsing and search happen inside Google Picker (Google's UI), and only the
+  picked files are granted to the app.
+* Access is **per Google user**: a teammate's server-side metadata refresh / text preview of a file linked by someone
+  else works only after *that teammate* opens it with the app (button „Ověřit přístup na Disku“ opens the Picker on
+  just that file; Google shows it only if the teammate can read it). Google answers 404 for both "deleted" and "not
+  granted", so ClearSpace never stores "missing" – it shows the caller's own state („Přístup k souboru není dostupný…“).
+* Thumbnails are not used (`thumbnailLink` is short-lived, needs credentials, not granted before picking) – type icons.
+
+## 3. Architecture (reusable Google foundation)
+
+```
+browser ──Bearer──> /api/google/oauth/start ─┐  state(sha256)+cookie-nonce(sha256)+PKCE verifier(AES-GCM) -> google_oauth_states
+   │                                          └─> 302 accounts.google.com (code, S256, offline, consent, include_granted_scopes)
+   │<── Google ── /api/google/oauth/callback   (no session, no DB, no Google call: parks {state,code} in an HttpOnly
+   │                                           path-scoped cookie, 303 -> /oauth/google; the code never enters a page URL)
+   └─Bearer──> /api/google/oauth/complete     consume(state, nonce, auth.uid()) -> code exchange (PKCE + secret)
+                                              -> id_token claims -> scope check -> AES-GCM seal -> google_oauth_complete
+/api/google/connection (GET status / DELETE = revoke at Google + delete)      /api/google/picker-token (short-lived access token)
+/api/drive/links (attach) · /api/drive/links/refresh · /api/drive/links/:id/content (text preview)
+```
+
+Files: `src/lib/google/{config,crypto,oauth,server,drive,labels,picker}.ts`, routes under `src/app/api/google/**` and
+`src/app/api/drive/**`, client `src/services/driveService.ts`, UI `src/components/drive/*`, page `src/app/settings`,
+`src/app/oauth/google`. Migration `supabase/migrations/20261126001200_google_drive.sql`.
+
+* **No service-role key** (unchanged rule): server routes act as the calling user (RLS) and use SECURITY DEFINER RPCs
+  guarded by `require_server_secret('google', …)` (new `server_trust` purpose; separate from the e-mail secret).
+* **No anonymous RPC**: the OAuth completion runs under the user's session (the harness enforces
+  "only `invitation_preview` is anonymous").
+* Official endpoints only, called with `fetch` (3 OAuth endpoints + Drive v3), bounded by timeouts, response caps,
+  `redirect: 'error'`. `google-auth-library` was considered: the flow uses three documented endpoints, all crypto is
+  Node's built-in (`createCipheriv('aes-256-gcm')`, `randomBytes`, SHA-256), and plain `fetch` keeps the provider
+  boundary testable with a local mock without monkey-patching. No new dependency.
+
+### 3.1 Connection model (`google_connections`, one row per ClearSpace user)
+`user_id` (PK, FK auth.users ON DELETE CASCADE), `google_sub` (UNIQUE – one Google account ↔ one ClearSpace account,
+because a revocation at Google ends the app's whole grant for that Google account), `google_email`, `scopes[]`,
+`status` (`active|revoked|error`), `refresh_token_enc`, `access_token_enc`, `access_expires_at`, `token_version`,
+`refresh_lock_until`, `last_error_code`, per-user API budget window. **RLS on, no policy, no grants** to
+anon/authenticated. The browser reads `google_connection_status()` (email, scopes, status, dates – never token data).
+
+### 3.2 OAuth security
+| Threat | Control |
+|---|---|
+| CSRF / login-CSRF / account linking | state (256-bit) stored as SHA-256, bound to the user who began it **and** to the browser (HttpOnly SameSite=Lax nonce cookie, hash stored) **and** consumed only by the same signed-in user |
+| Replay | state single-use (`consumed_at`), completion once (`completed_at`), 10-minute lifetime, Google codes single-use |
+| Code injection / interception | PKCE S256; verifier stored AES-GCM-sealed with the state as AAD, never leaves the server |
+| Open redirect | `returnTo` validated at start (`/settings` or `/projects/<id>`), CHECK constraint in DB; all redirects built from `APP_BASE_URL` |
+| Redirect URI | exactly `${APP_BASE_URL}/api/google/oauth/callback` (never from the Host header) |
+| Denied / partial consent | `access_denied` → „nepovolili“; Drive unticked (granular consent) → nothing stored, grant revoked, audited |
+| Code in URLs / referrers | callback stores it in a path-scoped HttpOnly cookie, `Referrer-Policy: no-referrer`, page URL carries nothing |
+| id_token | received directly from Google's token endpoint over TLS (OIDC: no signature re-check needed); `iss`, `aud`, `exp`, `email_verified`, `sub` format still checked |
+
+### 3.3 Token storage, refresh, revocation
+* AES-256-GCM, random 96-bit IV, AAD = `clearspace:google:<refresh|access|pkce>:<user|state>` (a ciphertext copied to
+  another row does not decrypt). Envelope `v1.<keyid>.<iv>.<ct>.<tag>`. Key `GOOGLE_TOKEN_ENCRYPTION_KEY` (32 bytes)
+  lives only in the server environment; the database holds ciphertext only.
+* **Rotation**: set the new key as `GOOGLE_TOKEN_ENCRYPTION_KEY`, the old one as `GOOGLE_TOKEN_ENCRYPTION_KEY_PREVIOUS`;
+  values re-seal with the new key on their next write (refresh). Remove PREVIOUS when no envelope carries its key id
+  (`select count(*) from google_connections where refresh_token_enc like 'v1.<oldid>.%'`). A lost key = users reconnect.
+* **Refresh**: when the access token expires within 60 s. One request takes the database lease (`token_version`,
+  20 s), the others wait for the stored result (verified: 5 concurrent requests → exactly 1 refresh). If Google returns
+  no new refresh token, the stored one is kept. `invalid_grant` / `unauthorized_client` → `revoked` (+ audit) →
+  „Znovu připojit účet“. Temporary failures → Czech „dočasně nedostupný“, connection kept, lease released.
+* **Disconnect**: revoke the refresh token at Google (best effort; reported), delete the row, audit. Links stay.
+* **Audit** (`integration_audit`, own rows readable): connected, reconnected, disconnected, revoked_by_provider,
+  refresh_failed, scope_denied. Routine refreshes are not audited; nothing goes to the project timeline.
+* Logs carry only error *codes* / error *names*; never tokens, codes, file names or content.
+
+## 4. ClearSpace access vs Google access
+
+| | Decided by | Enforced where |
+|---|---|---|
+| See a link (name, type, link, who/when) | ClearSpace membership | RLS `is_project_member` |
+| Add a link | ClearSpace editor+ (owner/admin/member) | route pre-check + `drive_link_add` (`can_edit_project`) + viewer guard trigger |
+| Remove a link | ClearSpace editor+ | RLS DELETE `can_edit_project` + viewer guard |
+| Open the file / read its content | **Google** (the viewer's own Google account) | Google; content preview only with the caller's own token |
+
+* ClearSpace never changes Drive sharing, never makes files public, never deletes or edits Drive files (no write call
+  exists in the code). One user's token is never used to show another user anything from Google.
+* What becomes visible to project members when linking: file **name, type, Google link, modified time, who linked it**.
+  The UI says so next to the add button. Content is never copied or stored.
+* Membership removal: the person loses the rows at once (RLS) and the realtime topic key rotates (RUN 01B). Their own
+  Google connection is personal and stays.
+
+## 5. Attachment model (`external_resource_links`)
+`id`, `project_id` (FK), `card_id` (nullable FK = task link; project follows the card on cross-project moves),
+`provider` (`google_drive`; Gmail/Calendar items later), `external_id` (validated), `name` (no control chars, ≤300),
+`mime_type`, `web_url` (CHECK: `https://(drive|docs).google.com/…` only), `size_bytes`, `modified_at`,
+`provider_state` (`ok|trashed`), `metadata_checked_at`, `linked_by`, `linked_by_name`, `created_at`.
+Unique per (project, card-or-project, provider, external id): duplicates return the existing row (`duplicate: true`).
+**INSERT/UPDATE only through server-secret RPCs** with metadata read from the Drive API by the server – a client can
+never inject a name or a phishing link. Storage attachments (`task_resources`) are unchanged and separate.
+
+## 6. Realtime and activity
+* Signal-only broadcast on the private keyed project topic: `{ t: 'links', op, card }` (ids only, no names/links);
+  task links also bump `cards.child_rev`. Clients re-read under RLS (`useKanbanBoard` → `emitLinksChanged`).
+* Events from triggers on the persisted row (source `app`, verified actor, RUN 01 envelope):
+  `drive_file_linked` / `drive_file_unlinked` with `{name, mime, link_id, title?}`. None for duplicates, refusals,
+  metadata refreshes, token refreshes, or links removed together with their task/project. Czech texts in
+  `activityText.ts`, icon „file“ in the timeline.
+
+## 7. Metadata refresh
+Manual („Obnovit informace“) and once when a view opens if any link is older than 1 h. Bounded: ≤25 links per call,
+4 parallel requests, 8 s timeout, one jittered retry on 429/5xx, per-user budget 300 Google calls / 10 min in the DB.
+Only an editor with access stores changes (rename, trash, modified time); everyone gets their own per-link state.
+No polling, no webhooks: changes inside a Google document are **not** synchronized live into ClearSpace.
+
+## 8. Project Intelligence readiness (resource-provider contract)
+`src/lib/google/drive.ts` → `getTextContent(cfg, callerToken, fileId)` returns `ResourceContent` {provider,
+externalId, name, mimeType, modifiedAt, retrievedAt, **text (untrusted)**, truncated}: explicit single link, the
+caller's own token, text types only (Docs→text, Sheets→CSV, Slides→text, text/markdown/csv/json), 2 MB fetch cap,
+20 000 chars returned, control chars stripped. Used today only by the text preview (not stored, not sent to AI).
+**Deferred (decision):** feeding Drive text into Project Intelligence / Gemini. Precise next step: an explicit
+"Analyzovat obsah" action calling `getTextContent` server-side and passing `text` into the existing
+`/api/intelligence/analyze-resource` gateway (owner/AI policy, quota ledger, rate limits unchanged), wrapped as
+untrusted quoted data with provenance (link id, retrievedAt). Not done here because it is a paid AI call and a privacy
+decision (document text leaves Google for the AI provider) that needs the owner's explicit approval.
+
+## 9. Configuration (server only; nothing `NEXT_PUBLIC_*`)
+| Variable | Secret? | Notes |
+|---|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | no | Web application client |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | **yes** (Sensitive) | |
+| `GOOGLE_SERVER_SECRET` | **yes** (Sensitive) | ≥32 chars, ≠ `EMAIL_SERVER_SECRET`; its SHA-256 in `server_trust('google')` |
+| `GOOGLE_TOKEN_ENCRYPTION_KEY` (+ `_PREVIOUS`) | **yes** (Sensitive) | base64 of 32 random bytes |
+| `GOOGLE_PICKER_API_KEY` | public browser key | restrict to the Picker API and the app's origins (+ `https://docs.google.com/*` if the key is referrer-restricted per Google's docs) |
+| `GOOGLE_CLOUD_PROJECT_NUMBER` | no | numeric project number (`setAppId`) |
+| `APP_BASE_URL` | no | already set for e-mail; redirect URI and all redirects are built from it |
+| `GOOGLE_API_MOCK_BASE` | – | **local tests only**; refused in production and for non-loopback hosts |
+
+Unconfigured = integration off; UI says „Propojení s Google Diskem není na serveru nastavené.“ CSP unchanged (the
+narrow CSP has no `script-src`/`frame-src`, so `apis.google.com` and the `docs.google.com` Picker frame work; if a
+stricter CSP comes later, allow exactly those). The production bundle guard now also refuses Google secrets, token
+prefixes, server RPC names and mock seams in `.next/static`.
+
+## 10. Local development and tests
+```
+frontend/scripts/drive-stack.sh up && frontend/scripts/drive-stack.sh seed   # isolated stack cs-drive-sb (55540-55549)
+frontend/scripts/drive-stack.sh mock                                         # Google MOCK on 127.0.0.1:55590 (SIMULACE)
+frontend/scripts/drive-stack.sh app                                          # http://127.0.0.1:3441
+eval "$(frontend/scripts/drive-stack.sh env)"
+```
+| Layer | Command | Result (2026-11-25) |
+|---|---|---|
+| Unit (all) | `npx vitest run` | **1255/1255** (50 new in `src/__tests__/drive/`) |
+| DB harness (all scenarios) | `supabase/tests/run.sh` | **2231** SQL assertions PASS (Drive suite `collab/92_google_drive.sql` 73 + 1200 rollback refusals + exact catalog restore + re-apply) |
+| Drive HTTP integration + adversarial (real app + stack + mock) | `node supabase/tests/drive_http.mjs` | **28/28** groups |
+| Browser E2E, 4 users (owner/editor/viewer/outsider) | `e2e/google-drive.spec.ts` | PASS (Klasika and Monograph) |
+| RUN 01 regressions on the same stack | `collab_realtime.mjs` 64/64 · `realtime_check.mjs` PASS · `invite_email.mjs` 41/41 · `e2e/collaboration.spec.ts` + `collaboration-01b.spec.ts` PASS · `supabase-runtime` 4/5 · `task-resources` 6/7 | the 2 failures are pre-existing (identical on unchanged `run01-complete`), §11 |
+| Real stack (pristine) | `supabase/tests/real_stack.sh` | PASS (legacy upgrade 16, SQL suites 519, HTTP 29/29) |
+| Demo-mode Playwright | `npx playwright test` | 27 passed, 109 skipped (need stacks), 0 failed |
+| Typecheck / lint / build / bundle guard | `tsc`, `eslint`, `next build`, `scripts/check-production-bundle.sh` | clean / 0 errors / OK / 48/48 |
+
+**Mock ≠ Google.** `scripts/google-mock.mjs` implements the authorization-code + PKCE + refresh + revoke protocol,
+granular consent, the `drive.file` model (readable only if the account can read it *and* picked it), Picker look-alike
+and failure injection. It proves our flow and boundaries, not Google's behaviour. Everything mock-based is labelled
+„SIMULACE“ in the UI.
+
+## 11. Known limitations
+1. Not verified against real Google yet (blocked on Google Cloud setup by the owner).
+2. `drive.file`: teammates need their own pick (or the file shared to them in Drive) for preview/refresh.
+3. In the task drawer a *Čtenář* sees links and can open them in Drive, but the drawer's read-only fieldset disables
+   the preview/connect buttons there; the „Soubory projektu“ dialog offers them.
+4. OAuth consent screen in **Testing**: max 100 test users and refresh tokens expire after 7 days (drive.file is not
+   exempt) → users see „Znovu připojit účet“ weekly. Publishing the app needs brand verification (homepage, privacy
+   policy on a verified domain); no security assessment for these scopes.
+5. No live sync of document changes; metadata refresh is manual / on open.
+6. Pre-existing, unrelated (also fail on unchanged `run01-complete`): `supabase-runtime` "AI gateway" expects 400 but the
+   owner-only AI policy answers 403 first in this environment; `task-resources` "card not saved" waits for a card that
+   the RUN 01B server-side card write never shows.
+
+## 12. Gmail / Calendar extension points (RUN 03 / 04)
+* Add a scope set next to `DRIVE_SCOPES` (e.g. `GMAIL_SCOPES`) and call `/api/google/oauth/start` with it when the
+  user enables the service; `include_granted_scopes=true` keeps Drive; `google_connections.scopes` records the union.
+  `hasDriveScope` → a generic `hasScope(service)` check per route.
+* Reuse `getAccessToken` (lease, refresh, revocation), `server_trust('google')`, `integration_audit` (add events),
+  the encrypted envelope, the route plumbing (`caller`, `dbError`, `readJson`, `errorResponse`), the mock (add endpoints).
+* `external_resource_links.provider` is a CHECK list: add `gmail_message` / `calendar_event` with their URL rules.
+* Gmail scopes are restricted/sensitive (security assessment) – a separate owner decision. Calendar `calendar.events`
+  is sensitive (verification).

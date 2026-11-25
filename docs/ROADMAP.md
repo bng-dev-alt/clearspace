@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-25)
+# ClearSpace V1 – roadmapa (stav k 2026-11-25, aktualizováno po RUN 02)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -7,7 +7,9 @@
 | 01 | Týmová spolupráce a realtime (role, přítomnost, živé úpravy, komentáře s @zmínkami, notifikace, pozvánky) | **PASS v rozsahu ověřených funkcí**, v produkci | `docs/collaboration/COLLABORATION.md`, `PRODUCTION_ROLLOUT.md` §11 |
 | 01B | Zabezpečení a spolehlivost, pozvánky e-mailem | **hotovo, v produkci** | tamtéž |
 | 01C | Produkční připravenost (Resend, nodemailer, rollout, DMARC, Monograph build) | **hotovo, v produkci** | `PRODUCTION_ROLLOUT.md` |
-| **02** | **Google Drive Integration** | **další**; handoff připraven | `docs/run02/GOOGLE_DRIVE_HANDOFF.md` |
+| **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **implementováno lokálně, CONDITIONAL PASS**: ověřeno proti lokálnímu zásobníku a mocku Googlu; **skutečný Google neověřen** (čeká na Google Cloud projekt vlastníka); nenasazeno, nepushnuto | `docs/run02/GOOGLE_DRIVE.md`, `docs/run02/PRODUCTION_ROLLOUT.md` |
+| 03 | Gmail & Email Intelligence | další; staví na sdíleném Google připojení (inkrementální autorizace) | `docs/run02/GOOGLE_DRIVE.md` §12 |
+| 04 | Google Calendar | plánováno; stejný základ | tamtéž |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
 * Webhooky Resend (stav *Delivered/Bounced* v `invitation_deliveries`) – dnes je znám jen „server převzal“.
@@ -15,3 +17,8 @@
 * Zpřísnění DMARC `p=none` → `quarantine` po několika týdnech provozu; přísnější CSP s noncí (dnes úzká CSP, viz `next.config.ts`).
 * Automatizace nasazení: skript pro staged build, který porovná `build.env` s předchozí produkcí (příčina chybějícího Monographu 2026-11-25).
 * Začlenění RUN 00 seederu do `main` (rozhodnutí o UUID účtu v manifestu, viz plán).
+
+## Poznámky z RUN 02
+* Před nasazením RUN 02: Google Cloud (dev + prod projekt), rozhodnutí Testing vs. ověření značky (vlastní doména), migrace 1200 (`apply-drive-hosted.sh`).
+* Napojení obsahu Drive do Project Intelligence je připravené rozhraním (`getTextContent`), ale vědomě neaktivované (placené AI volání + rozhodnutí o soukromí).
+* Dva E2E testy z dřívějška padají i na `run01-complete` (AI brána owner-only 403 vs. očekávaných 400; test „neuložené karty“) – kandidát na úklid testů.

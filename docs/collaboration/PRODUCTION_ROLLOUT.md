@@ -31,45 +31,48 @@ Zvažované a nezvolené:
 * Brevo (zdarma 300/den) – funguje také, ale vyžaduje firemní údaje a více nastavení. Amazon SES – levný, ale vyžaduje AWS účet a žádost o produkční přístup.
 * Výchozí poštovní služba Supabase – posílá jen členům týmu projektu, nová pozvaná osoba by si **nemohla potvrdit účet**.
 
-## 3. Co musíte udělat vy (nic z toho nevkládejte do konverzace)
+## 3. Stav konfigurace (2026-11-25) a co zbývá vám
 
-1. **Resend** (resend.com): založte účet → *Domains* → *Add Domain* `notify.luffast.com`, region **Ireland (eu-west-1)**.
-   Záznamy přidejte v Cloudflare (nebo použijte Resend *Auto configure* pro Cloudflare) a počkejte na stav *Verified*.
-2. **DNS** (Cloudflare, zóna `luffast.com`, záznamy „DNS only“): viz oddíl 4.
-3. **API klíč**: Resend → *API Keys* → *Create*, název `clearspace-production`, oprávnění **Sending access**, doména `notify.luffast.com`.
-   Uložte jen do správce hesel; použije se ve Vercelu a v Supabase.
-4. **Serverové tajemství** (na svém počítači):
+**Hotovo (ověřeno zpětným čtením, bez vypsání tajemství):**
+* Resend: účet, doména `notify.luffast.com` *Verified* (Ireland), klíče `clearspace-production` a `clearspace-supabase-auth`
+  (Sending access, jen tato doména) – založil vlastník.
+* Vercel, projekt `clearspace` (tým `bng-dev-alt`, obsluhuje `clearspace-ai.vercel.app`), *Production*: `EMAIL_TRANSPORT`, `SMTP_HOST`,
+  `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `EMAIL_FROM`, `APP_BASE_URL` (hodnoty v oddílu 5) a `EMAIL_SERVER_SECRET` (Sensitive).
+  Žádné duplicity, žádná `NEXT_PUBLIC_*` e-mailová proměnná. Projeví se až dalším nasazením.
+* `EMAIL_SERVER_SECRET` je uložené v Keychainu: služba `ClearSpace V1 – EMAIL_SERVER_SECRET`, účet `clearspace production`.
+  Otisk pro migraci se z něj odvodí příkazem v oddílu 6, krok 3 (hodnota se nikam nekopíruje).
+* Supabase Auth (`twjlnsxjtuntujarwner`): Site URL `https://clearspace-ai.vercel.app` (beze změny); Redirect URLs zúženy z
+  `https://clearspace-ai.vercel.app/**` na **`https://clearspace-ai.vercel.app/accept-invite?token=*`** – jediná cesta, kterou aplikace
+  posílá jako `emailRedirectTo` (registrace z pozvánky). Běžná registrace používá Site URL, obnova hesla v aplikaci není.
+  Pozn.: GoTrue povoluje každou adresu na hostiteli Site URL, seznam je tedy pojistka pro případ změny Site URL.
+  Návrat: `uri_allow_list` = `https://clearspace-ai.vercel.app/**`.
+* Přihlášení k `smtp.resend.com:465` ověřeno (TLS s ověřením certifikátu; neplatný klíč server odmítne kódem 535).
+
+**Zbývá vám:**
+1. Spusťte v Terminálu (z kořene repozitáře) a do skrytých výzev vložte oba klíče:
    ```bash
-   openssl rand -hex 32
+   frontend/scripts/set-resend-keys.sh
    ```
-   Výsledek je `EMAIL_SERVER_SECRET` (jen do Vercelu, Sensitive). Jeho otisk pro databázi:
-   ```bash
-   printf %s 'SEM_VLOZTE_TAJEMSTVI' | shasum -a 256 | cut -d' ' -f1
-   ```
-5. **Vercel** (projekt ClearSpace, prostředí *Production*): proměnné z oddílu 5.
-6. **Supabase Auth** (Dashboard → Authentication):
-   * *Emails → SMTP Settings*: Enable custom SMTP; Sender email `ucty@notify.luffast.com`; Sender name `ClearSpace`; Host `smtp.resend.com`;
-     Port `465`; Username `resend`; Password = API klíč Resend. Minimální interval nechte výchozí.
-   * *Rate Limits*: e-maily za hodinu ponechte 30 (výchozí s vlastním SMTP).
-   * *URL Configuration*: Site URL `https://clearspace-ai.vercel.app`; Redirect URLs přidejte `https://clearspace-ai.vercel.app/**`
-     (potvrzovací odkaz vrací nového uživatele na `/accept-invite?token=…`; bez toho by se odkaz na pozvánku ztratil).
-   * *Emails → Templates → Confirm signup* (volitelně česky): předmět `Potvrďte svůj účet ClearSpace`, text:
-     `<p>Dobrý den,</p><p>pro dokončení registrace v ClearSpace potvrďte svou e-mailovou adresu:</p><p><a href="{{ .ConfirmationURL }}">Potvrdit e-mail</a></p><p>Pokud jste se neregistrovali, tento e-mail ignorujte.</p>`
-7. Po schválení (oddíl 9) spusťte nebo nechte spustit rollout (oddíl 6) a dejte vědět skutečné testovací adresy pro oddíl 7.
+   Skript každý klíč nejprve ověří přihlášením k SMTP **bez odeslání e-mailu**, pak: `clearspace-production` → Vercel `SMTP_PASSWORD`
+   (Sensitive, Production); `clearspace-supabase-auth` → Supabase Auth vlastní SMTP (`smtp.resend.com`, 465, `resend`,
+   odesílatel `ClearSpace <ucty@notify.luffast.com>`, limit 30 e-mailů/h místo 2). Výsledek vypíše bez tajemství.
+   Vlastní SMTP v Supabase začne platit hned (potvrzovací e-maily nově dorazí i mimo členy organizace Supabase).
+2. Cloudflare → `luffast.com` → DNS → přidat TXT `_dmarc.notify`, hodnota `v=DMARC1; p=none;` (oddíl 4).
+3. Volitelně česká šablona *Authentication → Emails → Confirm signup*: předmět `Potvrďte svůj účet ClearSpace`, text:
+   `<p>Dobrý den,</p><p>pro dokončení registrace v ClearSpace potvrďte svou e-mailovou adresu:</p><p><a href="{{ .ConfirmationURL }}">Potvrdit e-mail</a></p><p>Pokud jste se neregistrovali, tento e-mail ignorujte.</p>`
+4. Schválení (oddíl 9) a skutečné testovací adresy pro oddíl 7.
 
-## 4. DNS záznamy (Cloudflare, zóna `luffast.com`)
+## 4. DNS záznamy (Cloudflare, zóna `luffast.com`) – skutečný stav 2026-11-25
 
-Přesné hodnoty DKIM zobrazí Resend po přidání domény; tvar záznamů je tento:
-
-| Typ | Název | Hodnota | Pozn. |
+| Typ | Název | Hodnota | Stav |
 |---|---|---|---|
-| TXT | `resend._domainkey.notify` | `p=MIGfMA0…` (veřejný klíč DKIM z Resend) | podpis zpráv |
-| MX | `send.notify` | `feedback-smtp.eu-west-1.amazonses.com`, priorita 10 | návratová adresa/odrazy |
-| TXT | `send.notify` | `v=spf1 include:amazonses.com ~all` | SPF pro návratovou adresu |
-| TXT | `_dmarc` | `v=DMARC1; p=none;` | DMARC pro `luffast.com` i subdomény; zatím jen sledování |
+| TXT | `resend._domainkey.notify` | `p=MIGfMA0GCSqGSIb3…` (DKIM Resend) | ✅ publikováno |
+| CNAME | `send.notify` | `send.forge.rmta.net` (MX + SPF návratové adresy Resend) | ✅ publikováno |
+| CNAME | `rsend.notify` | `rsend-euw1.forge.rmta.net` | ✅ publikováno |
+| TXT | `_dmarc.notify` | `v=DMARC1; p=none;` | ❌ **chybí – přidat** |
 
-Stávající záznamy `luffast.com` (MX Cloudflare Email Routing, SPF, `cf2024-1._domainkey`, `microcrm`, `basedemo`, …) se **nemění**.
-DMARC lze po několika týdnech bezproblémového provozu zpřísnit na `p=quarantine`.
+Všechny záznamy „DNS only“ (bez proxy). DMARC je jen pro odesílací subdoménu, `luffast.com` (Email Routing, SPF, DKIM Cloudflare)
+se **nemění**; `_dmarc.luffast.com` neexistuje. Po několika týdnech bez problémů lze zpřísnit na `p=quarantine`.
 
 ## 5. Proměnné prostředí (Vercel, Production) – bez tajných hodnot
 
@@ -80,11 +83,11 @@ DMARC lze po několika týdnech bezproblémového provozu zpřísnit na `p=quara
 | `SMTP_PORT` | `465` | běžná |
 | `SMTP_SECURITY` | `tls` | běžná |
 | `SMTP_USER` | `resend` | běžná |
-| `SMTP_PASSWORD` | API klíč Resend | **Sensitive** |
+| `SMTP_PASSWORD` | klíč Resend `clearspace-production` – nastaví `set-resend-keys.sh` | **Sensitive** |
 | `EMAIL_FROM` | `ClearSpace <pozvanky@notify.luffast.com>` | běžná |
 | `EMAIL_REPLY_TO` | nenastavovat (volitelně adresa, kterou chcete ukázat pozvaným) | běžná |
 | `APP_BASE_URL` | `https://clearspace-ai.vercel.app` | běžná |
-| `EMAIL_SERVER_SECRET` | výstup `openssl rand -hex 32` | **Sensitive** |
+| `EMAIL_SERVER_SECRET` | nastaveno 2026-11-25 (Keychain `ClearSpace V1 – EMAIL_SERVER_SECRET`) | **Sensitive** |
 
 **Nikdy** nenastavujte `EMAIL_ALLOW_RESERVED_DOMAINS` ani žádnou z nich jako `NEXT_PUBLIC_*`. Bez proměnných aplikace funguje dál, jen pozvánky předává odkazem.
 
@@ -100,7 +103,9 @@ vrátil katalog přesně na stav 0900. Stejný skript `frontend/scripts/apply-co
    (RC5 ukáže chybový pruh „uložení aktivity“, data úkolu se uloží). Okno = kroky 3–5, cíl do 15 minut. RUN 00 v té době nesmí zapisovat.
 3. **Migrace + záloha + kontrola** (jedním skriptem; zastaví se před zápisem, pokud cokoli nesedí):
    ```bash
-   CONFIRM_COLLAB=twjlnsxjtuntujarwner EMAIL_SERVER_SECRET_SHA256=<otisk z kroku 3.4> frontend/scripts/apply-collab-hosted.sh
+   CONFIRM_COLLAB=twjlnsxjtuntujarwner \
+   EMAIL_SERVER_SECRET_SHA256=$(security find-generic-password -s 'ClearSpace V1 – EMAIL_SERVER_SECRET' -w | tr -d '\n' | shasum -a 256 | cut -d' ' -f1) \
+   frontend/scripts/apply-collab-hosted.sh
    ```
    Skript: ověří checksumy, značky 0100–0900, katalog = nacvičený stav, oprávnění pro Realtime → udělá `pg_dump` schématu `public`
    do `/Volumes/WORKSPACE/_G2_BACKUP/<datum>-v1-pre-collab/` se SHA256SUMS → aplikuje 1000 a 1100 (každou v jedné transakci) →
@@ -146,8 +151,8 @@ Lokálně tato cesta prošla (Mailpit místo skutečné schránky): `e2e/collabo
 ## 8. Zbývající blokery
 
 1. Vaše schválení (oddíl 9).
-2. Účet Resend, ověřená doména `notify.luffast.com` (DNS z oddílu 4) a API klíč – jen vy.
-3. Vercel proměnné a Supabase Auth SMTP/URL nastavení – jen vy (nebo já, pokud to schválíte a hodnoty zadáte sami v dashboardu).
+2. Oba klíče Resend zadané přes `frontend/scripts/set-resend-keys.sh` (Vercel `SMTP_PASSWORD`, Supabase Auth SMTP) – oddíl 3.
+3. DMARC `_dmarc.notify` v Cloudflare – oddíl 4 (nebrání nasazení, zlepšuje doručitelnost).
 4. Hostovaná izolace kanálů a doručení skutečných e-mailů ověřené až po nasazení (oddíly 6.4, 6.6, 7). Do té doby není produkční připravenost ověřená.
 
 ## 9. Souhrnná žádost o schválení

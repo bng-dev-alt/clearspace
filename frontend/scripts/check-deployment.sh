@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -12,7 +12,7 @@ BASE=${1:?usage: check-deployment.sh <base-url>}
 MODE=${MODE:-direct}
 EXPECT_REF=${EXPECT_REF:-twjlnsxjtuntujarwner}
 FORBID_REF=${FORBID_REF:-bjycwqfessddbfocrggt}
-V=${VERCEL_BIN:-/Users/beng/.npm/_npx/67eb4586ca667318/node_modules/.bin/vercel}
+V=${VERCEL_BIN:-$(ls -d ~/.npm/_npx/*/node_modules/.bin/vercel 2>/dev/null | tail -1)}
 SCOPE=${VERCEL_SCOPE:-bng-dev-alt-webadvisor}
 fail=0
 ok() { echo "ok   - $1"; }; bad() { echo "FAIL - $1"; fail=1; }
@@ -48,6 +48,20 @@ for r in meetings/analyze meetings/purge meetings/sweep meetings/sync meetings/t
   code=$(status GET /api/intelligence/$r); [ "$code" = 405 ] && ok "GET /api/intelligence/$r -> 405" || bad "GET /api/intelligence/$r -> $code (expected 405)"
 done
 code=$(status POST /api/dev/login -H 'x-clearspace-dev-login: 1'); [ "$code" = 404 ] && ok "POST /api/dev/login -> 404" || bad "POST /api/dev/login -> $code (expected 404)"
+# RUN 02C (EXPECT_DRIVE=1, a build that contains the Google Drive release): every dev-login method is a 404, the public pages are
+# readable without login, the Google routes refuse anonymous callers and the mock seam is absent.
+if [ "${EXPECT_DRIVE:-0}" = 1 ]; then
+  for m in GET PUT PATCH DELETE; do code=$(status $m /api/dev/login); [ "$code" = 404 ] && ok "$m /api/dev/login -> 404" || bad "$m /api/dev/login -> $code (expected 404)"; done
+  P=$(get /privacy); echo "$P" | grep -q 'drive.file' && echo "$P" | grep -q 'Limited Use' && ok "GET /privacy: Google data disclosure readable without login" || bad "/privacy missing or not server-rendered"
+  echo "$P" | grep -q 'privacy-contact-missing' && bad "/privacy: controller contact NOT configured (PRIVACY_CONTROLLER / PRIVACY_CONTACT_EMAIL)" || ok "/privacy: controller contact present"
+  get /about | grep -q 'href="/privacy"' && ok "GET /about: homepage links to the privacy policy" || bad "/about missing or without privacy link"
+  for r in connection picker-token oauth/start; do
+    code=$(status GET /api/google/$r); case "$code" in 401|405) ok "anonymous GET /api/google/$r -> $code";; *) bad "anonymous GET /api/google/$r -> $code (expected 401/405)";; esac
+  done
+  code=$(status POST /api/google/oauth/complete -H 'Content-Type: application/json' -d '{}'); [ "$code" = 401 ] && ok "anonymous POST /api/google/oauth/complete -> 401" || bad "anonymous POST /api/google/oauth/complete -> $code (expected 401)"
+  code=$(status GET /api/google/oauth/callback); case "$code" in 302|303|307|308) ok "GET /api/google/oauth/callback without state -> $code (redirect, no error page)";; *) bad "GET /api/google/oauth/callback -> $code";; esac
+  code=$(status GET /__control/state); [ "$code" = 404 ] && ok "no Google mock control route" || bad "/__control/state -> $code"
+fi
 
 echo "== client bundle"
 CHUNKS=$(get /login | grep -oE '/_next/static/[^"]+\.js' | sort -u)
@@ -58,7 +72,8 @@ for c in $CHUNKS; do get "$c" >> "$BUNDLE"; done
 has() { grep -qF -- "$1" "$BUNDLE"; }
 has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle does NOT contain $EXPECT_REF"
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
-for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini'; do
+for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini' \
+           'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

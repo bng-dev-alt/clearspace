@@ -72,4 +72,6 @@ explicit env enablement (set by the launcher for that process only, never in `.e
 only, tunnel headers refuse, Auth must be a loopback instance. Verified by `e2e/dev-login-stack.spec.ts` (fresh browser context, one link,
 real session + RLS + Realtime, spoofed host / tunnel header / missing marker -> 404).
 
+**E2E suites against a stack app:** run them against an app started with `DEV_AUTO_LOGIN=0` (the button stays). Specs that register or accept an invitation in a FRESH browser context (`collaboration-01b`, `collaboration-01c-*`, `supabase-runtime`) expect no session, and the auto-login would sign that context in as alice (found in RUN 02B: `collaboration-01b` failed with auto-login on, passes with it off). Hand-testing keeps the default (auto).
+
 **Production builds:** never build with these flags in the environment; `scripts/check-production-bundle.sh` fails on the dev-login strings.

@@ -1,8 +1,8 @@
 # RUN 02 – Google Drive integration (architecture, security, operations)
 
-Status 2026-11-25: implemented on `feature/run02-google-drive` (base `run01-complete` = `ebeaa70`), verified locally
-against a real Supabase stack, the real Next.js app and a **deterministic Google mock**. **Not verified against real
-Google** (no Google Cloud project / OAuth client exists yet) – see §12. Rollout: `docs/run02/PRODUCTION_ROLLOUT.md`.
+Status 2026-11-25 (after RUN 02B): implemented on `feature/run02-google-drive` (base `run01-complete` = `ebeaa70`). Verified locally against a
+real Supabase stack and the real Next.js app with (a) a **deterministic Google mock** (RUN 02) and (b) **real Google** in a *dev* Google Cloud
+project, Testing mode (RUN 02B, §13: core path LIVE-verified, gaps listed). Production Google project not created. Rollout: `docs/run02/PRODUCTION_ROLLOUT.md`.
 
 ## 1. What users get
 
@@ -206,3 +206,66 @@ and failure injection. It proves our flow and boundaries, not Google's behaviour
 * `external_resource_links.provider` is a CHECK list: add `gmail_message` / `calendar_event` with their URL rules.
 * Gmail scopes are restricted/sensitive (security assessment) – a separate owner decision. Calendar `calendar.events`
   is sensitive (verification).
+
+## 13. RUN 02B – live acceptance against real Google (dev project, OAuth *Testing*, one real account)
+
+Environment: local app `http://127.0.0.1:3441`, isolated stack `cs-drive-sb`, credentials only in the macOS Keychain
+(`scripts/google-live.sh setup|status|verify|app|forget`), real endpoints (`accounts.google.com`, `oauth2.googleapis.com`,
+`www.googleapis.com/drive/v3`, `apis.google.com` Picker). Mock mode is separate (`drive-stack.sh mock|app`); the two never run together.
+Test files: dedicated harmless files in the owner's own Drive (one JPEG, one Word document); no private files were read.
+
+### 13.1 Findings and fixes
+1. **Real sign-in failed with `invalid_client` at the token exchange (live FAIL, then fixed).** Root cause (evidence: server log phase
+   `complete_failed`/`invalid_client`, state consumed, DB `connections=0`; reproduced by prefix check): `collab-stack.sh app` re-sourced the
+   stack accounts file, which also holds the **mock** client secret, over the real `GOOGLE_OAUTH_CLIENT_SECRET` exported by `google-live.sh`.
+   State, PKCE, session binding, cookies and DEV auto-login were all fine (state was consumed). Fix: launchers read only the values they need
+   (never `source` the accounts file); `google-live.sh` refuses a non-`GOCSPX-` secret; `googleConfig()` disables the integration when a
+   mock-format secret meets the real provider (instead of failing at the first sign-in). Regression tests in `googleLiveConfig.test.ts`.
+2. **Authorization code in the dev server's request log (security finding).** `next dev` printed `/api/google/oauth/callback?state=…&code=…`.
+   Fixed in `next.config.ts` (`logging.incomingRequests.ignore`, tested; verified live: a callback request is no longer logged). The old
+   log was redacted. Production servers do not print request URLs this way.
+3. **Secret-free structured OAuth logging** (`oauthLog`): one JSON line per phase (`config`, `state_consumed`, `exchange_ok|complete_failed`,
+   `identity_ok`, `saved`, `complete_result`) with booleans, counts, OAuth/Postgres error codes and HTTP status only; fields > 80 chars are
+   dropped; never tokens, codes, secrets, cookie values, e-mail addresses, file names or provider bodies.
+4. **DEV auto-login vs. fresh-context E2E** (`collaboration-01b`): run E2E suites with `DEV_AUTO_LOGIN=0` (LOCAL_DEV.md).
+5. A real-project number briefly appeared in a unit-test fixture of an unpushed local commit; scrubbed from the history before any push.
+
+### 13.2 Matrix – LIVE (real Google) vs not verified
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | Connect a real Google account | **LIVE PASS** | log `exchange_ok` (refresh token, id_token, Drive granted, 3 scopes) → `identity_ok` → `saved` → `connected`; DB: one `active` connection, scopes exactly `userinfo.email`, `openid`, `drive.file`; refresh token stored only as `v1.…` AES-GCM envelope |
+| 2 | Connected account shown | **LIVE PASS** | status API + settings card (DOM test, Classic and Monograph; e-mail not recorded) |
+| 3 | ClearSpace identity unchanged | **LIVE PASS** | session still the DEV owner; Google connection separate |
+| 4 | Real Google Picker | **LIVE PASS** | owner opened the real Picker (picker-token 200 → attach 201 twice) |
+| 5 | Select a real Drive file | **LIVE PASS** | a JPEG and a Word document picked |
+| 6 | Attach to project | **LIVE PASS (server path)** / manual project-level Picker pick **NOT DONE** | automated test attached the real, already-picked file at project level through the real Drive API (201, real metadata) |
+| 7 | Attach to task | **LIVE PASS** | two real task-level attaches via Picker (events `entity=task`) |
+| 8 | Metadata + link | **LIVE PASS** (clicking through to the original **NOT DONE**) | real size, modified time, MIME; link host `docs.google.com`, `rel=noopener noreferrer` |
+| 9 | Text preview | **PARTIAL** | real unsupported-format answer for the Word file (415, Czech text) ✔; preview of a native Google Doc **NOT VERIFIED** |
+| 10 | Duplicate protection | **LIVE PASS** | same real file again → `duplicate: true`, still 1 row |
+| 11 | Realtime between members | **LIVE PASS** | editor + viewer on the dialog, no reload: attach seen after ≈540 ms (incl. the real Drive call), removal after ≈115 ms |
+| 12 | Activity events | **LIVE PASS** | `drive_file_linked/unlinked` per persisted change, actor verified, none for duplicates/refreshes; timeline shows the Czech sentence |
+| 13 | Roles | **LIVE PASS** | editor: remove only (not connected → no add), viewer: no add/remove; outsider via RLS (mock + DB suites) |
+| 14 | ClearSpace vs Google permissions | **PARTIAL** | teammate without own Google connection gets „Nejprve připojte…“ and no content; **second real Google account NOT VERIFIED** |
+| 15 | Persistence | **LIVE PASS** | connection `active` across app restarts / reloads |
+| 16 | Access-token refresh | **LIVE PASS** | stored token expired → server refreshed with the real refresh token at Google (`token_version` 1→2, +60 min); browser got only the access token |
+| 17 | Remove link, original untouched | **LIVE PASS** | association removed; the file was still reachable at Google afterwards (`files.get`) and re-attachable; the code has no Drive write call |
+| 18 | Disconnect + reconnect | **LIVE PASS** | audit `connected`/`disconnected`/`connected`; links stayed; after reconnect Google still served the earlier-picked file (`refresh` → ok) |
+| 19 | Errors | **PARTIAL** | real Drive 404 → „Přístup k souboru není dostupný…“ ✔; the `invalid_client` incident now logs the phase; **denied consent / Drive unticked on the real Google screen NOT VERIFIED live** (mock only) |
+| 20 | Classic + Monograph | **LIVE PASS** | DOM assertions, desktop light + mobile dark, no horizontal overflow, no „simulace“ label |
+| – | Rename in Drive → *Obnovit informace* | **NOT VERIFIED live** | mock only |
+| – | 7-day refresh-token expiry (Testing) | **NOT VERIFIED** | needs ≥ 7 days; documented behaviour |
+| – | Revocation at Google on disconnect | **NOT VERIFIED** | result of the revoke call not captured |
+
+**Verdict: CONDITIONAL PASS** – the core real-Google path (OAuth, Picker, Drive API, refresh, attach, realtime, events, roles, disconnect/
+reconnect, UI in both styles) is live-verified; the items marked NOT VERIFIED remain open. Mock results are never counted as live.
+
+### 13.3 Live helper commands
+```
+frontend/scripts/google-live.sh setup | verify | app      # then open http://127.0.0.1:3441/settings?login=auto
+E2E_LIVE_UI=1 [E2E_STYLE=monograph] PLAYWRIGHT_TEST_BASE_URL=http://127.0.0.1:3441 npx playwright test e2e/google-drive-live-ui.spec.ts
+E2E_LIVE_REALTIME=1 E2E_LIVE_FILE_ID=<an already picked Drive id> E2E_PASSWORD=… … npx playwright test e2e/google-drive-live-realtime.spec.ts
+```
+### 13.4 Testing-mode limits (observed behaviour to plan for)
+Refresh tokens of an External app in *Testing* expire after 7 days (re-consent: „Znovu připojit účet“); ≤100 test users; the consent screen
+shows the unverified-app warning (Advanced → Go to ClearSpace). A public portfolio must not claim Google Drive is available to everyone.

@@ -7,7 +7,7 @@
 | 01 | Týmová spolupráce a realtime (role, přítomnost, živé úpravy, komentáře s @zmínkami, notifikace, pozvánky) | **PASS v rozsahu ověřených funkcí**, v produkci | `docs/collaboration/COLLABORATION.md`, `PRODUCTION_ROLLOUT.md` §11 |
 | 01B | Zabezpečení a spolehlivost, pozvánky e-mailem | **hotovo, v produkci** | tamtéž |
 | 01C | Produkční připravenost (Resend, nodemailer, rollout, DMARC, Monograph build) | **hotovo, v produkci** | `PRODUCTION_ROLLOUT.md` |
-| **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **implementováno lokálně, CONDITIONAL PASS**: ověřeno proti lokálnímu zásobníku a mocku Googlu; **skutečný Google neověřen** (čeká na Google Cloud projekt vlastníka); nenasazeno, nepushnuto | `docs/run02/GOOGLE_DRIVE.md`, `docs/run02/PRODUCTION_ROLLOUT.md` |
+| **02** | **Google Drive Integration** (připojení účtu Google, Picker + `drive.file`, soubory u projektů a úkolů, realtime, aktivita, šifrované tokeny) | **implementováno lokálně, CONDITIONAL PASS po RUN 02B**: hlavní cesta ověřena proti **skutečnému Googlu** (dev projekt, režim Testing): OAuth, Picker, Drive API, obnova tokenu, připojení souborů, realtime, události, role; otevřené: náhled nativního Google Dokumentu, přejmenování+obnova, odmítnutý souhlas naživo, druhý Google účet; nenasazeno, nepushnuto | `docs/run02/GOOGLE_DRIVE.md`, `docs/run02/PRODUCTION_ROLLOUT.md` |
 | 03 | Gmail & Email Intelligence | další; staví na sdíleném Google připojení (inkrementální autorizace) | `docs/run02/GOOGLE_DRIVE.md` §12 |
 | 04 | Google Calendar | plánováno; stejný základ | tamtéž |
 

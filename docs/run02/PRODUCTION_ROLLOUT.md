@@ -95,6 +95,6 @@ soubory nevybírejte – aplikace stejně uvidí jen vybrané.
 
 ## 8. Blokery vydání
 * Google Cloud projekt, consent screen a klient (§2) – **jen vlastník**.
-* Skutečné ověření OAuth + Picker + Drive API proti Googlu: **NEPROVEDENO** (dosud jen mock).
+* Skutečné ověření OAuth + Picker + Drive API proti Googlu: **provedeno v dev projektu** (RUN 02B, `GOOGLE_DRIVE.md` §13, CONDITIONAL PASS); produkční Google projekt a produkční živá akceptace (§5) zbývají.
 * Režim *Testing*: 7denní platnost refresh tokenu – akceptovat, nebo vlastní doména + ověření značky.
 * Nácvik na kopii produkce (vyžaduje schválení read-only přístupu).

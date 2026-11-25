@@ -130,7 +130,8 @@ try {
   check((await api(`/api/collab/invitations/${r4.json.id}/resend`, A.token)).status === 400, 'a revoked invitation cannot be re-sent');
 
   // ---- provider failure ----
-  const box = execFileSync('docker', ['ps', '--filter', 'name=inbucket_cs-collab-sb', '--format', '{{.Names}}']).toString().trim();
+  // the Mailpit of THIS stack (derived from DB_CONTAINER, so a second isolated stack never stops another one's)
+  const box = execFileSync('docker', ['ps', '--filter', `name=${DB_CONTAINER.replace(/^supabase_db_/, 'supabase_inbucket_')}`, '--format', '{{.Names}}']).toString().trim();
   execFileSync('docker', ['stop', box]);
   try {
     const F = `selhani-${run}@example.test`;

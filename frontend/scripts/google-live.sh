@@ -40,8 +40,10 @@ ask() {  # $1 label, $2 regex, $3 hidden(1/0), $4 expected prefix -> value on st
 load_env() {
   for a in "${ACCOUNTS[@]}"; do kc_has "$a" || { echo "missing Keychain item '$a' -- run: frontend/scripts/google-live.sh setup" >&2; exit 2; }; done
   [ -f "$DIR/collab-accounts.env" ] || { echo "no stack accounts file in $DIR -- run scripts/drive-stack.sh up" >&2; exit 2; }
-  # shellcheck disable=SC1091
-  . "$DIR/collab-accounts.env"
+  # Read only the stack-local server secrets. NEVER source the whole accounts file: it also holds the MOCK client secret.
+  acc() { sed -n "s/^$1=//p" "$DIR/collab-accounts.env" | head -1; }
+  GOOGLE_SERVER_SECRET=$(acc GOOGLE_SERVER_SECRET); GOOGLE_TOKEN_ENCRYPTION_KEY=$(acc GOOGLE_TOKEN_ENCRYPTION_KEY)
+  [ -n "$GOOGLE_SERVER_SECRET" ] && [ -n "$GOOGLE_TOKEN_ENCRYPTION_KEY" ] || { echo "stack Google secrets missing -- run scripts/drive-stack.sh up" >&2; exit 2; }
   GOOGLE_OAUTH_CLIENT_ID=$(kc_get client_id); export GOOGLE_OAUTH_CLIENT_ID
   GOOGLE_OAUTH_CLIENT_SECRET=$(kc_get client_secret); export GOOGLE_OAUTH_CLIENT_SECRET
   GOOGLE_PICKER_API_KEY=$(kc_get picker_key); export GOOGLE_PICKER_API_KEY
@@ -86,7 +88,8 @@ case "${1:-}" in
   app)
     load_env
     export PORT COLLAB_STACK_DIR=$DIR COLLAB_STACK_NAME=cs-drive-sb COLLAB_STACK_SOCK=/tmp/cs-drive-docker.sock COLLAB_SMTP_PORT=55545 COLLAB_MAIL_UI=55544
-    echo "real Google; APP_BASE_URL=$APP_BASE_URL; GOOGLE_API_MOCK_BASE=${GOOGLE_API_MOCK_BASE:-<unset>}; redirect URI=$REDIRECT"
+    [[ "$GOOGLE_OAUTH_CLIENT_SECRET" == GOCSPX-* ]] || { echo "refusing: the client secret does not have Google's GOCSPX- format (mock value?)" >&2; exit 2; }
+    echo "real Google; client secret format: GOCSPX; APP_BASE_URL=$APP_BASE_URL; GOOGLE_API_MOCK_BASE=${GOOGLE_API_MOCK_BASE:-<unset>}; redirect URI=$REDIRECT"
     exec "$HERE/scripts/collab-stack.sh" app
     ;;
   forget)

@@ -21,7 +21,15 @@ export const securityHeaders = [
   ...(isProd ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }] : []),
 ];
 
+/**
+ * Google's OAuth redirect carries the single-use authorization code (and state) in the query string. `next dev` logs every incoming
+ * request URL, which would put the code into the terminal / log files: never log that route (RUN 02B finding). Production servers
+ * do not print request URLs this way; this only concerns development.
+ */
+export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/];
+
 const nextConfig: NextConfig = {
+  logging: { incomingRequests: { ignore: noRequestLogPaths } },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

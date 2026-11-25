@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE } from '../../../../../lib/google/config';
+import { OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat } from '../../../../../lib/google/config';
 import { open, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { exchangeCode, GoogleOAuthError, hasDriveScope, parseIdToken, revokeToken } from '../../../../../lib/google/oauth';
-import { caller, errorResponse, NO_STORE, requireGoogle } from '../../../../../lib/google/server';
+import { caller, errorResponse, NO_STORE, oauthLog, requireGoogle } from '../../../../../lib/google/server';
 
 type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error';
 
@@ -20,23 +20,32 @@ export async function POST(req: NextRequest) {
     let result: { state?: string; code?: string; error?: string } = {};
     try { result = JSON.parse(req.cookies.get(OAUTH_RESULT_COOKIE)?.value ?? '{}'); } catch { /* malformed */ }
     const reply = (outcome: Outcome, returnTo = '/settings') => {
+      oauthLog('complete_result', { outcome });
       const res = NextResponse.json({ outcome, returnTo }, { headers: NO_STORE });
       res.cookies.set(OAUTH_COOKIE, '', { path: OAUTH_COOKIE_PATH, maxAge: 0 });
       res.cookies.set(OAUTH_RESULT_COOKIE, '', { path: OAUTH_COOKIE_PATH, maxAge: 0 });
       return res;
     };
     const state = typeof result.state === 'string' ? result.state : '';
-    if (!/^[A-Za-z0-9_-]{40,64}$/.test(state) || !/^[A-Za-z0-9_-]{40,64}$/.test(nonce)) return reply('expired');
+    if (!/^[A-Za-z0-9_-]{40,64}$/.test(state) || !/^[A-Za-z0-9_-]{40,64}$/.test(nonce)) {
+      oauthLog('state_rejected', { why: !/^[A-Za-z0-9_-]{40,64}$/.test(state) ? 'no_result_cookie' : 'no_nonce_cookie' });
+      return reply('expired');
+    }
 
     const stateHash = sha256hex(state);
     const { data, error } = await db.rpc('google_oauth_consume', { p_server_secret: cfg.serverSecret, p_state_sha256: stateHash, p_binding_sha256: sha256hex(nonce) });
     const row = (Array.isArray(data) ? data[0] : data) as { user_id: string; code_verifier_enc: string; return_to: string } | undefined;
-    if (error || !row || row.user_id !== userId) return reply('expired');
+    if (error || !row || row.user_id !== userId) {
+      oauthLog('state_rejected', { why: error ? 'consume_error' : !row ? 'not_found_used_or_expired' : 'other_user', pgCode: error?.code });
+      return reply('expired');
+    }
+    oauthLog('state_consumed', { hasError: Boolean(result.error), hasCode: Boolean(result.code) });
     if (result.error) return reply(result.error === 'access_denied' ? 'denied' : 'error', row.return_to);
     if (typeof result.code !== 'string' || !result.code) return reply('error', row.return_to);
 
     try {
       const t = await exchangeCode(cfg, result.code, open(cfg.keys, row.code_verifier_enc, tokenAad(state, 'pkce')));
+      oauthLog('exchange_ok', { hasRefresh: Boolean(t.refreshToken), hasIdToken: Boolean(t.idToken), driveGranted: hasDriveScope(t.scopes), scopeCount: t.scopes.length, expiresIn: t.expiresIn });
       if (!hasDriveScope(t.scopes)) {
         // the user unticked Drive on Google's consent screen: keep nothing, give the grant back
         await revokeToken(cfg, t.refreshToken ?? t.accessToken);
@@ -44,6 +53,7 @@ export async function POST(req: NextRequest) {
         return reply('scope_denied', row.return_to);
       }
       const id = parseIdToken(cfg, t.idToken);
+      oauthLog('identity_ok', { subLength: id.sub.length });
       const { error: saveErr } = await db.rpc('google_oauth_complete', {
         p_server_secret: cfg.serverSecret,
         p_state_sha256: stateHash,
@@ -54,6 +64,7 @@ export async function POST(req: NextRequest) {
         p_access_token_enc: seal(cfg.keys, t.accessToken, tokenAad(userId, 'access')),
         p_access_expires_at: new Date(Date.now() + t.expiresIn * 1000).toISOString(),
       });
+      oauthLog(saveErr ? 'save_failed' : 'saved', { pgCode: saveErr?.code, refreshKept: !t.refreshToken });
       if (saveErr) {
         // Same Google account already connected to another ClearSpace account: do NOT revoke -- a revocation at
         // Google ends the app's whole grant for that Google account, i.e. also the other (legitimate) connection.
@@ -63,7 +74,7 @@ export async function POST(req: NextRequest) {
       }
       return reply('connected', row.return_to);
     } catch (err) {
-      console.warn('[google-oauth-complete] failed:', err instanceof GoogleOAuthError ? err.code : (err as Error)?.name);
+      oauthLog('complete_failed', { stage: 'exchange_or_identity', code: err instanceof GoogleOAuthError ? err.code : (err as Error)?.name, httpStatus: err instanceof GoogleOAuthError ? err.status : undefined, mode: cfg.mock ? 'mock' : 'real', secretFormat: secretFormat(cfg.clientSecret) });
       return reply('error', row.return_to);
     }
   } catch (err) {

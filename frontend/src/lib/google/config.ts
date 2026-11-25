@@ -57,6 +57,11 @@ export interface GoogleConfig {
   mock: boolean;
 }
 
+/** Format CLASS of a secret for diagnostics (never the value): Google's client secrets start with GOCSPX-. */
+export function secretFormat(secret: string): 'gocspx' | 'mock' | 'other' {
+  return secret.startsWith('GOCSPX-') ? 'gocspx' : secret.startsWith('mock-') ? 'mock' : 'other';
+}
+
 export type GoogleConfigResult = GoogleConfig | { enabled: false; reason: string };
 
 function mockEndpoints(env: NodeJS.ProcessEnv): GoogleEndpoints | null | 'refused' {
@@ -95,6 +100,9 @@ export function googleConfig(env: NodeJS.ProcessEnv = process.env): GoogleConfig
   if (base.error || !base.url) return off(base.error ?? 'APP_BASE_URL není nastaveno.');
   const mock = mockEndpoints(env);
   if (mock === 'refused') return off('GOOGLE_API_MOCK_BASE je povolené jen pro lokální testy (http://127.0.0.1).');
+  // RUN 02B regression: a launcher once re-sourced the stack's accounts file over the real secret, so the app sent the MOCK secret to
+  // real Google (invalid_client at the token exchange). A mock-format secret is only valid together with the mock provider.
+  if (mock === null && secretFormat(clientSecret) === 'mock') return off('GOOGLE_OAUTH_CLIENT_SECRET je zkušební (mock) hodnota, ale Google není v mock režimu.');
   return {
     enabled: true,
     clientId,

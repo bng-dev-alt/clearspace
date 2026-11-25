@@ -61,8 +61,10 @@ case "${1:-}" in
     [ -n "$(docker ps -q --filter name=supabase_db_$NAME)" ] || "$0" up
     "$0" seed >/dev/null
     eval "$(keys)"
-    # shellcheck disable=SC1090
-    . "$DIR/collab-accounts.env"
+    # Read ONLY the two values this launcher needs. Never `source` the accounts file here: it also holds the MOCK Google secret, and
+    # sourcing it would overwrite a real GOOGLE_OAUTH_CLIENT_SECRET the caller exported (RUN 02B: real Google answered invalid_client).
+    acc() { sed -n "s/^$1=//p" "$DIR/collab-accounts.env" | head -1; }
+    COLLAB_PASSWORD=$(acc COLLAB_PASSWORD); EMAIL_SERVER_SECRET=$(acc EMAIL_SERVER_SECRET)
     AS=${DEV_LOGIN_AS:-alice}; case "$AS" in alice|bob|vera) ;; *) echo "DEV_LOGIN_AS must be alice, bob or vera"; exit 2;; esac
     export NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
     export CLEARSPACE_DEV_LOGIN=1 NEXT_PUBLIC_DEV_LOGIN=1 DEV_LOGIN_EMAIL=$AS@collab.test DEV_LOGIN_PASSWORD=$COLLAB_PASSWORD

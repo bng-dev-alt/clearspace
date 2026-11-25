@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { googleConfig, type GoogleConfig } from './config';
+import { googleConfig, secretFormat, type GoogleConfig } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -20,9 +20,32 @@ export const MSG = {
   forbidden: 'K této akci nemáte oprávnění.',
 } as const;
 
+/**
+ * Structured server log of the Google integration (RUN 02B). One JSON line per event, WHITELISTED fields only: phases, booleans,
+ * counts, OAuth/Postgres error CODES, HTTP statuses. Never tokens, authorization codes, secrets, cookie contents, e-mail addresses,
+ * file names or provider response bodies.
+ */
+type LogValue = string | number | boolean | null | undefined;
+export function oauthLog(phase: string, fields: Record<string, LogValue> = {}): void {
+  const safe: Record<string, LogValue> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === 'string' && v.length > 80) continue;     // never let a long (token-like) string through
+    safe[k] = v;
+  }
+  console.info(JSON.stringify({ evt: 'google', phase, ...safe }));
+}
+
+let configLogged = false;
 export function requireGoogle(): GoogleConfig {
   const cfg = googleConfig();
-  if (!cfg.enabled) throw new HttpError(503, MSG.not_configured, 'not_configured');
+  if (!cfg.enabled) {
+    if (!configLogged) { configLogged = true; oauthLog('config_disabled', { reason: cfg.reason }); }
+    throw new HttpError(503, MSG.not_configured, 'not_configured');
+  }
+  if (!configLogged) {
+    configLogged = true;
+    oauthLog('config', { mode: cfg.mock ? 'mock' : 'real', secretFormat: secretFormat(cfg.clientSecret), clientIdProject: `…${cfg.clientId.split('-')[0].slice(-4)}`, redirectUri: cfg.redirectUri, tokenHost: new URL(cfg.endpoints.token).host });
+  }
   return cfg;
 }
 

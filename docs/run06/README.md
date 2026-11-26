@@ -1,15 +1,16 @@
 # RUN 06 – Google demo ekosystém + pilotní režim Gmail / Kalendář
 
-Stav 2026-11-26. Větev `feature/google-demo-pilot` (pracovní strom `V1-gdemo`, z `main` = RUN 05), **nic nepushnuto, nemergnuto, nenasazeno**.
-Produkce beze změny (`GMAIL_INTEGRATION_ENABLED=0`, `CALENDAR_INTEGRATION_ENABLED=0`). Žádný nový Google Cloud projekt, žádná placená služba.
+Stav 2026-11-26: **v `main` a v produkci** (`dpl_9NkXChVh…`) – Gmail a Kalendář v **pilotním režimu** jen pro prezentační účet + demo Google účet
+(`PRODUCTION_ACCEPTANCE.md`). Žádný nový Google Cloud projekt, žádná placená služba, publikační režim OAuth beze změny (Testing).
 
 | Dokument | Obsah |
 |---|---|
 | `GOOGLE_DEMO_SEEDER.md` | dataset CS-GDEMO, seeder (oddělený OAuth klient, ochrana identity, idempotence, úklid) |
 | `PILOT_MODE.md` | `=pilot` pro Gmail / Kalendář: návrh, chování, testy |
 | `LIVE_ACCEPTANCE.md` | živá akceptace s demo účtem (skutečný Google) + NOT VERIFIED |
-| `PRODUCTION_PILOT.md` | návrh bezpečného produkčního pilotu (k samostatnému schválení) |
-| `EMAIL_ROUTING.md` | read-only audit Cloudflare DNS / Email Routing luffast.com + přesný postup pro 5 aliasů |
+| `PRODUCTION_PILOT.md` | plán produkčního pilotu (schválen a proveden) |
+| `PRODUCTION_ACCEPTANCE.md` | záznam produkčního nasazení, propojení dat a ověření izolace |
+| `EMAIL_ROUTING.md` | audit Cloudflare DNS / Email Routing + postup (5 aliasů provedeno, doručení ověřeno) |
 
 ## Truth mode – co je skutečné, co simulace
 | Oblast | Stav |
@@ -19,7 +20,7 @@ Produkce beze změny (`GMAIL_INTEGRATION_ENABLED=0`, `CALENDAR_INTEGRATION_ENABL
 | ClearSpace ↔ demo účet | **skutečný Google** (dev projekt `clearspace-dev`, Testing), lokální stack `cs-gdemo-sb`, pilotní režim |
 | Propojení s projekty | **skutečné**: vlákna, dokumenty (přes skutečný Google Picker) a události připojené k projektům CSD-CORVANE v lokálním stacku |
 | Pilotní režim | mock HTTP + unit testy + **živě** (izolace bob / vera / cizí uživatel) |
-| Produkce | **nezměněna**; produkční pilot = jen návrh |
+| Produkce | **pilot aktivní** (skutečný Google): 14 projektů Corvane prezentačního účtu propojeno s 19 dokumenty, 14 vlákny a 17 událostmi |
 | Cloudflare | **jen čtení** (API GET + veřejné DNS); nic nezměněno |
 
 ## Výsledky testů (finální kód)
@@ -56,8 +57,7 @@ Proto: **seeder se odvolá DŘÍV, než se připojí ClearSpace** (tak to bylo p
 dostal přesně 5 read-only scopů). Pravidlo je v `GOOGLE_DEMO_SEEDER.md` a `PRODUCTION_PILOT.md`.
 
 ## Zbývající kroky (vlastník)
-1. Rozhodnout o produkčním pilotu (`PRODUCTION_PILOT.md`) – vyžaduje i úpravu `check-deployment.sh` / `hosted-verify.sh` pro `=pilot`.
-2. Email Routing: přidat cílovou adresu + 5 pravidel (`EMAIL_ROUTING.md`) – ověřovací e-mail potvrdí vlastník v demo Gmailu.
-3. Dialog „chytré funkce“ v demo Gmailu – nastavení účtu, nesahali jsme na něj.
-4. Testing režim: refresh token demo účtu u ClearSpace Dev vyprší za 7 dní → znovu připojit (stejný postup).
-5. Merge / push větve – na schválení.
+1. Smazat omylem vytvořenou Vercel proměnnou `ZZ_PROBE` (`vercel env rm ZZ_PROBE production`, potvrdit `y`).
+2. Každých 7 dní (Testing) znovu připojit Google u prezentačního účtu, nebo rozhodnout o publikaci aplikace (varování „neověřená aplikace“, strop 100 uživatelů, Gmail restricted ⇒ CASA pro veřejné použití).
+3. `V1/frontend/.env.local` stále chybí (incident RUN 05) – obnovit ze svých záznamů (vzor `V1-consolidation/frontend/.env.local`).
+4. Konec pilotu: `GMAIL/CALENDAR_INTEGRATION_ENABLED=0` + redeploy; prezentující „Odpojit Google účet“.

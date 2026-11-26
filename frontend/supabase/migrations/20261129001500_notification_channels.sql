@@ -397,7 +397,7 @@ BEGIN
     RETURN QUERY SELECT v_row.secret_enc, v_shared, v_row.id, v_row.status;
 END $$;
 
--- Test message: the caller's own channel credential, at most one test per 30 s (also any confirm / connected message).
+-- Test message: the caller's own channel credential, at most one test per 30 s (the welcome message after a confirmation is not counted).
 CREATE OR REPLACE FUNCTION public.notify_test_begin(p_server_secret TEXT, p_provider TEXT, p_allow_confirm BOOLEAN DEFAULT false)
 RETURNS TABLE (channel_id UUID, secret_enc TEXT, status TEXT)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp
@@ -412,10 +412,13 @@ BEGIN
     IF NOT FOUND OR v_row.secret_enc IS NULL OR NOT (v_row.status = 'active' OR (p_allow_confirm AND v_row.status = 'confirm')) THEN
         RAISE EXCEPTION 'Kanál není připojený.' USING ERRCODE = '22023';
     END IF;
-    IF v_row.last_test_at > now() - interval '30 seconds' THEN
-        RAISE EXCEPTION 'Zkušební zprávu lze poslat jednou za 30 sekund.' USING ERRCODE = 'PT429';
+    -- p_allow_confirm = the one welcome message right after the owner confirmed (server only): not counted as a test message
+    IF NOT coalesce(p_allow_confirm, false) THEN
+        IF v_row.last_test_at > now() - interval '30 seconds' THEN
+            RAISE EXCEPTION 'Zkušební zprávu lze poslat jednou za 30 sekund.' USING ERRCODE = 'PT429';
+        END IF;
+        UPDATE public.notification_channels c SET last_test_at = now() WHERE c.id = v_row.id;
     END IF;
-    UPDATE public.notification_channels c SET last_test_at = now() WHERE c.id = v_row.id;
     RETURN QUERY SELECT v_row.id, v_row.secret_enc, v_row.status;
 END $$;
 

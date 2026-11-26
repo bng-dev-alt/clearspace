@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
+import { hasSupabaseConfig } from '../../lib/supabase';
 import { hubService, PROVIDER_NAME, type HubMessage, type HubProvider } from '../../services/hubService';
 import { formatRelativeTime } from '../../lib/collab/activityText';
 import { ProviderIcon } from './ProjectIntegrationsModal';
@@ -51,6 +52,7 @@ export default function CommunicationList({ projectId, onOpenCard, names }: { pr
 
   return (
     <div className="hub-comm" data-testid="hub-communication">
+      {!hasSupabaseConfig && <p className="hub-scope" data-testid="hub-demo-note"><strong>Simulace</strong> – ukázková data, ne skutečný Slack ani Telegram.</p>}
       <p className="hub-scope" data-testid="hub-scope">Jen komunikace z kanálů a skupin propojených s tímto projektem: zprávy, ze kterých vznikly úkoly, odpovědi ve vláknech úkolů a – kde to správce výslovně zapnul – zprávy pro Project Intelligence. Nikdy celý workspace ani soukromé konverzace.</p>
       <div className="hub-filter">
         <input type="search" className="cs-input" placeholder="Hledat v komunikaci…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Hledat v komunikaci" data-testid="hub-search" />

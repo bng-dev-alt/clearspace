@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MessageSquare, Send, Plug } from 'lucide-react';
 import { ModalShell, Badge } from '../ui';
 import { DriveError } from '../../services/driveService';
+import { hasSupabaseConfig } from '../../lib/supabase';
 import {
   EVENT_LABEL, hubService, PROVIDER_NAME, STATUS_LABEL, type HubDestination, type HubEventType, type HubProjectStatus, type HubProvider,
 } from '../../services/hubService';
@@ -178,7 +179,8 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
             ))}</ul>
           </details>
         )}
-        {status && !status.canManage && <p className="hub-muted">Propojení spravují vlastník a správci projektu.</p>}
+        {!hasSupabaseConfig && <p className="hub-muted" data-testid="hub-demo-note">Ukázka: simulovaná data. Žádné spojení se Slackem ani Telegramem, nic se neodesílá.</p>}
+        {hasSupabaseConfig && status && !status.canManage && <p className="hub-muted">Propojení spravují vlastník a správci projektu.</p>}
         <p className="hub-muted">Podrobnosti: <Link href="/privacy#komunikace">Ochrana osobních údajů – komunikace projektu</Link>.</p>
       </div>
     </ModalShell>

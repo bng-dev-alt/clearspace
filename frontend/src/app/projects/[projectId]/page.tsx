@@ -175,7 +175,7 @@ export default function ProjectBoardPage() {
   const [hubOn, setHubOn] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   useEffect(() => {
-    if (!hasSupabaseConfig || !projectId) return;
+    if (!projectId) return;
     let active = true;
     hubService.project(projectId).then((s) => { if (active) setHubOn(s !== null); }).catch(() => { if (active) setHubOn(false); });
     return () => { active = false; };

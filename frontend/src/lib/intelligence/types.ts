@@ -4,7 +4,7 @@
  */
 
 /** Zdroj, který smí model citovat. `ref` je stabilní a lidsky čitelný (viz REF_GRAMMAR). */
-export type SourceKind = 'card' | 'comment' | 'check' | 'activity' | 'meeting' | 'item';
+export type SourceKind = 'card' | 'comment' | 'check' | 'activity' | 'meeting' | 'item' | 'comm';
 
 export interface SourceRecord {
   ref: string;

@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+import { hasSupabaseConfig, supabase } from '../lib/supabase';
+import { HUB_DEMO_MESSAGES, HUB_DEMO_STATUS } from '../data/hubFixtures';
 import { api, DriveError } from './driveService';
 
 /**
@@ -46,6 +47,7 @@ const MESSAGE_COLUMNS = 'id, project_id, destination_id, destination_label, prov
 export const hubService = {
   /** null = the hub is off on this server (no button, no tab). */
   async project(projectId: string): Promise<HubProjectStatus | null> {
+    if (!hasSupabaseConfig) return HUB_DEMO_STATUS;     // demo: static simulation, no network
     try {
       return await api<HubProjectStatus>(`/api/hub/projects/${encodeURIComponent(projectId)}`);
     } catch (e) {
@@ -92,12 +94,14 @@ export const hubService = {
   },
   /** Recorded chat communication of a project (task sources, linked thread replies, PI imports), newest first. */
   async messages(projectId: string, limit = 200): Promise<HubMessage[]> {
+    if (!hasSupabaseConfig) return HUB_DEMO_MESSAGES;
     const { data, error } = await supabase.from('hub_messages').select(MESSAGE_COLUMNS).eq('project_id', projectId).order('sent_at', { ascending: false }).limit(limit);
     if (error) throw new DriveError('db', 'Komunikaci se nepodařilo načíst.');
     return (data ?? []) as HubMessage[];
   },
   /** The chat conversation of one task (source message + synced thread replies), oldest first. */
   async taskConversation(cardId: string): Promise<HubMessage[]> {
+    if (!hasSupabaseConfig) return HUB_DEMO_MESSAGES.filter((m) => m.card_id === cardId).reverse();
     const { data, error } = await supabase.from('hub_messages').select(MESSAGE_COLUMNS).eq('card_id', cardId).order('sent_at', { ascending: true }).limit(200);
     if (error) return [];
     return (data ?? []) as HubMessage[];

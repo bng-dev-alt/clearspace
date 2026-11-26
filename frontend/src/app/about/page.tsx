@@ -3,6 +3,7 @@ import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
 import { calendarFeatureEnabled } from '../../lib/google/config';
 import { slackFeatureEnabled, telegramFeatureEnabled } from '../../lib/notify/config';
+import { hubAnyEnabled } from '../../lib/hub/config';
 
 export const metadata: Metadata = { title: 'O aplikaci – ClearSpace' };
 
@@ -35,6 +36,13 @@ export default function AboutPage() {
           <h2>Oznámení do Slacku a Telegramu</h2>
           <p>Vybraná oznámení (přiřazení úkolu, blížící se termín, zmínky a další) vám ClearSpace může posílat i do Slacku nebo Telegramu – jen vám osobně, s odkazem zpět do aplikace. Bez textu komentářů a bez příloh.</p>
           <p style={{ marginTop: '0.5rem' }}>Podrobnosti: <Link href="/privacy#notifikace">Ochrana osobních údajů – oznámení mimo aplikaci</Link>.</p>
+        </section>
+      )}
+      {hubAnyEnabled() && (
+        <section className="settings-card" id="komunikace" data-testid="about-hub">
+          <h2>Projekty propojené se Slackem a Telegramem</h2>
+          <p>Projekt lze propojit s vybranými Slack kanály a Telegram skupinami: do nich chodí stručná oznámení o změnách, ze zprávy lze vytvořit úkol a odpovědi ve vlákně úkolu se propisují do komentářů. Čtení komunikace pro Project Intelligence je vypnuté, dokud ho správce projektu výslovně nezapne.</p>
+          <p style={{ marginTop: '0.5rem' }}>Podrobnosti: <Link href="/privacy#komunikace">Ochrana osobních údajů – komunikace projektu</Link>.</p>
         </section>
       )}
       <section className="settings-card">

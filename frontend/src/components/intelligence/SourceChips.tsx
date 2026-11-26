@@ -12,6 +12,7 @@ const KIND_LABEL: Record<string, string> = {
   activity: 'aktivita',
   item: 'porada',
   meeting: 'porada',
+  comm: 'chat',
 };
 
 /** Odkazy na zdroje tvrzení: karta se otevře, závěr z porady vede na detail porady. Vše ostatní je jen popisek. */

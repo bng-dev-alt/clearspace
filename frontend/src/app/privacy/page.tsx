@@ -3,6 +3,7 @@ import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
 import { serviceMode } from '../../lib/google/config';
 import { slackFeatureEnabled, telegramFeatureEnabled } from '../../lib/notify/config';
+import { hubAnyEnabled, hubIntelligenceEnabled } from '../../lib/hub/config';
 
 export const metadata: Metadata = { title: 'Ochrana osobních údajů – ClearSpace' };
 // The controller's identity and contact come from SERVER env (PRIVACY_CONTROLLER, PRIVACY_CONTACT_EMAIL): never hard-coded in the
@@ -104,6 +105,23 @@ export default function PrivacyPage() {
             <li><strong>Co ukládáme:</strong> šifrovaně přístupový údaj (Slack: token aplikace pro váš workspace a vaše ID ve Slacku; Telegram: ID chatu), název workspace nebo jméno v Telegramu (vidíte jen vy) a frontu odeslaných oznámení bez textu (jen identifikátory a stav) po dobu 30 dní.</li>
             <li><strong>Slack a Telegram</strong> jsou samostatní správci zpráv, které vám doručí; zprávy u sebe ukládají podle svých pravidel. Odpojením v ClearSpace smažeme přístupové údaje (u Slacku zrušíme i token, pokud ho nepoužívají další lidé z vašeho workspace).</li>
             <li>Údaje z oznámení se neposílají žádnému poskytovateli umělé inteligence.</li>
+          </ul>
+        )}
+      </section>
+
+      <section className="settings-card" id="komunikace">
+        <h2>3d. Komunikace projektu – Slack kanály a Telegram skupiny (volitelné)</h2>
+        {!hubAnyEnabled() ? (
+          <p data-testid="privacy-hub-off">Propojení projektů se Slack kanály ani Telegram skupinami není na tomto serveru zapnuté. ClearSpace zde z chatů nic nečte ani do nich nepíše.</p>
+        ) : (
+          <ul data-testid="privacy-hub">
+            <li><strong>Jen výslovně propojené:</strong> vlastník nebo správce projektu propojí konkrétní kanál / skupinu jednorázovým kódem a propojení v ClearSpace potvrdí. Nikdy celý workspace, kontakty, adresáře, soukromé konverzace ani historie zpráv před propojením.</li>
+            <li><strong>Oznámení:</strong> do propojeného kanálu chodí jen typ změny, název úkolu a projektu a odkaz. Komentáře se do vlákna posílají jen u úkolu, který vznikl z chatu, a jen při zapnutém režimu „Interaktivní“.</li>
+            <li><strong>Co ukládáme:</strong> zprávu, ze které někdo vytvořil úkol, odpovědi ve vlákně takového úkolu (autor, text, čas, odkaz na zprávu) a – jen kde to správce výslovně zapnul pro Project Intelligence – nové zprávy z daného kanálu (Slack) nebo zprávy, které projektový bot vidí (Telegram, režim soukromí zapnutý). Ostatní zprávy se zahazují bez uložení. ID kanálů a uživatelů ukládáme jen jako jednosměrné otisky, přístupové údaje šifrovaně.</li>
+            <li><strong>Kdo to vidí:</strong> členové projektu. Úkoly a komentáře z chatu vznikají jen jménem ověřeného člověka s propojeným účtem a právem upravovat; zprávy neověřených autorů se jen zaznamenají.</li>
+            <li><strong>Uchování:</strong> zprávy pro Project Intelligence nejvýš 90 dní; úpravy a smazání ve Slacku se propisují (Telegram botům mazání neoznamuje). Odpojením kanálu / skupiny se zprávy pro AI smažou ihned; záznamy u úkolů zůstávají jako historie, pokud správce nezvolí úplné smazání. Technické záznamy o doručení 30 dní, přijaté události 7 dní.</li>
+            <li><strong>Umělá inteligence:</strong> {hubIntelligenceEnabled() ? 'zprávy z kanálů, kde to správce zapnul, smí Project Intelligence použít jako citovaný zdroj; nikdy podle nich sama nemění úkoly.' : 'na tomto serveru komunikaci z chatů žádnému poskytovateli AI neposíláme.'}</li>
+            <li><strong>Slack a Telegram</strong> jsou samostatní správci zpráv ve svých službách a ukládají je podle svých pravidel.</li>
           </ul>
         )}
       </section>

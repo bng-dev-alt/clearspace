@@ -16,7 +16,7 @@ export interface Citation {
   meetingId: string | null;
 }
 
-const MARKER = /\[((?:card|comment|check|activity|item):[^\]\s]+|meeting:[^\]\s]+#[^\]\s]+)\]/g;
+const MARKER = /\[((?:card|comment|check|activity|item|comm):[^\]\s]+|meeting:[^\]\s]+#[^\]\s]+)\]/g;
 
 export function linkCitations(content: string, sources: SourceRecord[]): { content: string; citations: Citation[] } {
   const byRef = new Map(sources.map((s) => [s.ref, s]));

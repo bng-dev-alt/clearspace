@@ -3730,6 +3730,13 @@ body {
 .settings-service { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.55rem 0.7rem;
   border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); }
 .settings-service strong { color: var(--dark-navy); font-size: 0.82rem; }
+/* RUN 05: notifications outside the app (Slack / Telegram) -- tokens only, same structure as the Google card */
+.notify-prefs { margin: 0; padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.notify-prefs legend { padding: 0 0.3rem; font-size: 0.78rem; font-weight: 700; color: var(--dark-navy); }
+.notify-check { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.8rem; color: var(--dark-navy); line-height: 1.4; cursor: pointer; overflow-wrap: anywhere; }
+.notify-check input { margin-top: 0.15rem; flex-shrink: 0; }
+.notify-projects { display: flex; flex-direction: column; gap: 0.3rem; padding-top: 0.35rem; border-top: 1px solid var(--border); }
+.notify-project-list { display: flex; flex-direction: column; gap: 0.25rem; padding-left: 1.4rem; max-height: 14rem; overflow: auto; }
 /* RUN 02C: public static pages (/about, /privacy) -- readable without login */
 .public-page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 1rem 3rem 0; }
 .public-page-brand { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; color: var(--dark-navy); text-decoration: none; }

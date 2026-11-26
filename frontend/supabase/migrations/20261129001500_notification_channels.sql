@@ -619,6 +619,12 @@ BEGIN
         WHEN p_outcome = 'release' THEN 'pending'
         WHEN p_outcome = 'retry' AND r.attempts < 5 THEN 'pending'
         ELSE 'failed' END;
+    -- never put a message back for a channel that meanwhile became unusable (paused, blocked, reconnect, removed)
+    IF v_status = 'pending' AND NOT EXISTS (SELECT 1 FROM public.notification_channels c WHERE c.id = r.channel_id AND c.status = 'active' AND c.enabled) THEN
+        v_status := 'cancelled';
+        p_outcome := 'cancelled';
+        p_error_code := 'channel_inactive';
+    END IF;
     UPDATE public.notification_deliveries d
        SET status = v_status, lease_until = NULL, updated_at = now(),
            attempts = CASE WHEN p_outcome = 'release' THEN greatest(d.attempts - 1, 0) ELSE d.attempts END,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1 the RUN 06 pilot checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1 the RUN 06 pilot checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks; EXPECT_HUB_OFF=1 the RUN 07 communication-hub containment checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -127,6 +127,24 @@ if [ "${EXPECT_SLACK_OFF:-0}" = 1 ] && [ "${EXPECT_TELEGRAM_OFF:-0}" = 1 ]; then
   echo "$H" | tr 'A-Z' 'a-z' | grep -q 'location: /settings?notify=disabled' && ! echo "$H" | grep -qi 'set-cookie: cs_notify' && ok "Slack callback (off) -> /settings?notify=disabled, no cookie" || bad "Slack callback while off parks a cookie or redirects elsewhere"
   P=$(get /privacy); echo "$P" | grep -q 'privacy-notify-off' && ! echo "$P" | grep -q 'data-testid="privacy-notify"' && ok "/privacy: Slack / Telegram stated as NOT enabled" || bad "/privacy does not state that notifications are off"
   A=$(get /about); echo "$A" | grep -q 'about-notify' && bad "/about presents notifications although they are off" || ok "/about: no notifications section"
+fi
+
+# RUN 07 (EXPECT_HUB_OFF=1, a build with the hub code and HUB_SLACK_ENABLED / HUB_TELEGRAM_ENABLED off): every /api/hub route -- the signed
+# provider webhooks and the scheduler endpoint too -- is closed BEFORE any auth, signature, config or database access (503 hub_*disabled);
+# the install callback parks nothing; /privacy says the hub is off; /about has no section.
+if [ "${EXPECT_HUB_OFF:-0}" = 1 ]; then
+  for mp in "GET /api/hub/projects/x" "POST /api/hub/projects/x" "PATCH /api/hub/destinations/00000000-0000-4000-8000-000000000000" \
+            "POST /api/hub/destinations/00000000-0000-4000-8000-000000000000" "DELETE /api/hub/destinations/00000000-0000-4000-8000-000000000000" \
+            "GET /api/hub/identity" "POST /api/hub/identity" "POST /api/hub/slack/install/start" "POST /api/hub/slack/install/complete" \
+            "POST /api/hub/slack/commands" "POST /api/hub/slack/interactivity" "POST /api/hub/slack/events" "POST /api/hub/telegram/webhook" "POST /api/hub/dispatch"; do
+    m=${mp%% *}; p=${mp#* }
+    b=$(get "$p" -X "$m" -H 'Content-Type: application/json' -H 'x-hub-secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' -d '{"provider":"slack"}' -w ' HTTP%{http_code}')
+    case "$b" in *'disabled"'*' HTTP503') ok "$m $p -> 503 (switched off)";; *) bad "$m $p -> ${b: -7} (expected 503 hub_*disabled)";; esac
+  done
+  H=$(get "/api/hub/slack/install/callback?state=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code=x" -I)
+  echo "$H" | tr 'A-Z' 'a-z' | grep -q 'location: /settings?hub=disabled' && ! echo "$H" | grep -qi 'set-cookie: cs_hub' && ok "hub Slack install callback (off) -> /settings?hub=disabled, no cookie" || bad "hub install callback while off parks a cookie or redirects elsewhere"
+  P=$(get /privacy); echo "$P" | grep -q 'privacy-hub-off' && ! echo "$P" | grep -q 'data-testid="privacy-hub"' && ok "/privacy: project communication hub stated as NOT enabled" || bad "/privacy does not state that the hub is off"
+  A=$(get /about); echo "$A" | grep -q 'about-hub' && bad "/about presents the hub although it is off" || ok "/about: no hub section"
 fi
 
 echo "== client bundle"

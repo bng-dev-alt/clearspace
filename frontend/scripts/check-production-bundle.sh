@@ -17,7 +17,11 @@ for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_
   'SLACK_INTEGRATION_ENABLED' 'TELEGRAM_INTEGRATION_ENABLED' 'NOTIFY_SERVER_SECRET' 'NOTIFY_TOKEN_ENCRYPTION_KEY' 'SLACK_CLIENT_SECRET' 'SLACK_CLIENT_ID' \
   'TELEGRAM_BOT_TOKEN' 'SLACK_API_MOCK_BASE' 'TELEGRAM_API_MOCK_BASE' 'slack.com/api' 'api.telegram.org' 'oauth.v2.access' 'chat.postMessage' \
   'xoxb-' 'xoxp-' 'MOCKmockMOCK' 'x-notify-secret' 'notify_dispatch' 'notify_scheduler_tick' 'notify_link_begin' 'notify_slack_complete' \
-  'notify_telegram_attach' 'notify_test_begin' 'secret_enc' 'cs_notify_slack'; do
+  'notify_telegram_attach' 'notify_test_begin' 'secret_enc' 'cs_notify_slack' \
+  'HUB_SLACK_ENABLED' 'HUB_TELEGRAM_ENABLED' 'HUB_INTELLIGENCE_ENABLED' 'HUB_SERVER_SECRET' 'HUB_TOKEN_ENCRYPTION_KEY' 'HUB_SERVICE_EMAIL' 'HUB_SERVICE_PASSWORD' \
+  'SLACK_HUB_CLIENT_ID' 'SLACK_HUB_CLIENT_SECRET' 'SLACK_HUB_SIGNING_SECRET' 'SLACK_HUB_API_MOCK_BASE' 'TELEGRAM_HUB_BOT_TOKEN' 'TELEGRAM_HUB_WEBHOOK_SECRET' \
+  'TELEGRAM_HUB_API_MOCK_BASE' 'x-hub-secret' 'x-slack-signature' 'x-telegram-bot-api-secret-token' 'hub_svc_' 'hub_scheduler_tick' 'hub_dispatch' 'hub_link_begin' \
+  'hub_slack_install' 'cs_hub_slack' 'views.open' 'getChatMember' 'chat.getPermalink' 'hub-service@'; do
   n=$(grep -rlF -- "$pat" .next/static 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" != 0 ]; then echo "FAIL: '$pat' found in $n client file(s)"; bad=1; else echo "ok - no '$pat' in the client bundle"; fi
 done

@@ -76,6 +76,8 @@ if (process.env.HUB_EXPECT_OFF === '1') {
   assert.equal(cb.status, 303); assert.match(cb.headers.get('location'), /hub=disabled/); assert.ok(!(cb.headers.get('set-cookie') ?? '').includes('cs_hub'));
   const st = (await ctl('stats')).json;
   assert.equal(st.slackPosts + st.tgSends + st.exchanges + st.views + st.chatMember, 0, 'no provider call');
+  assert.ok((await http(`${APP}/privacy`)).text.includes('privacy-hub-off'), 'privacy says off');
+  assert.ok(!(await http(`${APP}/about`)).text.includes('about-hub'), 'about has no hub section');
   ok(`A27: switches OFF -> all ${USER_ROUTES.length} hub routes answer 503 first (signed webhooks and the dispatcher too); the install callback parks nothing; zero provider calls`);
   console.log(`\nHub HTTP (OFF): ${passed} groups passed (SIMULATED providers)`);
   process.exit(0);
@@ -489,7 +491,7 @@ const viewM = await db(`/rest/v1/hub_intelligence_messages?select=*&project_id=e
 const viewX = await db(`/rest/v1/hub_intelligence_messages?select=*&project_id=eq.${P}`, { token: X.token });
 assert.equal(viewX.status === 200 ? viewX.json.length : 0, 0, 'A9: outsider sees nothing');
 if (piOn) {
-  assert.equal(viewM.json.length, 1); assert.ok(!('msg_key_hmac' in viewM.json[0]), 'routing key not exposed');
+  assert.equal(viewM.json.filter((r) => r.kind === 'ingested').length, 1); assert.ok(viewM.json.every((r) => !('msg_key_hmac' in r) && r.project_id === P), 'routing key not exposed');
   assert.equal(sql(`select count(*) from public.cards where project_id = '${P}' and column_id = '${P}-done'`), '0', 'A25: injected text changed nothing');
   // A23: switching PI off hides it immediately
   await cfgDest(pub.id, { interactive: true, intelligence: false, eventTypes: ['task_created'] });

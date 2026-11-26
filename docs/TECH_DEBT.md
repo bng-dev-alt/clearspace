@@ -106,3 +106,16 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Plánovač hubu = druhý cron job (D15); každý běh max 20 položek (souhrny se proto mohou rozdělit do dvou zpráv).
 * `hub-stack.sh up` na běžícím stacku aplikuje jen migraci 1600 (opakované aplikování starší 1300 naráží na pozdější testovací data – `external_resource_links_provider_check`).
 * Vitest v sandboxu: testy s lokálními sockety (SMTP, STT) padají na zákazu bindování portů; mimo sandbox 1423/1423.
+
+## RUN 07B – stav omezení RUN 07 a nová
+* **Vyřešeno**: at-most-once příchozí zpracování (→ odolný inbox, D23); chybějící permalinky synchronizovaných odpovědí (Slack); obnova po odebrání
+  bota / reinstalaci (→ „Ověřit znovu“); `/integrations/link` + chat-iniciovaná identita (→ odstraněno, D22); 13 nálezů revize (`docs/run07b/FINDINGS.md`).
+* **Trvá**: Telegram neoznamuje botům mazání zpráv; Slack zpráva v soukromém kanálu bez `groups:read` nezjistí typ kanálu; checkboxy modalu bez
+  optimistického update; odpojení přes nativní `confirm()`; souhrny po max. 20 položkách na běh.
+* **Nové**: odpověď do chatu přerušená pádem se neopakuje (`reply_ambiguous`, záměrně); Telegram `/task` – pokud proces spadne mezi odesláním
+  potvrzení a připojením vlákna, úkol vznikne bez propojeného vlákna (odpovědi se nepropíší; další `/task` řekne „Úkol už existuje“).
+* **Prostředí**: spouštěcí smyčka `collab-stack.sh up` znovu aplikuje všechny migrace; na stacku s pozdějšími testovacími daty se zastaví na 1300
+  a starší definice funkcí (1200) přepíšou novější → Gmail/Kalendář aktivita jako „Disk“. Náprava: znovu aplikovat 1400+; trvalé řešení =
+  přeskakovat migrace se zapsaným markerem (rozhodnutí pro všechny RUN skripty).
+* **Cloudflare quick tunel** může vrátit 429 (bez účtu) → pro živé testy pojmenovaný tunel vlastníka.
+* TD-2 (`task-resources.spec.ts:140`) padá dál beze změny (i na `origin/main`).

@@ -13,6 +13,7 @@
 #   frontend/scripts/hub-live.sh set-tunnel      # OPTIONAL named Cloudflare tunnel token (stable hostname; HUB_PUBLIC_URL=https://<host> app)
 #   frontend/scripts/hub-live.sh status          # which items exist (never values) -- hub + RUN 05 personal items
 #   frontend/scripts/hub-live.sh app             # stack + gate + tunnel + Telegram webhooks + app; prints the Slack manifest path
+#   frontend/scripts/hub-live.sh manifest        # Slack manifest for HUB_PUBLIC_URL (named tunnel) -- create the Slack app BEFORE the first run
 #   frontend/scripts/hub-live.sh gate            # live gate (bots, privacy modes, webhooks, tunnel scoping) -- booleans only
 #   frontend/scripts/hub-live.sh forget          # delete the hub Keychain items
 # RUN 05 personal notifications use their own Keychain items: frontend/scripts/notify-live.sh set-slack | set-telegram (same session).
@@ -124,6 +125,9 @@ case "${1:-}" in
     echo ">>> Slack manifest with this tunnel: $DIR/hub-live-slack-manifest.yaml (App Manifest -> paste -> Save; the tunnel URL changes per run)"
     echo ">>> LIVE (real providers, synthetic data): open https://localhost:$HTTPS_PORT/?login=auto  (accept the local certificate once)"
     APP_BASE_URL_OVERRIDE="https://localhost:$HTTPS_PORT" "$HERE/scripts/hub-stack.sh" app;;
+  manifest)   # print the project Slack app manifest for a stable public URL (named tunnel): HUB_PUBLIC_URL=https://<host> hub-live.sh manifest
+    [ -n "${HUB_PUBLIC_URL:-}" ] || { echo "set HUB_PUBLIC_URL=https://<your tunnel hostname>"; exit 2; }
+    sed -e "s#https://<BASE>/api/hub/slack/install/callback#https://localhost:$HTTPS_PORT/api/hub/slack/install/callback#" -e "s#https://<BASE>#$HUB_PUBLIC_URL#g" "$HERE/../docs/run07b/slack-hub-manifest.yaml";;
   gate) load_env; eval "$("$HERE/scripts/hub-stack.sh" env 2>/dev/null)"; HUB_LIVE_URL=$(cat "$DIR/hub-live-url" 2>/dev/null || true) exec node "$HERE/supabase/tests/hub_live_gate.mjs";;
   forget)
     for a in slack_hub_client_id slack_hub_client_secret slack_hub_signing_secret telegram_hub_bot_token telegram_hub_bot_username telegram_pi_bot_token telegram_pi_bot_username cloudflare_tunnel_token; do

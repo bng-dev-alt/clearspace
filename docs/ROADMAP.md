@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 07)
+# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 07B)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -19,6 +19,7 @@
 | později | Živá akceptace Slack/Telegram (owner block) → rozhodnutí o zapnutí (pilot / veřejně); obousměrné zprávy, digesty, kanály – LATER | vlastník | `docs/run05/HANDOFF_NEXT_RUNS.md` |
 | 06 | Google demo + pilot (Gmail/Kalendář pro prezentujícího + demo účet) | **v produkci** (pilot) | `docs/run06/` |
 | **07** | **Project Communication Hub** (projekt ↔ vybrané Slack kanály a Telegram skupiny: propojení kódem + potvrzení, oznámení se souhrny, úkol ze zprávy, synchronizace vlákna ↔ komentáře, identita, záložka Komunikace, PI opt-in se zdrojem `comm:`, demo simulace) | **merge-ready lokálně, tag `run07-mock-complete`** (nepushnuto, nenasazeno, produkce beze změny); mock/DB/HTTP/E2E + zkouška na replice produkce PASS; **živá akceptace BLOCKED** (owner block: staging s veřejným HTTPS, Slack app, bot) | `docs/run07/HANDOFF.md`, `ACCEPTANCE.md`, `PRODUCTION_ROLLOUT.md` |
+| **07B** | Hardening hubu (odolný inbox, souběh, identita zahajovaná v ClearSpace, volitelný PI bot pro Telegram, permalinky, „Ověřit znovu“, 13 nálezů bezpečnostní revize) + konsolidace | **v `main`** (tag `run07b-hardening-complete`), **produkce beze změny** (migrace 1600 + 1700 nacvičené na produkčním DDL); kompletní regrese PASS; **živá akceptace BLOCKED** (owner block: boti, Slack app, pojmenovaný tunel) | `docs/run07b/README.md`, `OWNER_BLOCK.md` |
 | později (LATER z RUN 07) | Plnohodnotní klienti chatu, kontakty, soukromé konverzace, celoworkspace indexace, historický import, hovory, zrcadlení souborů, autonomní AI odpovědi, další poskytovatelé (Teams, Discord, e-mail), volitelný ingest bot pro Telegram, přehled kanálů pro výběr (`channels:read`) | návrh | `docs/run07/DECISIONS.md` |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)

@@ -10,21 +10,23 @@ Konfigurace aplikace odmítne shodné Client ID / token bota s RUN 05. Všechny 
 | `HUB_SLACK_ENABLED`, `HUB_TELEGRAM_ENABLED` | `1` = zapnuto (výchozí vypnuto, každá routa kontroluje přepínač jako první) |
 | `HUB_INTELLIGENCE_ENABLED` | `1` = Project Intelligence smí číst komunikaci kanálů, kde to správce zapnul (kill switch, výchozí 0) |
 | `HUB_SERVER_SECRET` | ≥ 32 znaků, jiný než ostatní server secrety; SHA-256 v `server_trust('hub')`; zároveň autentizuje plánovač |
+| `HUB_ROUTING_KEY` | ≥ 32 znaků, jiný než `HUB_SERVER_SECRET`, **nikdy se nerotuje** (klíč HMAC směrovacích otisků; RUN 07B) |
 | `HUB_TOKEN_ENCRYPTION_KEY` (+ `_PREVIOUS`) | base64 z 32 náhodných bajtů (`openssl rand -base64 32`), jiný než Google/notify klíč |
 | `HUB_SERVICE_EMAIL`, `HUB_SERVICE_PASSWORD` | servisní identita webhooků: obyčejný Supabase uživatel bez projektů; heslo ≥ 16 znaků |
 | `SLACK_HUB_CLIENT_ID`, `SLACK_HUB_CLIENT_SECRET`, `SLACK_HUB_SIGNING_SECRET` | z Slack aplikace (Basic Information) |
 | `TELEGRAM_HUB_BOT_TOKEN`, `TELEGRAM_HUB_BOT_USERNAME`, `TELEGRAM_HUB_WEBHOOK_SECRET` | token od @BotFather, jméno bota, náhodné tajemství 32–256 znaků `[A-Za-z0-9_-]` |
+| `TELEGRAM_HUB_PI_BOT_TOKEN`, `TELEGRAM_HUB_PI_BOT_USERNAME`, `TELEGRAM_HUB_PI_WEBHOOK_SECRET` | **volitelný** PI bot (privacy OFF, jen čte, třetí samostatný bot, vlastní tajemství); webhook `/api/hub/telegram/pi-webhook`, `allowed_updates=["message","edited_message"]` |
 | `APP_BASE_URL` | veřejná HTTPS adresa aplikace |
 
 ## 2. Databáze (jednou na prostředí)
-1. Migrace `20261130001600_communication_hub.sql` (produkce jen `scripts/apply-hub-hosted.sh` v rámci schválení vlastníka; předtím `scripts/rehearse-hub-prod.sh`).
+1. Migrace `20261130001600_communication_hub.sql` + `20261201001700_hub_hardening.sql` (produkce jen `scripts/apply-hub-hosted.sh` – obě v jedné transakci – v rámci schválení vlastníka; předtím `scripts/rehearse-hub-prod.sh`).
 2. Servisní identita: vytvořit uživatele (`HUB_SERVICE_EMAIL`, potvrzený e-mail), pak
    `psql -v uid=<auth.users.id> -v secret_sha256=<sha256 hex HUB_SERVER_SECRET> -f frontend/supabase/ops/hub_service_principal.sql`.
 3. Plánovač (pg_cron každou minutu → `/api/hub/dispatch`): `psql -v url=https://<APP>/api/hub/dispatch -v secret=<HUB_SERVER_SECRET> -f frontend/supabase/ops/hub_scheduler_enable.sql`;
    vypnutí `hub_scheduler_disable.sql`. **Do produkce jen se schválením.**
 
 ## 3. Slack aplikace „ClearSpace Projekty“ (api.slack.com → Create New App → From an app manifest)
-Nahraďte `<BASE>` veřejnou HTTPS adresou.
+Nahraďte `<BASE>` veřejnou HTTPS adresou (aktuální manifest: `docs/run07b/slack-hub-manifest.yaml`; `/clearspace` má nově `ucet KÓD`).
 ```yaml
 display_information:
   name: ClearSpace Projekty
@@ -63,13 +65,15 @@ settings:
 * Žádné user scopes, žádné `channels:read` / `users:read` (ClearSpace nevidí seznam kanálů ani lidí workspace).
 * Instalace: ClearSpace → Nastavení → *Slack a Telegram pro projekty* → **Nainstalovat do Slacku** (vlastník/správce projektu). Server odmítne jiné scopes než tyto čtyři.
 * Kanál: pozvat aplikaci (`/invite @ClearSpace Projekty`), v ClearSpace Projekt → Integrace → *Připojit Slack kanál* → v kanálu `/clearspace propojit KÓD` → potvrdit v ClearSpace.
+* Účet (RUN 07B): ClearSpace → Nastavení → *Propojit Slack účet* → ve Slacku `/clearspace ucet KÓD`.
 
 ## 4. Telegram projektový bot (@BotFather)
 1. `/newbot` → token do Keychainu / Vercel env (nikdy do repozitáře). **Privacy mode nechat zapnutý** (výchozí).
 2. Webhook (jednou; tajemství = `TELEGRAM_HUB_WEBHOOK_SECRET`):
    `curl -sS https://api.telegram.org/bot<TOKEN>/setWebhook -d url=https://<BASE>/api/hub/telegram/webhook -d secret_token=<SECRET> -d 'allowed_updates=["message","edited_message","my_chat_member"]' -d drop_pending_updates=true`
 3. Skupina: přidat bota, v ClearSpace *Připojit Telegram skupinu* → ve skupině `/link@<bot> KÓD` (zakladatel/správce skupiny) → potvrdit v ClearSpace.
-4. Účet: soukromá zpráva botovi `/start` → odkaz → potvrdit přihlášený v ClearSpace.
+4. Účet (RUN 07B): ClearSpace → Nastavení → *Propojit Telegram účet* → odkaz `t.me/<bot>?start=KÓD` → Start.
+5. Volitelně PI bot: @BotFather `/setprivacy` → Disable; přidat do skupiny; webhook na `/api/hub/telegram/pi-webhook` s jeho tajemstvím; v ClearSpace u skupiny zapnout PI → *Celá komunikace skupiny*.
 
 ## 5. Lokální vývoj a testy (simulace)
 ```

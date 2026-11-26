@@ -71,6 +71,13 @@ for e in json.load(sys.stdin)["envs"]:
       echo "$names" | grep -qE "^(production|preview):$n$" && bad "$n present although notifications stay OFF (not approved)" || ok "no $n"
     done
   fi
+  # RUN 06 (EXPECT_GOOGLE_PILOT=1): Gmail / Calendar in pilot mode -- the pilot lists exist for Production only (Sensitive), never Preview
+  if [ "${EXPECT_GOOGLE_PILOT:-0}" = 1 ]; then
+    for n in GOOGLE_PILOT_ACCOUNTS GOOGLE_PILOT_USER_IDS; do
+      echo "$names" | grep -qx "production:$n" && ok "$n set for Production" || bad "$n missing in Production (pilot would be off for everyone)"
+      echo "$names" | grep -qx "preview:$n" && bad "$n must not exist for Preview" || ok "no Preview $n"
+    done
+  fi
   unset PGPASSWORD
 }
 
@@ -95,7 +102,9 @@ case "${1:-}" in
     # Monograph is the default in every build since RUN 02C (only NEXT_PUBLIC_ENABLE_MONOGRAPH=0 turns it off); the deploy still passes =1 explicitly
     keys "$host" | grep -qx NEXT_PUBLIC_ENABLE_MONOGRAPH && ok "NEXT_PUBLIC_ENABLE_MONOGRAPH passed explicitly" || ok "no NEXT_PUBLIC_ENABLE_MONOGRAPH in build.env (Monograph stays the default)"
     echo "== black-box checks"
-    MODE=vercel DEPLOYMENT="$URL" EXPECT_DRIVE=1 EXPECT_GMAIL_OFF=${EXPECT_GMAIL_MIGRATION:-0} EXPECT_CALENDAR_OFF=${EXPECT_CALENDAR_MIGRATION:-0} \
+    # RUN 06: EXPECT_GOOGLE_PILOT=1 replaces the Gmail / Calendar OFF checks by the pilot checks (switches = pilot)
+    P=${EXPECT_GOOGLE_PILOT:-0}; GOFF=$([ "$P" = 1 ] && echo 0 || echo "${EXPECT_GMAIL_MIGRATION:-0}"); COFF=$([ "$P" = 1 ] && echo 0 || echo "${EXPECT_CALENDAR_MIGRATION:-0}")
+    MODE=vercel DEPLOYMENT="$URL" EXPECT_DRIVE=1 EXPECT_GMAIL_OFF=$GOFF EXPECT_CALENDAR_OFF=$COFF EXPECT_GMAIL_PILOT=$P EXPECT_CALENDAR_PILOT=$P \
       EXPECT_SLACK_OFF=${EXPECT_NOTIFY_MIGRATION:-0} EXPECT_TELEGRAM_OFF=${EXPECT_NOTIFY_MIGRATION:-0} bash "$FRONTEND/scripts/check-deployment.sh" "$URL" || fail=1
     echo "NOTE: Google OAuth cannot be exercised on the staged URL (not an authorized redirect URI): it is accepted after promote (PRODUCTION_ACCEPTANCE.md)."
     ;;

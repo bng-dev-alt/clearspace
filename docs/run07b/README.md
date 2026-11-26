@@ -65,7 +65,19 @@ opětovné použití 1600 + 1700. SHA-256 všech čtyř souborů připnuté v `a
 5. Kill switches a rollback: `docs/run07/PRODUCTION_ROLLOUT.md`.
 
 ## 6. Git
-Viz závěrečná zpráva běhu (commity, tagy `run07b-hardening-complete`, merge do `main`). Nic se nepushovalo silou, nic se nepřepisovalo.
+* Větev `feature/run07-communication-hub` (z `main` d1236a2) sloučena s `origin/main` 63dfbac (jen AGENTS.md, čistě) → merge `512fb99`;
+  `main` **fast-forward** 63dfbac → 512fb99 v hlavním checkoutu `V1` (nesledované soubory vlastníka nedotčeny) a push; žádný force push.
+* Tagy (pushnuté): `run07-mock-complete` (RUN 07), `run07b-hardening-complete` (512fb99). `run07-live-complete` neexistuje.
+* Vercel má `git.deploymentEnabled: false` → push do `main` **nic nenasadil** (ověřeno: poslední produkční deploy zůstává `dpl_9NkXChVh…`).
+* GitHub secret scanning: 1 otevřené upozornění **z RUN 05** (26. 11. 01:10 UTC, `frontend/src/__tests__/notify/notify.test.ts:12`, syntetický
+  testovací token „Telegram Bot Token“, platnost neznámá) – žádné nové z tohoto pushe; zavření jako „used in tests“ = rozhodnutí vlastníka.
+* Místní sken diffu proti `origin/main`: žádné tokeny, klíče, `.env` ani osobní identifikátory (jen veřejné ID Supabase projektu, ve `main` už ve 23 souborech).
+
+## 6b. Úklid (RUN CLEANUP standard)
+Zastaveno: aplikace 3471, mocky 55621/55622/55623, brána 3473, `next start` 3478, quick tunel (vlastní proces; pojmenované tunely vlastníka
+PID 1343/1691 nedotčeny), stack `cs-notify-sb` (`supabase stop` bez `--no-backup`, data ve volumes, sdílený s RUN 05 – ponechán), loopback proxy.
+Odstraněno (schváleno): kontejner `clearspace-v1-thub` (RUN 07, bez volumes, jen syntetická DB `tdb`, obnovitelná z migrací), dočasné exporty
+`cs-hub-build` a `cs-hub-oldbuild`. Kontejner zkoušky produkce odstraňuje skript sám. Ponecháno: `clearspace-v1-t95` (RUN 05, zastavený).
 
 ## 7. Integrita souborů vlastníka
 Hashe (obsah nečten) `V1/frontend/.env.local`, `V1/frontend/test_intro.mp4`, strom `V1/DEMO`, `.env.local` ve `V1-consolidation` a `V1-intelligence`

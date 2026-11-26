@@ -1,6 +1,7 @@
 'use client';
 
 import { TaskConversation } from '../hub/CommunicationList';
+import { hubService } from '../../services/hubService';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { X, Trash2, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, AlignRight, Maximize2 } from 'lucide-react';
@@ -85,6 +86,16 @@ export default function TaskDetailDrawer({
   notice = null,
   onDismissNotice,
 }: TaskDetailDrawerProps) {
+  // RUN 07B: provenance of comments synced with a chat thread (only when the hub is on)
+  const [chatInfo, setChatInfo] = useState<Awaited<ReturnType<typeof hubService.commentSources>> | null>(null);
+  const commentCount = card?.comments?.length ?? 0;
+  useEffect(() => {
+    if (!showChatConversation || !card?.id) return;
+    let active = true;
+    hubService.commentSources(card.id).then((r) => { if (active) setChatInfo(r); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [showChatConversation, card?.id, commentCount]);
+
   const { profile } = useAuth();
   const params = useParams();
   const projectId = params?.projectId as string;
@@ -859,6 +870,8 @@ export default function TaskDetailDrawer({
               }}
               onEdit={onEditComment ? (commentId, content, mentions) => onEditComment(card.id, commentId, content, mentions) : undefined}
               onDelete={onDeleteComment ? (commentId) => onDeleteComment(card.id, commentId) : undefined}
+              chatSources={chatInfo?.sources}
+              chatNotice={chatInfo && chatInfo.linked.length ? `Komentáře k tomuto úkolu se posílají i do propojeného vlákna (${chatInfo.linked.map((p) => (p === 'slack' ? 'Slack' : 'Telegram')).join(', ')}).` : null}
             />
             {showChatConversation && <TaskConversation cardId={card.id} names={new Map((mentionables ?? []).map((m) => [m.profileId, m.name]))} />}
           </div>

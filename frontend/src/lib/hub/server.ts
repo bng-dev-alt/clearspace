@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../collab/invitationServer';
 import { open, seal } from '../google/crypto';
@@ -104,10 +104,22 @@ export const verifyScheduler = (secret: string, headers: Headers) => {
   return h.length > 0 && safeEq(h, secret);
 };
 export const MAX_INBOUND_BYTES = 256 * 1024;
+/** Raw body with a hard BYTE cap: Content-Length is refused before reading; the stream is cut off past the cap (no unbounded buffering). */
 export async function readRaw(req: Request): Promise<string> {
-  const text = await req.text();
-  if (text.length > MAX_INBOUND_BYTES) throw new HttpError(413, 'Požadavek je příliš velký.', 'too_large');
-  return text;
+  const len = Number(req.headers.get('content-length') ?? '0');
+  if (Number.isFinite(len) && len > MAX_INBOUND_BYTES) throw new HttpError(413, 'Požadavek je příliš velký.', 'too_large');
+  if (!req.body) return '';
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_INBOUND_BYTES) { await reader.cancel().catch(() => undefined); throw new HttpError(413, 'Požadavek je příliš velký.', 'too_large'); }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 // ------------------------------------------------------------------ opaque routing keys (HMAC; never raw provider ids in the database)
@@ -124,7 +136,7 @@ export const keys = (secret: string) => ({
 });
 
 export interface ResolvedDestination {
-  id: string; projectId: string; projectName: string; status: string; label: string; notify: boolean; interactive: boolean; intelligence: boolean;
+  id: string; projectId: string; projectName: string; status: string; label: string; notify: boolean; interactive: boolean; intelligence: boolean; fullIngest: boolean;
   extRefEnc: string; installationId: string | null;
 }
 /** Linking codes are typed by hand: case and spaces do not matter. */
@@ -136,11 +148,16 @@ export const LINK_REASON: Record<string, string> = {
   linked_elsewhere: 'Tento kanál / skupina už je propojená s jiným projektem. Jeden kanál může patřit jen jednomu projektu.',
 };
 export const TASK_REASON: Record<string, string> = {
-  identity_unlinked: 'Nejdřív propojte svůj účet s ClearSpace (Slack: /clearspace ucet, Telegram: soukromá zpráva botovi /start).',
+  identity_unlinked: 'Nejdřív propojte svůj účet: v ClearSpace → Nastavení → Slack a Telegram pro projekty si vytvořte kód a pošlete ho odsud (Slack: /clearspace ucet KÓD, Telegram: odkaz z Nastavení).',
+  card_moved: 'Úkol z této zprávy už existuje, ale byl přesunut do jiného projektu.',
   no_edit_right: 'V tomto projektu nemáte právo vytvářet úkoly.',
   destination_inactive: 'Kanál není s projektem aktivně propojený (čeká na potvrzení, nebo byl odpojen).',
   interactive_off: 'Vytváření úkolů z chatu je pro tento kanál vypnuté (Projekt → Integrace → Interaktivní).',
   invalid_input: 'Název úkolu je prázdný nebo příliš dlouhý (max. 200 znaků).',
   no_column: 'Projekt nemá žádný sloupec.',
 };
-export const identityLink = (cfg: Pick<HubConfig, 'appBaseUrl'>, code: string) => `${cfg.appBaseUrl}/integrations/link#code=${encodeURIComponent(code)}`;
+/** 10 characters from an unambiguous alphabet (~50 bits): typed by hand, single use, 10 minutes, rate-limited. */
+export function humanCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 10 }, () => alphabet[randomInt(alphabet.length)]).join('');
+}

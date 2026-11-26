@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<'/api/hub/destin
   try {
     const cfg = requireHub();
     const id = await destId(ctx);
-    const b = await readJson<{ decision?: unknown; notify?: unknown; interactive?: unknown; intelligence?: unknown; intelligenceAck?: unknown; eventTypes?: unknown }>(req);
+    const b = await readJson<{ decision?: unknown; notify?: unknown; interactive?: unknown; intelligence?: unknown; intelligenceAck?: unknown; eventTypes?: unknown; fullIngest?: unknown }>(req);
     const { db } = await auth(req);
     if (b.decision === 'confirm' || b.decision === 'reject') {
       const { data, error } = await db.rpc('hub_destination_decide', { p_server_secret: cfg.serverSecret, p_destination: id, p_accept: b.decision === 'confirm' });
@@ -34,10 +34,10 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<'/api/hub/destin
     if (!events || !events.every((e) => (HUB_EVENT_TYPES as readonly unknown[]).includes(e))) throw dbError({ code: '22023', message: 'Neplatné typy událostí.' });
     const { error } = await db.rpc('hub_destination_configure', {
       p_server_secret: cfg.serverSecret, p_destination: id, p_notify: b.notify === true, p_interactive: b.interactive === true,
-      p_intelligence: b.intelligence === true, p_intelligence_ack: b.intelligenceAck === true, p_event_types: events,
+      p_intelligence: b.intelligence === true, p_intelligence_ack: b.intelligenceAck === true, p_event_types: events, p_full_ingest: b.fullIngest === true,
     });
     if (error) throw dbError(error);
-    hubLog('destination_configured', { notify: b.notify === true, interactive: b.interactive === true, intelligence: b.intelligence === true });
+    hubLog('destination_configured', { notify: b.notify === true, interactive: b.interactive === true, intelligence: b.intelligence === true, full: b.fullIngest === true });
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'hub-destination');
@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<'/api/hub/destin
 
 const TEST_OUTCOME: Record<string, string> = {
   sent: 'Zkušební zpráva odeslána.',
+  reactivated: 'Zkušební zpráva odeslána – propojení je znovu aktivní.',
   retry: 'Služba je dočasně nedostupná. Zkuste to prosím později.',
   failed: 'Zprávu se nepodařilo odeslat.',
   reconnect: 'Přístup aplikace byl zrušen. Nainstalujte Slack aplikaci znovu.',
@@ -53,7 +54,8 @@ const TEST_OUTCOME: Record<string, string> = {
   archived: 'Kanál je archivovaný.',
 };
 
-/** POST /api/hub/destinations/:id -- a test message (manager, max 1 / 30 s). A dead destination is marked accordingly. */
+/** POST /api/hub/destinations/:id -- a test message / re-check (manager, max 1 / 30 s). A proven send re-activates a cut-off destination
+ *  (bot added back, workspace reinstalled); a dead one is marked accordingly. */
 export async function POST(req: NextRequest, ctx: RouteContext<'/api/hub/destinations/[id]'>) {
   try {
     const cfg = requireHub();
@@ -61,15 +63,19 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/hub/destina
     const { db } = await auth(req);
     const { data, error } = await db.rpc('hub_destination_target', { p_server_secret: cfg.serverSecret, p_destination: id });
     if (error) throw dbError(error);
-    const t = data as { provider: HubProvider; extRefEnc: string; installationId: string | null; installationEnc: string | null; projectName: string };
+    const t = data as { provider: HubProvider; status: string; extRefEnc: string; installationId: string | null; installationEnc: string | null; projectName: string };
     if (!hubProviderEnabled(t.provider)) throw dbError({ code: '22023', message: t.provider === 'slack' ? HUB_MSG.slack_disabled : HUB_MSG.telegram_disabled });
     const { result } = await sendTo(cfg, { provider: t.provider, destinationId: id, extRef: t.extRefEnc, installationId: t.installationId, installation: t.installationEnc }, TEST_TEXT(t.projectName));
-    const o = result.outcome === 'blocked' ? 'removed_bot' : result.outcome;
+    let o: string = result.outcome === 'blocked' ? 'removed_bot' : result.outcome;
+    if (o === 'sent' && t.status !== 'active') {
+      await db.rpc('hub_destination_mark_user', { p_server_secret: cfg.serverSecret, p_destination: id, p_status: 'active', p_error: null });
+      o = 'reactivated';
+    }
     if (o === 'reconnect' || o === 'removed_bot' || o === 'archived') {
       await db.rpc('hub_destination_mark_user', { p_server_secret: cfg.serverSecret, p_destination: id, p_status: o === 'reconnect' ? 'revoked' : o, p_error: 'code' in result ? result.code : null });
     }
     hubLog('destination_test', { provider: t.provider, outcome: o });
-    return NextResponse.json({ outcome: o, message: TEST_OUTCOME[o] ?? TEST_OUTCOME.failed }, { headers: NO_STORE });
+    return NextResponse.json({ outcome: o === 'reactivated' ? 'sent' : o, reactivated: o === 'reactivated', message: TEST_OUTCOME[o] ?? TEST_OUTCOME.failed }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'hub-destination-test');
   }

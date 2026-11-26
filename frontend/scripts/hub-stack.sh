@@ -16,6 +16,8 @@ acc() { sed -n "s/^$1=//p" "$ACC" | head -1; }
 gen_hub() {
   umask 077
   grep -q '^HUB_SERVER_SECRET=' "$ACC" || printf 'HUB_SERVER_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$ACC"
+  grep -q '^HUB_ROUTING_KEY=' "$ACC" || printf 'HUB_ROUTING_KEY=%s\n' "$(openssl rand -hex 32)" >> "$ACC"
+  grep -q '^TELEGRAM_HUB_PI_WEBHOOK_SECRET=' "$ACC" || printf 'TELEGRAM_HUB_PI_WEBHOOK_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$ACC"
   grep -q '^HUB_TOKEN_ENCRYPTION_KEY=' "$ACC" || printf 'HUB_TOKEN_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" >> "$ACC"
   grep -q '^HUB_SERVICE_PASSWORD=' "$ACC" || printf 'HUB_SERVICE_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> "$ACC"
   grep -q '^SLACK_HUB_MOCK_CLIENT_SECRET=' "$ACC" || printf 'SLACK_HUB_MOCK_CLIENT_SECRET=mock-%s\n' "$(openssl rand -hex 16)" >> "$ACC"
@@ -25,12 +27,18 @@ gen_hub() {
 hub_env() {
   export HUB_SLACK_ENABLED=${HUB_SLACK_ENABLED:-1} HUB_TELEGRAM_ENABLED=${HUB_TELEGRAM_ENABLED:-1} HUB_INTELLIGENCE_ENABLED=${HUB_INTELLIGENCE_ENABLED:-0}
   export HUB_SERVER_SECRET; HUB_SERVER_SECRET=$(acc HUB_SERVER_SECRET)
+  export HUB_ROUTING_KEY; HUB_ROUTING_KEY=$(acc HUB_ROUTING_KEY)
   export HUB_TOKEN_ENCRYPTION_KEY; HUB_TOKEN_ENCRYPTION_KEY=$(acc HUB_TOKEN_ENCRYPTION_KEY)
   export HUB_SERVICE_EMAIL=$SERVICE_EMAIL HUB_SERVICE_PASSWORD; HUB_SERVICE_PASSWORD=$(acc HUB_SERVICE_PASSWORD)
   export SLACK_HUB_CLIENT_ID=300000000003.400000000004 SLACK_HUB_CLIENT_SECRET SLACK_HUB_SIGNING_SECRET
   SLACK_HUB_CLIENT_SECRET=$(acc SLACK_HUB_MOCK_CLIENT_SECRET); SLACK_HUB_SIGNING_SECRET=$(acc SLACK_HUB_MOCK_SIGNING_SECRET)
   export TELEGRAM_HUB_BOT_TOKEN=200000002:MOCKmockMOCKmockMOCKmockMOCKhub_cd TELEGRAM_HUB_BOT_USERNAME=clearspace_hub_mock_bot TELEGRAM_HUB_WEBHOOK_SECRET
   TELEGRAM_HUB_WEBHOOK_SECRET=$(acc TELEGRAM_HUB_WEBHOOK_SECRET)
+  # optional Project Intelligence bot (simulated): HUB_PI_BOT=0 leaves it unconfigured
+  if [ "${HUB_PI_BOT:-1}" = 1 ]; then
+    export TELEGRAM_HUB_PI_BOT_TOKEN=300000003:MOCKmockMOCKmockMOCKmockMOCKpi_ef TELEGRAM_HUB_PI_BOT_USERNAME=clearspace_pi_mock_bot TELEGRAM_HUB_PI_WEBHOOK_SECRET
+    TELEGRAM_HUB_PI_WEBHOOK_SECRET=$(acc TELEGRAM_HUB_PI_WEBHOOK_SECRET)
+  fi
   export SLACK_HUB_API_MOCK_BASE="http://127.0.0.1:$HUB_MOCK_PORT" TELEGRAM_HUB_API_MOCK_BASE="http://127.0.0.1:$HUB_MOCK_PORT" HUB_MOCK_PORT
   export MOCK_SLACK_REDIRECTS="http://127.0.0.1:$PORT/api/hub/slack/install/callback"
 }
@@ -39,7 +47,7 @@ case "${1:-}" in
   up)
     if [ -n "$(docker ps -q --filter name=supabase_db_cs-notify-sb)" ] && [ "$(psql_db -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = 1 ]; then
       # running stack: re-apply ONLY the hub migration (re-applying older ones can collide with later test data, e.g. the 1300 provider check)
-      psql_db --single-transaction -f - < "$HERE/supabase/migrations/20261130001600_communication_hub.sql" >/dev/null
+      for m in 20261130001600_communication_hub 20261201001700_hub_hardening; do psql_db --single-transaction -f - < "$HERE/supabase/migrations/$m.sql" >/dev/null; done
     else
       "$HERE/scripts/notify-stack.sh" up
     fi
@@ -61,7 +69,7 @@ case "${1:-}" in
   env)
     "$HERE/scripts/notify-stack.sh" env
     hub_env
-    echo "export HUB_MOCK_URL=http://127.0.0.1:$HUB_MOCK_PORT HUB_SERVER_SECRET=$HUB_SERVER_SECRET SLACK_HUB_SIGNING_SECRET=$SLACK_HUB_SIGNING_SECRET TELEGRAM_HUB_WEBHOOK_SECRET=$TELEGRAM_HUB_WEBHOOK_SECRET TELEGRAM_HUB_BOT_USERNAME=$TELEGRAM_HUB_BOT_USERNAME";;
+    echo "export HUB_MOCK_URL=http://127.0.0.1:$HUB_MOCK_PORT HUB_SERVER_SECRET=$HUB_SERVER_SECRET SLACK_HUB_SIGNING_SECRET=$SLACK_HUB_SIGNING_SECRET TELEGRAM_HUB_WEBHOOK_SECRET=$TELEGRAM_HUB_WEBHOOK_SECRET TELEGRAM_HUB_BOT_USERNAME=$TELEGRAM_HUB_BOT_USERNAME TELEGRAM_HUB_PI_WEBHOOK_SECRET=${TELEGRAM_HUB_PI_WEBHOOK_SECRET:-}";;
   tick)  # one scheduler tick by hand (what pg_cron does every minute); needs scheduler-on once (vault url + secret)
     psql_db -At -c "select public.hub_scheduler_tick(${2:+'$2'::timestamptz})";;
   scheduler-on) psql_db -v url="$DISPATCH_URL" -v secret="$(acc HUB_SERVER_SECRET)" -f - < "$HERE/supabase/ops/hub_scheduler_enable.sql";;

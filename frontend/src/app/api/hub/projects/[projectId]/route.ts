@@ -1,10 +1,9 @@
-import { randomInt } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCaller } from '../../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../../lib/google/server';
 import { hubIntelligenceEnabled, hubSlackEnabled, hubTelegramEnabled } from '../../../../../lib/hub/config';
-import { hubLog, parseHubProvider, requireHub, requireHubSlack, requireHubTelegram } from '../../../../../lib/hub/server';
+import { humanCode, hubLog, parseHubProvider, requireHub, requireHubSlack, requireHubTelegram } from '../../../../../lib/hub/server';
 
 const PROJECT_RE = /^[A-Za-z0-9_-]{1,120}$/;
 const auth = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
@@ -24,6 +23,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/hub/projects
       providers: { slack: slackReady, telegram: telegramReady },
       simulated: { slack: slackReady && !('error' in cfg.slack) && cfg.slack.mock, telegram: telegramReady && !('error' in cfg.telegram) && cfg.telegram.mock },
       telegramBot: telegramReady && !('error' in cfg.telegram) ? cfg.telegram.botUsername : null,
+      telegramPiBot: telegramReady && !('error' in cfg.telegram) && cfg.telegram.pi && hubIntelligenceEnabled() ? cfg.telegram.pi.botUsername : null,
       intelligenceAvailable: hubIntelligenceEnabled(),
     }, { headers: NO_STORE });
   } catch (err) {
@@ -43,9 +43,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/hub/project
     const { projectId } = await ctx.params;
     if (!PROJECT_RE.test(projectId)) throw dbError({ code: '22023', message: 'Neplatný projekt.' });
     const { db } = await auth(req);
-    // 10 characters from an unambiguous alphabet: typed by hand, guessed never (single use, 10 min, rate-limited)
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const code = Array.from({ length: 10 }, () => alphabet[randomInt(alphabet.length)]).join('');
+    const code = humanCode();
     const { error } = await db.rpc('hub_link_begin', { p_server_secret: cfg.serverSecret, p_project_id: projectId, p_provider: provider, p_code_hash: sha256hex(code) });
     if (error) throw dbError(error);
     hubLog('link_code', { provider });

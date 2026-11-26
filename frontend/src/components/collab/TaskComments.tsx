@@ -17,6 +17,10 @@ interface TaskCommentsProps {
   onAdd: (content: string, mentions: string[]) => void;
   onEdit?: (commentId: string, content: string, mentions: string[]) => Promise<boolean>;
   onDelete?: (commentId: string) => Promise<boolean>;
+  /** RUN 07B: comments that came from / went to a linked Slack / Telegram thread (provenance + original message link). */
+  chatSources?: Map<string, { provider: 'slack' | 'telegram'; direction: 'inbound' | 'outbound'; permalink: string | null }>;
+  /** RUN 07B: shown above the composer when comments of this task are synced into a chat. */
+  chatNotice?: string | null;
 }
 
 /** Text area with @mention suggestions limited to the project's members. */
@@ -115,7 +119,7 @@ function CommentBody({ content, names }: { content: string; names: string[] }) {
 }
 
 export default function TaskComments({
-  comments, mentionables, currentUserId, canModerate, readOnly, onAdd, onEdit, onDelete,
+  comments, mentionables, currentUserId, canModerate, readOnly, onAdd, onEdit, onDelete, chatSources, chatNotice,
 }: TaskCommentsProps) {
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -147,6 +151,7 @@ export default function TaskComments({
   return (
     <>
       {error && <p role="alert" style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '0 0 0.5rem' }}>{error}</p>}
+      {chatNotice && <p className="hub-muted" style={{ margin: '0 0 0.5rem' }} data-testid="comments-chat-notice">{chatNotice}</p>}
       <div className="drawer-comments-list" data-testid="comments-list">
         {comments.length === 0 ? (
           <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', fontStyle: 'italic', padding: '0.5rem 0' }}>
@@ -163,6 +168,14 @@ export default function TaskComments({
                   <time className="comment-date" dateTime={c.createdAt} title={new Date(c.createdAt).toLocaleString('cs-CZ')}>
                     {formatRelativeTime(c.createdAt)}
                   </time>
+                  {chatSources?.get(c.id) && (() => {
+                    const src = chatSources.get(c.id)!, name = src.provider === 'slack' ? 'Slack' : 'Telegram';
+                    return src.direction === 'inbound'
+                      ? (src.permalink
+                        ? <a className="comment-edited" href={src.permalink} target="_blank" rel="noopener noreferrer" data-testid={`comment-chat-${c.id}`}>z vlákna ({name}) ↗</a>
+                        : <span className="comment-edited" data-testid={`comment-chat-${c.id}`}>z vlákna ({name})</span>)
+                      : <span className="comment-edited" data-testid={`comment-chat-${c.id}`}>odesláno do vlákna ({name})</span>;
+                  })()}
                   {c.origin && c.origin !== 'app' && (
                     <span className="comment-edited" title="Autor ani čas nebyly ověřeny aplikací (obnova ze zálohy, import nebo starší data)." data-testid={`comment-origin-${c.id}`}>
                       {c.origin === 'import' ? '(importováno)' : '(starší záznam)'}

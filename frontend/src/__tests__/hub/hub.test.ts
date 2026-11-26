@@ -13,7 +13,7 @@ const base: HubItem = { id: '00000000-0000-4000-8000-000000000001', destinationI
   column: 'Hotovo', actor: 'Jana', comment: null, commentAuthor: null, threadRef: null, dueDate: null };
 
 describe('hub config (D5 / D6 separation, mocks)', () => {
-  const env = { HUB_SLACK_ENABLED: '1', HUB_SERVER_SECRET: 's'.repeat(40), HUB_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+  const env = { HUB_SLACK_ENABLED: '1', HUB_SERVER_SECRET: 's'.repeat(40), HUB_ROUTING_KEY: 'r'.repeat(40), HUB_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
     HUB_SERVICE_EMAIL: 'svc@example.test', HUB_SERVICE_PASSWORD: 'p'.repeat(20), APP_BASE_URL: 'http://127.0.0.1:3471',
     SLACK_HUB_CLIENT_ID: '300000000003.400000000004', SLACK_HUB_CLIENT_SECRET: 'abcdefgh12345', SLACK_HUB_SIGNING_SECRET: 'abcdefgh12345678abcd',
     TELEGRAM_HUB_BOT_TOKEN: '200000002:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12', TELEGRAM_HUB_BOT_USERNAME: 'proj_bot', TELEGRAM_HUB_WEBHOOK_SECRET: 'w'.repeat(40) } as unknown as NodeJS.ProcessEnv;
@@ -27,11 +27,20 @@ describe('hub config (D5 / D6 separation, mocks)', () => {
     const c2 = hubConfig({ ...env, TELEGRAM_BOT_TOKEN: env.TELEGRAM_HUB_BOT_TOKEN }); expect(!('error' in c2) && 'error' in c2.telegram).toBe(true);
     expect('error' in hubConfig({ ...env, NOTIFY_SERVER_SECRET: env.HUB_SERVER_SECRET })).toBe(true);
     expect('error' in hubConfig({ ...env, HUB_SERVER_SECRET: 'short' })).toBe(true);
+    expect('error' in hubConfig({ ...env, HUB_ROUTING_KEY: env.HUB_SERVER_SECRET })).toBe(true);   // RUN 07B: routing key apart from the rotatable secret
+    expect('error' in hubConfig({ ...env, HUB_ROUTING_KEY: undefined })).toBe(true);
   });
   test('mock bases only on loopback and never in production', () => {
     const c = hubConfig({ ...env, SLACK_HUB_API_MOCK_BASE: 'http://evil.example' }); expect(!('error' in c) && 'error' in c.slack).toBe(true);
     const p = hubConfig({ ...env, VERCEL_ENV: 'production', APP_BASE_URL: 'https://app.example', SLACK_HUB_API_MOCK_BASE: 'http://127.0.0.1:1' });
     expect('error' in p || 'error' in p.slack).toBe(true);
+  });
+  test('the optional PI bot must be a third bot with its own secret', () => {
+    const t = (extra: Record<string, string>) => { const c = hubConfig({ ...env, HUB_TELEGRAM_ENABLED: '1', ...extra } as unknown as NodeJS.ProcessEnv); return 'error' in c ? c : c.telegram; };
+    expect('error' in t({ TELEGRAM_HUB_PI_BOT_TOKEN: env.TELEGRAM_HUB_BOT_TOKEN!, TELEGRAM_HUB_PI_BOT_USERNAME: 'pi_bot', TELEGRAM_HUB_PI_WEBHOOK_SECRET: 'p'.repeat(40) })).toBe(true);
+    expect('error' in t({ TELEGRAM_HUB_PI_BOT_TOKEN: '300000003:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef99', TELEGRAM_HUB_PI_BOT_USERNAME: 'pi_bot', TELEGRAM_HUB_PI_WEBHOOK_SECRET: env.TELEGRAM_HUB_WEBHOOK_SECRET! })).toBe(true);
+    const ok = t({ TELEGRAM_HUB_PI_BOT_TOKEN: '300000003:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef99', TELEGRAM_HUB_PI_BOT_USERNAME: 'pi_bot', TELEGRAM_HUB_PI_WEBHOOK_SECRET: 'p'.repeat(40) });
+    expect('error' in ok ? null : ok.pi?.botUsername).toBe('pi_bot');
   });
   test('routing keys are opaque and stable', () => {
     expect(hubKey('k', 'slack', 'channel', 'T1', 'C1')).toMatch(/^[0-9a-f]{64}$/);
@@ -147,6 +156,14 @@ describe('Project Intelligence: opted-in chat as a citable, untrusted source', (
     const { content, citations } = linkCitations('Okna až v pátek [comm:m1] [comm:nope].', ctx.sources);
     expect(content).toBe('Okna až v pátek [1].');
     expect(citations[0]).toMatchObject({ kind: 'comm', ref: 'comm:m1' });
+  });
+  test('purposes that propose changes never see chat text (RUN 07B)', () => {
+    for (const purpose of ['pm', 'improve', 'risk', 'capacity', 'daily', 'meeting'] as const) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = assembleContext(data as any, { purpose, now: NOW });
+      expect(c.rendered, purpose).not.toContain('[comm:m1]');
+      expect(c.sources.some((x) => x.kind === 'comm'), purpose).toBe(false);
+    }
   });
   test('no chat -> no chat section', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCaller } from '../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
-import { hubLog, parseHubProvider, requireHub } from '../../../../lib/hub/server';
+import { humanCode, hubLog, parseHubProvider, requireHub } from '../../../../lib/hub/server';
 
 /**
- * Chat identities (RUN 07): which Slack / Telegram accounts act as ME when creating tasks or replying in linked threads. A link is created
- * only from the chat side (`/clearspace propojit` in Slack, /start in a private chat with the project bot) and confirmed here, signed in.
+ * Chat identities: which Slack / Telegram accounts act as ME when creating tasks or replying in linked threads. RUN 07B: the link starts
+ * HERE (signed in) with a single-use code that the user then sends FROM the chat account -- a chat account can never bind itself to
+ * someone else's ClearSpace account by a forwarded link.
  *   GET                         -- my linked chat accounts
- *   POST { code }               -- confirm the link I got privately in the chat
+ *   POST { provider }           -- a code (10 min) + where to send it (Telegram: deep link to the bot)
  *   DELETE { provider, key }    -- unlink
  */
 const auth = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
@@ -28,15 +29,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const cfg = requireHub();
-    const b = await readJson<{ code?: unknown }>(req);
-    if (typeof b.code !== 'string' || !/^[A-Za-z0-9_-]{32,64}$/.test(b.code)) throw dbError({ code: '22023', message: 'Odkaz je neplatný.' });
+    const b = await readJson<{ provider?: unknown }>(req);
+    const provider = parseHubProvider(b.provider);
+    const t = cfg.telegram;
+    if (provider === 'telegram' && 'error' in t) throw dbError({ code: '22023', message: 'Telegram pro projekty není na serveru nastavený.' });
     const { db } = await auth(req);
-    const { data, error } = await db.rpc('hub_identity_confirm', { p_server_secret: cfg.serverSecret, p_code_hash: sha256hex(b.code) });
+    const code = humanCode();
+    const { error } = await db.rpc('hub_identity_begin', { p_server_secret: cfg.serverSecret, p_provider: provider, p_code_hash: sha256hex(code) });
     if (error) throw dbError(error);
-    hubLog('identity_linked', { provider: (data as { provider?: string })?.provider ?? null });
-    return NextResponse.json(data, { headers: NO_STORE });
+    hubLog('identity_begin', { provider });
+    return NextResponse.json(provider === 'telegram' && !('error' in t)
+      ? { code, expiresInSeconds: 600, url: `https://t.me/${t.botUsername}?start=${code}`, instruction: `Otevřete odkaz v Telegramu a stiskněte „Start“ (bot @${t.botUsername}).` }
+      : { code, expiresInSeconds: 600, instruction: `Ve Slacku (kdekoli, kde je aplikace ClearSpace Projekty) napište: /clearspace ucet ${code}` }, { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err, 'hub-identity-confirm');
+    return errorResponse(err, 'hub-identity-begin');
   }
 }
 

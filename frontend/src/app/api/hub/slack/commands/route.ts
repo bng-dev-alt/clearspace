@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomToken, sha256hex } from '../../../../../lib/google/crypto';
+import { sha256hex } from '../../../../../lib/google/crypto';
 import { clean } from '../../../../../lib/notify/message';
 import {
-  HUB_MSG, hubLog, identityLink, keys, LINK_REASON, normCode, readRaw, requireHubSlack, sealRef, serviceDb, svc, verifySlack, type ResolvedDestination,
+  HUB_MSG, hubLog, keys, LINK_REASON, normCode, readRaw, requireHubSlack, sealRef, serviceDb, svc, verifySlack, type ResolvedDestination,
 } from '../../../../../lib/hub/server';
 import { HttpError } from '../../../../../lib/collab/invitationServer';
 
 const HELP = [
   'ClearSpace – příkazy:',
   '• /clearspace propojit KÓD – propojí tento kanál s projektem (kód vytvoří správce v ClearSpace → Projekt → Integrace; aplikaci nejdřív pozvěte do kanálu)',
-  '• /clearspace ucet – propojí váš Slack účet s ClearSpace (pak můžete z chatu vytvářet úkoly)',
+  '• /clearspace ucet KÓD – propojí váš Slack účet s ClearSpace (kód si vytvoříte v ClearSpace → Nastavení → Slack a Telegram pro projekty)',
   '• /clearspace stav – stav propojení tohoto kanálu',
   'Úkol ze zprávy: u zprávy … → Další akce → Vytvořit úkol v ClearSpace.',
 ].join('\n');
@@ -30,15 +30,18 @@ export async function POST(req: NextRequest) {
     const team = f.get('team_id') ?? '', channel = f.get('channel_id') ?? '', user = f.get('user_id') ?? '';
     if (!/^T[A-Z0-9]{2,30}$/.test(team) || !/^[CGD][A-Z0-9]{2,30}$/.test(channel) || !/^[UW][A-Z0-9]{2,30}$/.test(user)) return reply(HUB_MSG.invalid);
     const [verb = '', ...rest] = (f.get('text') ?? '').trim().split(/\s+/);
-    const k = keys(cfg.serverSecret);
+    const k = keys(cfg.routingKey);
     const db = await serviceDb(cfg);
 
     if (/^(ucet|účet|account)$/i.test(verb)) {
-      const code = randomToken(32);
-      await svc(db, cfg, 'hub_svc_identity_begin', { p_code_hash: sha256hex(code), p_provider: 'slack', p_ext_user: k.slackUser(team, user),
+      // the code was created by the SIGNED-IN ClearSpace user; sending it from this Slack account proves both sides (RUN 07B)
+      const code = normCode(rest.join(''));
+      if (!/^[A-Z0-9]{10}$/.test(code)) return reply('Kód si vytvořte v ClearSpace → Nastavení → Slack a Telegram pro projekty → Propojit Slack, pak napište: /clearspace ucet KÓD');
+      const r = await svc<{ ok: boolean; name?: string }>(db, cfg, 'hub_svc_identity_complete', { p_code_hash: sha256hex(code), p_provider: 'slack', p_ext_user: k.slackUser(team, user),
         p_label: `Slack: ${clean(f.get('user_name'), 60) || 'účet'} (${clean(f.get('team_domain'), 60) || 'workspace'})` });
-      hubLog('slack_identity_begin');
-      return reply(`Propojte svůj Slack účet s ClearSpace (odkaz platí 10 minut, vidíte ho jen vy): ${identityLink(cfg, code)}`);
+      hubLog('slack_identity', { ok: r.ok });
+      return reply(r.ok ? `Hotovo: tento Slack účet je propojený s účtem ClearSpace „${clean(r.name, 80) || 'uživatel'}". Pokud jste to nebyli vy, odpojte ho v ClearSpace → Nastavení.`
+        : 'Kód je neplatný nebo vypršel. Vytvořte nový v ClearSpace → Nastavení.');
     }
     if (/^(propojit|link)$/i.test(verb)) {
       if (channel.startsWith('D')) return reply('Propojit lze jen kanál, ne soukromou konverzaci.');
@@ -51,6 +54,7 @@ export async function POST(req: NextRequest) {
         p_id: id, p_code_hash: sha256hex(code), p_provider: 'slack', p_ext_key: k.slackChannel(team, channel),
         p_ext_ref_enc: sealRef(cfg, 'destination', id, { teamId: team, channelId: channel }),
         p_label: `#${clean(f.get('channel_name'), 80) || 'kanál'}`, p_kind: 'slack_channel', p_installation: inst.id,
+        p_linked_by: `Slack: ${clean(f.get('user_name'), 60) || 'člen kanálu'}`,
       });
       hubLog('slack_link', { ok: r.ok, reason: r.reason ?? null });
       if (!r.ok) return reply(LINK_REASON[r.reason ?? ''] ?? HUB_MSG.invalid);
@@ -60,7 +64,7 @@ export async function POST(req: NextRequest) {
       const d = await svc<ResolvedDestination | null>(db, cfg, 'hub_svc_resolve', { p_provider: 'slack', p_ext_key: k.slackChannel(team, channel) });
       if (!d) return reply('Tento kanál není propojený s žádným projektem ClearSpace.');
       const state: Record<string, string> = { pending: 'čeká na potvrzení', active: 'aktivní', removed_bot: 'aplikace není v kanálu', revoked: 'přístup zrušen', archived: 'archivováno', error: 'chyba' };
-      return reply(`Projekt „${clean(d.projectName, 120)}" – ${state[d.status] ?? d.status}. Oznámení: ${d.notify ? 'ano' : 'ne'}, úkoly z chatu: ${d.interactive ? 'ano' : 'ne'}, Project Intelligence: ${d.intelligence ? 'ano' : 'ne'}.`);
+      return reply(`Projekt „${clean(d.projectName, 120)}" – ${state[d.status] ?? d.status}. Oznámení: ${d.notify ? 'ano' : 'ne'}, úkoly z chatu: ${d.interactive ? 'ano' : 'ne'}, Project Intelligence: ${d.intelligence ? 'ano – nové zprávy tohoto kanálu' : 'ne'}.`);
     }
     return reply(HELP);
   } catch (err) {

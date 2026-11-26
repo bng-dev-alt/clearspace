@@ -12,7 +12,7 @@ export type HubEventType = 'task_created' | 'task_completed' | 'status_changed' 
 export interface HubDestination {
   id: string; provider: HubProvider; label: string; kind: 'slack_channel' | 'telegram_group' | 'telegram_supergroup'; status: DestinationStatus;
   notify: boolean; interactive: boolean; intelligence: boolean; eventTypes: HubEventType[]; lastErrorCode: string | null;
-  createdAt: string; confirmedAt: string | null; messages: number;
+  createdAt: string; confirmedAt: string | null; messages: number; fullIngest: boolean; linkedBy: string | null;
 }
 export interface HubProjectStatus {
   canManage: boolean;
@@ -23,6 +23,7 @@ export interface HubProjectStatus {
   providers: { slack: boolean; telegram: boolean };
   simulated: { slack: boolean; telegram: boolean };
   telegramBot: string | null;
+  telegramPiBot: string | null;
   intelligenceAvailable: boolean;
 }
 export interface HubMessage {
@@ -61,7 +62,7 @@ export const hubService = {
   decide(id: string, decision: 'confirm' | 'reject'): Promise<{ status: string }> {
     return api(`/api/hub/destinations/${id}`, { method: 'PATCH', body: { decision } });
   },
-  configure(id: string, c: { notify: boolean; interactive: boolean; intelligence: boolean; intelligenceAck?: boolean; eventTypes: HubEventType[] }): Promise<{ ok: boolean }> {
+  configure(id: string, c: { notify: boolean; interactive: boolean; intelligence: boolean; intelligenceAck?: boolean; eventTypes: HubEventType[]; fullIngest?: boolean }): Promise<{ ok: boolean }> {
     return api(`/api/hub/destinations/${id}`, { method: 'PATCH', body: c });
   },
   test(id: string): Promise<{ outcome: string; message: string }> {
@@ -86,8 +87,26 @@ export const hubService = {
       throw e;
     }
   },
-  confirmIdentity(code: string): Promise<{ provider: HubProvider; label: string }> {
-    return api('/api/hub/identity', { method: 'POST', body: { code } });
+  /** A single-use code (10 min) the user sends FROM the chat account (Telegram: deep link to the bot). */
+  startIdentity(provider: HubProvider): Promise<{ code: string; expiresInSeconds: number; instruction: string; url?: string }> {
+    return api('/api/hub/identity', { method: 'POST', body: { provider } });
+  },
+  /** Comments of a task that came from / went to a chat thread, with the original message link; plus the linked chats. */
+  async commentSources(cardId: string): Promise<{ sources: Map<string, { provider: HubProvider; direction: 'inbound' | 'outbound'; permalink: string | null }>; linked: HubProvider[] }> {
+    const empty = { sources: new Map(), linked: [] as HubProvider[] };
+    if (!hasSupabaseConfig) return empty;
+    const { data: comments } = await supabase.from('task_comments').select('id').eq('card_id', cardId).limit(500);
+    const ids = ((comments ?? []) as Array<{ id: string }>).map((c) => c.id);
+    const [{ data: links }, { data: conv }] = await Promise.all([
+      ids.length ? supabase.from('hub_comment_links').select('comment_id, direction, provider, message:hub_messages(permalink)').in('comment_id', ids) : Promise.resolve({ data: [] }),
+      supabase.from('hub_messages').select('provider').eq('card_id', cardId).not('conversation_id', 'is', null).limit(10),
+    ]);
+    type Link = { comment_id: string; direction: 'inbound' | 'outbound'; provider: HubProvider; message?: { permalink: string | null } | Array<{ permalink: string | null }> | null };
+    const sources = new Map(((links ?? []) as unknown as Link[]).map((l) => {
+      const m = Array.isArray(l.message) ? l.message[0] : l.message;
+      return [l.comment_id, { provider: l.provider, direction: l.direction, permalink: m?.permalink ?? null }] as const;
+    }));
+    return { sources, linked: [...new Set(((conv ?? []) as Array<{ provider: HubProvider }>).map((r) => r.provider))] };
   },
   removeIdentity(provider: HubProvider, key: string): Promise<{ removed: boolean }> {
     return api('/api/hub/identity', { method: 'DELETE', body: { provider, key } });

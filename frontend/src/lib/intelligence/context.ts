@@ -74,6 +74,7 @@ export interface ProjectData {
 export interface ChatLite { id: string; provider: 'slack' | 'telegram'; channel: string; author: string; verified: boolean; text: string; sentAt: string; cardId: string | null }
 const CHAT_LIMIT = 100;
 const CHAT_CAP = 400;
+const COMM_PURPOSES = new Set<ContextPurpose>(['chat', 'brief']);
 
 /** Gramatika ref: typ:id. Id jsou klientem generované TEXT identifikátory, proto jen negativní omezení. */
 export const REF_PATTERN = /^(card|comment|check|activity|item|comm):[^\s\]\[#]{1,200}$|^meeting:[^\s\]\[#]{1,200}#[^\s\]\[#]{1,200}$/;
@@ -251,9 +252,10 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     });
   }
 
-  // RUN 07: opted-in chat messages -- third-party text, below the board's own data, citable, never instructions
+  // RUN 07: opted-in chat messages -- third-party text, below the board's own data, citable, never instructions. RUN 07B: only for
+  // answering / summarising (chat, brief); purposes that PROPOSE changes (pm, improve, risk, capacity, daily, meeting) never see chat text.
   const chatLineOf = new Map<string, string>();
-  for (const m of data.chat ?? []) {
+  for (const m of COMM_PURPOSES.has(opts.purpose) ? data.chat ?? [] : []) {
     const text = clip(m.text, CHAT_CAP);
     const who = `${m.provider === 'slack' ? 'Slack' : 'Telegram'} ${clip(m.channel, 60)} – ${clip(m.author, 60)}${m.verified ? '' : ' (neověřený autor)'}`;
     const line = `[${commRef(m.id)}] ${m.sentAt.slice(0, 16).replace('T', ' ')} ${who}: ${text}`;
@@ -310,7 +312,7 @@ export function assembleContext(data: ProjectData, opts: ContextOptions): Projec
     .map((a) => `[${activityRef(a.id)}] ${activityText(a)}`);
 
   const itemLines = knowledge.filter((i) => included.has(`item:${i.id}`)).map((i) => itemLineOf.get(i.id)!);
-  const chatLines = (data.chat ?? []).filter((m) => included.has(`comm:${m.id}`)).map((m) => chatLineOf.get(m.id)!);
+  const chatLines = (COMM_PURPOSES.has(opts.purpose) ? data.chat ?? [] : []).filter((m) => included.has(`comm:${m.id}`)).map((m) => chatLineOf.get(m.id)!);
 
   // zdroje, které model nedostal, z mapy odstraníme (cituje jen to, co viděl)
   for (const [ref] of sources) {

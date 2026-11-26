@@ -136,7 +136,7 @@ if [ "${EXPECT_HUB_OFF:-0}" = 1 ]; then
   for mp in "GET /api/hub/projects/x" "POST /api/hub/projects/x" "PATCH /api/hub/destinations/00000000-0000-4000-8000-000000000000" \
             "POST /api/hub/destinations/00000000-0000-4000-8000-000000000000" "DELETE /api/hub/destinations/00000000-0000-4000-8000-000000000000" \
             "GET /api/hub/identity" "POST /api/hub/identity" "POST /api/hub/slack/install/start" "POST /api/hub/slack/install/complete" \
-            "POST /api/hub/slack/commands" "POST /api/hub/slack/interactivity" "POST /api/hub/slack/events" "POST /api/hub/telegram/webhook" "POST /api/hub/dispatch"; do
+            "POST /api/hub/slack/commands" "POST /api/hub/slack/interactivity" "POST /api/hub/slack/events" "POST /api/hub/telegram/webhook" "POST /api/hub/telegram/pi-webhook" "POST /api/hub/dispatch"; do
     m=${mp%% *}; p=${mp#* }
     b=$(get "$p" -X "$m" -H 'Content-Type: application/json' -H 'x-hub-secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' -d '{"provider":"slack"}' -w ' HTTP%{http_code}')
     case "$b" in *'disabled"'*' HTTP503') ok "$m $p -> 503 (switched off)";; *) bad "$m $p -> ${b: -7} (expected 503 hub_*disabled)";; esac

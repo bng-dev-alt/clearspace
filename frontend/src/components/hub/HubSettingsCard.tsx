@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plug } from 'lucide-react';
 import { DriveError } from '../../services/driveService';
-import { hubService, PROVIDER_NAME, type HubIdentity } from '../../services/hubService';
+import { hubService, PROVIDER_NAME, type HubIdentity, type HubProvider } from '../../services/hubService';
 import { ProviderIcon } from './ProjectIntegrationsModal';
 
 const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
@@ -25,6 +25,7 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
   const [ids, setIds] = useState<HubIdentity[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  const [pending, setPending] = useState<{ code: string; instruction: string; url?: string } | null>(null);
   const load = useCallback(async () => {
     try { setIds(await hubService.identities()); } catch (e) { setIds(null); setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Stav se nepodařilo načíst.' }); }
   }, []);
@@ -44,6 +45,8 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
     try { await fn(); } catch (e) { setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : fallback }); } finally { setBusy(false); }
   };
 
+  const start = (provider: HubProvider) => run(async () => { setPending(await hubService.startIdentity(provider)); setMessage(null); }, 'Kód se nepodařilo vytvořit.');
+
   if (ids === undefined || ids === null) return message ? <section className="settings-card" id="hub" data-testid="hub-settings"><p role="alert" className="drive-message is-error">{message.text}</p></section> : null;
   return (
     <section className="settings-card" id="hub" data-testid="hub-settings" aria-labelledby="hub-settings-title">
@@ -61,7 +64,19 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
         </li>
       </ul>
       <h3 className="hub-subtitle">Moje propojené chat účty</h3>
-      <p>Úkoly z chatu a odpovědi ve vláknech se ukládají pod vaším jménem jen z účtů, které tu máte propojené. Propojení začnete v chatu: ve Slacku <code>/clearspace ucet</code>, v Telegramu soukromou zprávou <code>/start</code> projektovému botovi.</p>
+      <p>Úkoly z chatu a odpovědi ve vláknech se ukládají pod vaším jménem jen z účtů, které tu máte propojené. Propojení začíná tady: vytvořte kód a pošlete ho ze svého chat účtu (prokážete tím obě strany).</p>
+      <div className="hub-actions">
+        <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} data-testid="hub-identity-slack" onClick={() => start('slack')}>Propojit Slack účet</button>
+        <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} data-testid="hub-identity-telegram" onClick={() => start('telegram')}>Propojit Telegram účet</button>
+      </div>
+      {pending && (
+        <div className="hub-code" data-testid="hub-identity-code-box">
+          <p>{pending.instruction}</p>
+          {pending.url ? <p><a href={pending.url} target="_blank" rel="noopener noreferrer" data-testid="hub-identity-link">Otevřít Telegram</a> (kód {pending.code})</p>
+            : <p className="hub-code-value" data-testid="hub-identity-code">{pending.code}</p>}
+          <p className="hub-muted">Kód platí 10 minut a jde použít jen jednou. Pak <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => { setPending(null); void load(); }} data-testid="hub-identity-refresh">obnovte seznam</button>.</p>
+        </div>
+      )}
       <ul className="settings-services" data-testid="hub-identities">
         {ids.length === 0 && <li className="hub-muted">Žádný propojený účet.</li>}
         {ids.map((i) => (

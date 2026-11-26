@@ -16,12 +16,13 @@ export const ProviderIcon = ({ provider, size = 14 }: { provider: HubProvider; s
 const AUDIT_LABEL: Record<string, string> = {
   link_code_issued: 'vytvořen kód pro propojení', destination_linked: 'kanál / skupina zadala kód', destination_confirmed: 'propojení potvrzeno',
   destination_rejected: 'propojení odmítnuto', destination_configured: 'změna nastavení', destination_removed: 'odpojeno',
-  destination_state: 'změna stavu od poskytovatele', task_created_from_chat: 'úkol vytvořen z chatu',
+  destination_state: 'změna stavu od poskytovatele', task_created_from_chat: 'úkol vytvořen z chatu', destination_reactivated: 'znovu ověřeno a aktivní',
 };
-const PI_SCOPE: Record<HubProvider, string> = {
-  slack: 'Project Intelligence uvidí NOVÉ zprávy z tohoto kanálu od chvíle zapnutí (ne historii) – jen kanál, kde je aplikace ClearSpace Projekty, nic jiného z workspace.',
-  telegram: 'Project Intelligence uvidí jen zprávy, které projektový bot dostane: příkazy pro něj a odpovědi na jeho zprávy (režim soukromí Telegramu je zapnutý, bot ostatní zprávy skupiny nevidí).',
-};
+/** What Project Intelligence actually sees (RUN 07B: never claim more than the bot receives). */
+export const piScope = (d: Pick<HubDestination, 'provider' | 'fullIngest'>) =>
+  d.provider === 'slack' ? 'všechny NOVÉ zprávy tohoto kanálu od zapnutí (ne historie, nic jiného z workspace)'
+    : d.fullIngest ? 'celá komunikace skupiny od zapnutí – čte ji samostatný PI bot (jen čte, nic nepíše)'
+    : 'jen vybrané zprávy: příkazy pro projektového bota a odpovědi na jeho zprávy (ostatní zprávy skupiny bot nevidí)';
 
 interface Props { projectId: string; onClose: () => void }
 
@@ -31,7 +32,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [code, setCode] = useState<{ provider: HubProvider; code: string; instruction: string; until: number } | null>(null);
-  const [piAsk, setPiAsk] = useState<HubDestination | null>(null);
+  const [piAsk, setPiAsk] = useState<{ d: HubDestination; full: boolean } | null>(null);
 
   const load = useCallback(async () => {
     try { setStatus(await hubService.project(projectId)); } catch (e) {
@@ -58,14 +59,15 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
     if (decision === 'confirm') setCode(null);
     await load();
   }, 'Rozhodnutí se nepodařilo uložit.');
-  const save = (d: HubDestination, patch: Partial<Pick<HubDestination, 'notify' | 'interactive' | 'intelligence' | 'eventTypes'>>, ack = false) => run(async () => {
+  const save = (d: HubDestination, patch: Partial<Pick<HubDestination, 'notify' | 'interactive' | 'intelligence' | 'eventTypes' | 'fullIngest'>>, ack = false) => run(async () => {
     const next = { ...d, ...patch };
-    await hubService.configure(d.id, { notify: next.notify, interactive: next.interactive, intelligence: next.intelligence, intelligenceAck: ack, eventTypes: next.eventTypes });
+    await hubService.configure(d.id, { notify: next.notify, interactive: next.interactive, intelligence: next.intelligence, intelligenceAck: ack, eventTypes: next.eventTypes,
+      fullIngest: next.intelligence && next.fullIngest });
     await load();
   }, 'Nastavení se nepodařilo uložit.');
   const test = (d: HubDestination) => run(async () => {
     const r = await hubService.test(d.id);
-    setMessage({ kind: r.outcome === 'sent' ? 'info' : 'error', text: r.message });
+    setMessage({ kind: r.outcome === 'sent' ? 'info' : 'error', text: r.message });   // a successful re-check re-activates the destination
     await load();
   }, 'Zkušební zprávu se nepodařilo odeslat.');
   const remove = (d: HubDestination) => {
@@ -118,7 +120,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                 </div>
                 {d.status === 'pending' && status.canManage && (
                   <div className="hub-actions">
-                    <span>Někdo v {d.provider === 'slack' ? 'kanálu' : 'skupině'} zadal kód tohoto projektu. Propojit?</span>
+                    <span data-testid="hub-linked-by">{d.linkedBy ?? 'Někdo'} zadal v {d.provider === 'slack' ? 'kanálu' : 'skupině'} „{d.label}“ kód tohoto projektu. Je to ten správný {d.provider === 'slack' ? 'kanál' : 'chat'}? Propojit?</span>
                     <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled={busy} onClick={() => decide(d, 'confirm')} data-testid="hub-confirm">Potvrdit propojení</button>
                     <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy} onClick={() => decide(d, 'reject')} data-testid="hub-reject">Odmítnout</button>
                   </div>
@@ -138,14 +140,21 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                     <label className="notify-check"><input type="checkbox" checked={d.interactive} onChange={(e) => save(d, { interactive: e.target.checked })} data-testid="hub-cap-interactive" />
                       <span><strong>Interaktivní</strong> – úkol ze zprávy ({d.provider === 'slack' ? 'akce u zprávy „Vytvořit úkol v ClearSpace“' : 'odpověď na zprávu příkazem /task'}), odpovědi ve vlákně úkolu ↔ komentáře. Jen pro lidi s propojeným účtem a právem upravovat.</span></label>
                     <label className="notify-check"><input type="checkbox" checked={d.intelligence} disabled={!status.intelligenceAvailable && !d.intelligence}
-                      onChange={(e) => (e.target.checked ? setPiAsk(d) : save(d, { intelligence: false }))} data-testid="hub-cap-intelligence" />
-                      <span><strong>Project Intelligence</strong> – AI smí číst vybranou komunikaci tohoto {d.provider === 'slack' ? 'kanálu' : 'skupiny'}. Výchozí stav vypnuto.{!status.intelligenceAvailable && ' (Na serveru vypnuto.)'}</span></label>
+                      onChange={(e) => (e.target.checked ? setPiAsk({ d, full: false }) : save(d, { intelligence: false, fullIngest: false }))} data-testid="hub-cap-intelligence" />
+                      <span><strong>Project Intelligence</strong> – AI smí číst komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'}. Výchozí stav vypnuto.{!status.intelligenceAvailable && ' (Na serveru vypnuto.)'}
+                        {d.intelligence && <><br /><em data-testid="hub-pi-scope">Rozsah: {piScope(d)}.</em></>}</span></label>
+                    {d.provider === 'telegram' && d.intelligence && status.telegramPiBot && (
+                      <label className="notify-check hub-events"><input type="checkbox" checked={d.fullIngest}
+                        onChange={(e) => (e.target.checked ? setPiAsk({ d, full: true }) : save(d, { fullIngest: false }))} data-testid="hub-cap-full-ingest" />
+                        <span><strong>Celá komunikace skupiny</strong> – přidejte do skupiny také PI bota @{status.telegramPiBot} (jen čte, nikdy nepíše).</span></label>
+                    )}
                   </fieldset>
                 )}
-                {d.lastErrorCode && d.status !== 'active' && <p className="drive-message is-error">Poslední chyba: {d.lastErrorCode}. {d.status === 'removed_bot' ? `Přidejte ${d.provider === 'slack' ? 'aplikaci do kanálu' : 'bota do skupiny'} a propojte znovu.` : d.status === 'revoked' ? 'Nainstalujte Slack aplikaci znovu.' : ''}</p>}
+                {d.lastErrorCode && d.status !== 'active' && <p className="drive-message is-error">Poslední chyba: {d.lastErrorCode}. {d.status === 'removed_bot' ? `Přidejte ${d.provider === 'slack' ? 'aplikaci do kanálu' : 'bota do skupiny'} a klikněte na „Ověřit znovu“.` : d.status === 'revoked' ? 'Nainstalujte Slack aplikaci znovu (Nastavení) a klikněte na „Ověřit znovu“.' : ''}</p>}
                 {status.canManage && (
                   <div className="hub-actions">
                     {d.status === 'active' && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-test">Zkušební zpráva</button>}
+                    {['removed_bot', 'archived', 'error', 'revoked'].includes(d.status) && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-recheck">Ověřit znovu</button>}
                     {d.status !== 'pending' && <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" disabled={busy} onClick={() => remove(d)} data-testid="hub-remove">Odpojit</button>}
                   </div>
                 )}
@@ -156,16 +165,16 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
 
         {piAsk && (
           <div className="hub-confirm" role="alertdialog" aria-labelledby="hub-pi-title" data-testid="hub-pi-confirm">
-            <p id="hub-pi-title"><strong>Zapnout Project Intelligence pro {piAsk.label}?</strong></p>
+            <p id="hub-pi-title"><strong>{piAsk.full ? 'Zapnout čtení celé komunikace skupiny' : 'Zapnout Project Intelligence'} pro {piAsk.d.label}?</strong></p>
             <ul>
-              <li>{PI_SCOPE[piAsk.provider]}</li>
-              <li>Zprávy se ukládají v ClearSpace nejvýš 90 dní; úpravy a smazání ve {PROVIDER_NAME[piAsk.provider]}u se propisují. Vypnutím nebo odpojením je AI okamžitě přestane vidět (odpojení je i smaže).</li>
+              <li>AI uvidí: {piScope({ provider: piAsk.d.provider, fullIngest: piAsk.full || piAsk.d.fullIngest })}.</li>
+              <li>Zprávy se ukládají v ClearSpace nejvýš 90 dní; úpravy se propisují{piAsk.d.provider === 'slack' ? ' i smazání' : ' (Telegram botům mazání neoznamuje)'}. Vypnutím nebo odpojením se načtené zprávy okamžitě smažou.</li>
               <li>AI s nimi zachází jako s nedůvěryhodným textem a nikdy podle nich sama nemění úkoly. Odpovědi cituje se zdrojem.</li>
               <li>Ostatní členové kanálu by měli vědět, že komunikaci čte i ClearSpace.</li>
             </ul>
             <div className="hub-actions">
               <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled={busy} data-testid="hub-pi-accept"
-                onClick={() => { const d = piAsk; setPiAsk(null); void save(d, { intelligence: true }, true); }}>Rozumím, zapnout</button>
+                onClick={() => { const a = piAsk; setPiAsk(null); void save(a.d, a.full ? { intelligence: true, fullIngest: true } : { intelligence: true }, true); }}>Rozumím, zapnout</button>
               <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setPiAsk(null)} data-testid="hub-pi-cancel">Zrušit</button>
             </div>
           </div>

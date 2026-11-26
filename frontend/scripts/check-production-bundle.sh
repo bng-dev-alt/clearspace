@@ -21,7 +21,8 @@ for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_
   'HUB_SLACK_ENABLED' 'HUB_TELEGRAM_ENABLED' 'HUB_INTELLIGENCE_ENABLED' 'HUB_SERVER_SECRET' 'HUB_TOKEN_ENCRYPTION_KEY' 'HUB_SERVICE_EMAIL' 'HUB_SERVICE_PASSWORD' \
   'SLACK_HUB_CLIENT_ID' 'SLACK_HUB_CLIENT_SECRET' 'SLACK_HUB_SIGNING_SECRET' 'SLACK_HUB_API_MOCK_BASE' 'TELEGRAM_HUB_BOT_TOKEN' 'TELEGRAM_HUB_WEBHOOK_SECRET' \
   'TELEGRAM_HUB_API_MOCK_BASE' 'x-hub-secret' 'x-slack-signature' 'x-telegram-bot-api-secret-token' 'hub_svc_' 'hub_scheduler_tick' 'hub_dispatch' 'hub_link_begin' \
-  'hub_slack_install' 'cs_hub_slack' 'views.open' 'getChatMember' 'chat.getPermalink' 'hub-service@'; do
+  'hub_slack_install' 'cs_hub_slack' 'views.open' 'getChatMember' 'chat.getPermalink' 'hub-service@' \
+  'HUB_ROUTING_KEY' 'TELEGRAM_HUB_PI_BOT_TOKEN' 'TELEGRAM_HUB_PI_WEBHOOK_SECRET' 'hub_svc_inbox' 'hub_svc_identity_complete' 'hub_svc_burn_code'; do
   n=$(grep -rlF -- "$pat" .next/static 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" != 0 ]; then echo "FAIL: '$pat' found in $n client file(s)"; bad=1; else echo "ok - no '$pat' in the client bundle"; fi
 done

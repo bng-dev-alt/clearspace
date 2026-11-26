@@ -118,21 +118,30 @@ BEGIN
   PERFORM public.hub_destination_configure(repeat('h', 40), '00000000-0000-4000-8000-0000000000d2', true, true, false, false, ARRAY['task_completed']);
 END $$;
 
--- ================= identity linking (privately delivered single-use code) =================
+-- ================= identity linking (RUN 07B: code issued to the SIGNED-IN user, completed from the chat account) =================
+DO $$ BEGIN
+  PERFORM test.act_as(current_setting('t.b')::uuid, 'h-ed@example.test');
+  PERFORM public.hub_identity_begin(repeat('h', 40), 'telegram', encode(sha256('id-b'), 'hex'));
+  PERFORM public.hub_identity_begin(repeat('h', 40), 'slack', encode(sha256('id-bs'), 'hex'));
+  PERFORM test.act_as(current_setting('t.c')::uuid, 'h-view@example.test');
+  PERFORM public.hub_identity_begin(repeat('h', 40), 'telegram', encode(sha256('id-c'), 'hex'));
+  PERFORM test.act_as(current_setting('t.s')::uuid, 'h-service@example.test');
+  PERFORM test.throws($q$select public.hub_identity_begin(repeat('h', 40), 'telegram', encode(sha256('id-s'), 'hex'))$q$, '42501', 'the service principal cannot start an identity link');
+END $$;
 DO $$ BEGIN
   PERFORM test.act_as(current_setting('t.s')::uuid, 'h-service@example.test');
-  PERFORM public.hub_svc_identity_begin(repeat('h', 40), encode(sha256('id-b'), 'hex'), 'telegram', repeat('b', 64), 'Eva (@eva)');
-  PERFORM public.hub_svc_identity_begin(repeat('h', 40), encode(sha256('id-c'), 'hex'), 'telegram', repeat('c', 64), 'Cyril');
-  PERFORM public.hub_svc_identity_begin(repeat('h', 40), encode(sha256('id-bs'), 'hex'), 'slack', repeat('e', 64), 'eva');
+  PERFORM test.ok((public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-b'), 'hex'), 'telegram', repeat('b', 64), 'Eva (@eva)') ->> 'ok')::boolean, 'editor links her Telegram identity from the chat');
+  PERFORM test.ok((public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-b'), 'hex'), 'telegram', repeat('b', 64), 'Eva (@eva)') ->> 'replay')::boolean, 'a provider retry of the same completion is a replay, not an error');
+  PERFORM test.ok(public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-b'), 'hex'), 'telegram', repeat('9', 64), 'Mallory') ->> 'reason' = 'code_invalid', 'T7: another chat account cannot reuse the code');
+  PERFORM test.ok(public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-bs'), 'hex'), 'telegram', repeat('e', 64), 'eva') ->> 'reason' = 'code_invalid', 'a code is bound to its provider');
+  PERFORM public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-bs'), 'hex'), 'slack', repeat('e', 64), 'eva');
+  PERFORM public.hub_svc_identity_complete(repeat('h', 40), encode(sha256('id-c'), 'hex'), 'telegram', repeat('c', 64), 'Cyril');
 END $$;
 DO $$ BEGIN
   PERFORM test.act_as(current_setting('t.b')::uuid, 'h-ed@example.test');
-  PERFORM test.ok(public.hub_identity_confirm(repeat('h', 40), encode(sha256('id-b'), 'hex')) ->> 'provider' = 'telegram', 'editor links her Telegram identity');
-  PERFORM public.hub_identity_confirm(repeat('h', 40), encode(sha256('id-bs'), 'hex'));
-  PERFORM test.throws($q$select public.hub_identity_confirm(repeat('h', 40), encode(sha256('id-b'), 'hex'))$q$, '22023', 'T7: identity link is single use');
+  PERFORM test.ok(jsonb_array_length(public.hub_identities_mine(repeat('h', 40))) = 2, 'each user sees only their own identities (editor: 2)');
   PERFORM test.act_as(current_setting('t.c')::uuid, 'h-view@example.test');
-  PERFORM public.hub_identity_confirm(repeat('h', 40), encode(sha256('id-c'), 'hex'));
-  PERFORM test.ok(jsonb_array_length(public.hub_identities_mine(repeat('h', 40))) = 1, 'each user sees only their own identities');
+  PERFORM test.ok(jsonb_array_length(public.hub_identities_mine(repeat('h', 40))) = 1, 'viewer: 1');
 END $$;
 
 -- ================= create task from chat (A12/A13/A14) =================
@@ -156,7 +165,8 @@ BEGIN
     'the activity is attributed to the verified ClearSpace user (not the service principal)');
   PERFORM test.ok((SELECT count(*) FROM public.hub_outbox WHERE card_id = current_setting('t.card') AND kind = 'task_created') = 0,
     'A16: a task created FROM the chat is not echoed back as a "task created" notification');
-  PERFORM test.ok((SELECT kind = 'task_source' AND verified AND permalink = 'https://t.me/c/123/45' FROM public.hub_messages WHERE card_id = current_setting('t.card')), 'source message stored with permalink + verified author');
+  PERFORM test.ok((SELECT kind = 'task_source' AND NOT verified AND author_user_id IS NULL AND permalink = 'https://t.me/c/123/45' FROM public.hub_messages WHERE card_id = current_setting('t.card')),
+    'source message stored with permalink under its OWN (unverified) author -- the creator is attributed in the activity, not on the message (RUN 07B)');
   PERFORM test.act_as(current_setting('t.s')::uuid, 'h-service@example.test');
   r := public.hub_svc_create_task(repeat('h', 40), '00000000-0000-4000-8000-0000000000d1', repeat('b', 64), 'Zajistit parkovací místo pro stěhováky', '', repeat('5', 64), 'Eva', 'x', null, now());
   PERFORM test.ok((r ->> 'duplicate')::boolean AND r ->> 'cardId' = current_setting('t.card'), 'A17: the same message twice -> the same task (idempotent)');

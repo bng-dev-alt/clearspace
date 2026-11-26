@@ -13,7 +13,7 @@ const VIEW_ID = 'clearspace_task';
 const TS = /^[0-9]{6,12}\.[0-9]{1,8}$/;
 const ok = () => new NextResponse(null, { status: 200, headers: { 'Cache-Control': 'no-store' } });
 
-interface Meta { ch: string; ts: string; th: string }
+interface Meta { ch: string; ts: string; th: string; tx: string }
 
 /**
  * POST /api/hub/slack/interactivity -- signed Slack interactions of the PROJECT app:
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     try { p = JSON.parse(new URLSearchParams(raw).get('payload') ?? ''); } catch { return new NextResponse(null, { status: 400 }); }
     const team = String(p.team?.id ?? p.user?.team_id ?? ''), user = String(p.user?.id ?? '');
     if (!/^T[A-Z0-9]{2,30}$/.test(team) || !/^[UW][A-Z0-9]{2,30}$/.test(user)) return new NextResponse(null, { status: 400 });
-    const k = keys(cfg.serverSecret);
+    const k = keys(cfg.routingKey);
     const db = await serviceDb(cfg);
     const installation = async () => {
       const inst = await svc<{ id: string; status: string; secretEnc: string } | null>(db, cfg, 'hub_svc_installation', { p_team_hmac: k.slackTeam(team) });
@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
       const sec = await installation();
       if (!sec) return say('Aplikace ClearSpace Projekty nemá v tomto workspace platný přístup.');
       const text = String(msg.text ?? '').slice(0, 2900);
-      const meta: Meta = { ch, ts: String(msg.ts), th: TS.test(String(msg.thread_ts ?? '')) ? String(msg.thread_ts) : String(msg.ts) };
+      // the ORIGINAL message text travels in the (Slack-signed) metadata: the record keeps it, whatever the user edits in the preview
+      const meta: Meta = { ch, ts: String(msg.ts), th: TS.test(String(msg.thread_ts ?? '')) ? String(msg.thread_ts) : String(msg.ts), tx: text.slice(0, 2400) };
       const view = {
         type: 'modal', callback_id: VIEW_ID, private_metadata: JSON.stringify(meta),
         title: { type: 'plain_text', text: 'Úkol v ClearSpace' }, submit: { type: 'plain_text', text: 'Vytvořit úkol' }, close: { type: 'plain_text', text: 'Zrušit' },
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     if (p.type === 'view_submission' && p.view?.callback_id === VIEW_ID) {
       let meta: Meta;
       try { meta = JSON.parse(String(p.view.private_metadata ?? '')); } catch { return new NextResponse(null, { status: 400 }); }
-      if (!/^[CG][A-Z0-9]{2,30}$/.test(meta.ch) || !TS.test(meta.ts) || !TS.test(meta.th)) return new NextResponse(null, { status: 400 });
+      if (!/^[CG][A-Z0-9]{2,30}$/.test(meta.ch) || !TS.test(meta.ts) || !TS.test(meta.th) || typeof meta.tx !== 'string') return new NextResponse(null, { status: 400 });
       const values = p.view.state?.values ?? {};
       const title = String(values.title?.v?.value ?? '').trim(), details = String(values.details?.v?.value ?? '');
       const fail = (m: string) => NextResponse.json({ response_action: 'errors', errors: { title: m } });
@@ -83,17 +84,17 @@ export async function POST(req: NextRequest) {
       const permalink = await slackPermalink(slack, sec.botToken, meta.ch, meta.ts);
       const r = await svc<{ ok: boolean; reason?: string; duplicate?: boolean; cardId?: string; projectId?: string; title?: string; projectName?: string }>(db, cfg, 'hub_svc_create_task', {
         p_destination: d.id, p_ext_user: k.slackUser(team, user), p_title: title, p_details: details.slice(0, 4000),
-        p_msg_key: k.slackMsg(team, meta.ch, meta.ts), p_author_label: 'Slack', p_text: details.slice(0, 4000), p_permalink: permalink,
+        p_msg_key: k.slackMsg(team, meta.ch, meta.ts), p_author_label: 'Autor zprávy (Slack)', p_text: meta.tx.slice(0, 4000), p_permalink: permalink,
         p_sent_at: new Date(Number(meta.ts.split('.')[0]) * 1000).toISOString(),
       });
       hubLog('slack_task', { ok: r.ok, reason: r.reason ?? null, duplicate: r.duplicate ?? false });
       if (!r.ok) return fail(TASK_REASON[r.reason ?? ''] ?? 'Úkol se nepodařilo vytvořit.');
       const href = taskHref(cfg.appBaseUrl, r.projectId ?? d.projectId, r.cardId);
       after(async () => {
-        if (!r.duplicate) {
-          await svc(db, cfg, 'hub_svc_attach_conversation', { p_destination: d.id, p_card: r.cardId, p_thread_key: k.slackThread(team, meta.ch, meta.th), p_thread_ref: meta.th }).catch(() => null);
-        }
-        await slackPost(slack, sec.botToken, meta.ch, `${r.duplicate ? 'Úkol už existuje' : 'Vytvořen úkol'} v ClearSpace: „${clean(r.title, 150)}" (${clean(r.projectName, 80)})\n${href}`, meta.th);
+        // one thread = one task conversation: a second task from the same thread is not linked (replies stay unambiguous)
+        const conv = r.duplicate ? 'dup' : await svc<string | null>(db, cfg, 'hub_svc_attach_conversation', { p_destination: d.id, p_card: r.cardId, p_thread_key: k.slackThread(team, meta.ch, meta.th), p_thread_ref: meta.th }).catch(() => null);
+        const tail = conv === 'dup' ? '' : conv ? '\nOdpovědi v tomto vlákně se propíší jako komentáře k úkolu.' : '\nToto vlákno už patří k jinému úkolu – odpovědi se propisují tam.';
+        await slackPost(slack, sec.botToken, meta.ch, `${r.duplicate ? 'Úkol už existuje' : 'Vytvořen úkol'} v ClearSpace: „${clean(r.title, 150)}" (${clean(r.projectName, 80)})\n${href}${tail}`, meta.th);
       });
       return NextResponse.json({ response_action: 'clear' });
     }

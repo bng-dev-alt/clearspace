@@ -97,7 +97,7 @@ pilot_routes() {  # $1 service, then "METHOD path" pairs
   local svc=$1; shift
   for mp in "$@"; do
     m=${mp%% *}; p=${mp#* }
-    code=$(status "$p" -X "$m" -H 'Content-Type: application/json' -d '{}')
+    code=$(status "$m" "$p" -H 'Content-Type: application/json' -d '{}')
     [ "$code" = 401 ] && ok "pilot: anonymous $m ${p%%\?*} -> 401" || bad "pilot: anonymous $m ${p%%\?*} -> $code (expected 401)"
   done
   P=$(get /privacy)

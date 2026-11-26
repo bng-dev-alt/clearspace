@@ -128,7 +128,7 @@ test('seeder end-to-end against a fake Google: seed, idempotent re-seed, status,
     assert.equal(new Set(st.msgs.map((m) => m.threadId)).size, 14, '14 Gmail threads');
     r = await run(base, ['seed', '--anchor', '2026-12-10']);
     assert.match(r.out, /gmail: created 0, already present 42/); assert.match(r.out, /drive: created 0, already present 28/); assert.match(r.out, /calendar: created 0, already present 21/);
-    r = await run(base, ['status']); assert.match(r.out, /"gmail":\{"present":42,"trashed":0,"of":42\},"drive":\{"present":21,"of":21\},"calendar":\{"present":21,"deleted":0,"of":21\}/);
+    r = await run(base, ['status']); assert.match(r.out, /"gmail":\{"present":42,"trashed":0,"duplicates":0,"of":42\},"drive":\{"present":21,"of":21,"duplicates":0\},"calendar":\{"present":21,"deleted":0,"of":21\}/);
     assert.equal((await run(base, ['cleanup'])).code, 1, 'cleanup needs --confirm');
     r = await run(base, ['cleanup', '--confirm', 'CS-GDEMO']); assert.match(r.out, /42 messages -> Gmail Trash, 28 Drive items -> Trash, 21 events deleted/);
     r = await run(base, ['status']); assert.match(r.out, /"trashed":42/); assert.match(r.out, /"drive":\{"present":0/); assert.match(r.out, /"deleted":21/);

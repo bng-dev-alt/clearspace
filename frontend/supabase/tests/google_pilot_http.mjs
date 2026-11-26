@@ -61,6 +61,8 @@ const alice = await user('alice', 'alice@collab.test');
 const bob = await user('bob', 'bob@collab.test');
 const outsider = await user('outsider');
 for (const u of [alice, bob]) await disconnect(u);      // clean start (re-runnable)
+// other suites on this stack may leave the MOCK accounts connected to their own throwaway users: free them (mock subs only)
+await admin(`/rest/v1/google_connections?google_sub=in.(${ANNA},${BOHDAN},${CYRIL})`, { method: 'DELETE' });
 
 // 1. availability is per user: only alice sees Gmail / Calendar; nothing tells the others that a pilot exists
 let s = await status(alice); assert.equal(s.gmailAvailable, true); assert.equal(s.calendarAvailable, true);

@@ -57,6 +57,9 @@ describe('pilot mode', () => {
     expect(await code(getAccessToken(fakeDb(OTHER, 'demo.presenter@example.com'), cfg, { service: 'gmail' }))).toBe('gmail_disabled');
     expect(await code(getAccessToken(fakeDb(PILOT, 'private.person@example.com'), cfg, { service: 'calendar' }))).toBe('calendar_disabled');
     expect(await code(getAccessToken(fakeDb(OTHER, 'x@example.com'), cfg, { service: 'drive' }))).toBe('ok');
+    const none = { rpc: vi.fn(async () => ({ data: [], error: null })) } as unknown as SupabaseClient;
+    expect(await code(getAccessToken(none, cfg, { service: 'gmail' }))).toBe('gmail_disabled');   // no connection: same as OFF
+    expect(await code(getAccessToken(none, cfg, { service: 'drive' }))).toBe('not_connected');
     vi.stubEnv('GMAIL_INTEGRATION_ENABLED', '0');
     expect(() => requireGmail()).toThrow(/Gmail/);
   });

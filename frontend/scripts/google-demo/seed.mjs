@@ -171,7 +171,7 @@ async function auth() {
       if (!u.searchParams.get('code')) return reject(new Error(`consent not given: ${u.searchParams.get('error') ?? 'no code'}`));
       resolve({ code: u.searchParams.get('code'), redirect: `http://127.0.0.1:${srv.address()?.port ?? port}/cb` });
     });
-    let port; const timer = setTimeout(() => { srv.close(); reject(new Error('timed out waiting for consent (10 min)')); }, 600_000);
+    let port; const timer = setTimeout(() => { srv.close(); reject(new Error('timed out waiting for consent (30 min)')); }, 1_800_000);
     srv.listen(0, '127.0.0.1', () => {
       port = srv.address().port;
       const url = `${G.auth}?${new URLSearchParams({ client_id: cfg.clientId, redirect_uri: `http://127.0.0.1:${port}/cb`, response_type: 'code', scope: SEED_SCOPES.join(' '),
@@ -246,10 +246,10 @@ async function seedCalendar(token, anchor, stats) {
 
 async function status() {
   const { token, me } = await session();
-  let gm = 0, gt = 0; for (const m of buildMessages(pragueToday(), me)) { const f = await gmailFind(token, m); if (f.length) { const x = (await req('GET', `${G.gmail}/messages/${f[0].id}?format=minimal`, token)).data; x.labelIds?.includes('TRASH') ? gt++ : gm++; } }
-  let df = 0; for (const f of FILES) if ((await driveFind(token, f.key)).length) df++;
+  let gm = 0, gt = 0, gd = 0; for (const m of buildMessages(pragueToday(), me)) { const f = await gmailFind(token, m); if (f.length > 1) gd++; if (f.length) { const x = (await req('GET', `${G.gmail}/messages/${f[0].id}?format=minimal`, token)).data; x.labelIds?.includes('TRASH') ? gt++ : gm++; } }
+  let df = 0, dd = 0; for (const key of [...FILES.map((f) => f.key), ...FOLDERS.map((n) => `folder:${n}`), `folder:${ROOT_FOLDER}`]) { const n = (await driveFind(token, key)).length; if (n && !key.startsWith('folder:')) df++; if (n > 1) dd++; }
   let ce = 0, cc = 0; for (const e of EVENTS) { const r = await req('GET', `${G.cal}/events/${eventId(e.key)}`, token, { ok: [200, 404, 410] }); if (r.status === 200) (r.data.status === 'cancelled' ? cc++ : ce++); }
-  console.log(JSON.stringify({ dataset: `${DATASET}@${VERSION}`, gmail: { present: gm, trashed: gt, of: buildMessages(pragueToday(), me).length }, drive: { present: df, of: FILES.length }, calendar: { present: ce, deleted: cc, of: EVENTS.length } }));
+  console.log(JSON.stringify({ dataset: `${DATASET}@${VERSION}`, gmail: { present: gm, trashed: gt, duplicates: gd, of: buildMessages(pragueToday(), me).length }, drive: { present: df, of: FILES.length, duplicates: dd }, calendar: { present: ce, deleted: cc, of: EVENTS.length } }));
 }
 
 async function cleanup() {

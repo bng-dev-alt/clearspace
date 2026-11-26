@@ -111,6 +111,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts: { cost?: number; force?: boolean; service?: GoogleService } = {}): Promise<{ token: string; expiresAt: number; userId: string }> {
   let row = await readCreds(db, cfg, opts.cost ?? 1);
+  // RUN 06 pilot: without a connection the pilot cannot be verified -> the OFF answer (a non-pilot user must not learn that it is on)
+  if (!row && opts.service && opts.service !== 'drive' && serviceMode(opts.service) === 'pilot') throw new HttpError(503, DISABLED[opts.service], `${opts.service}_disabled`);
   if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
   if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
   // RUN 06 pilot: a Gmail/Calendar token only for a listed user AND listed Google account (checked on every use and BEFORE the

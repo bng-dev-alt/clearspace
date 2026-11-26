@@ -77,7 +77,8 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * `monograph-prodcheck.mjs`: přepínač/rail v navbaru se na odhlášené produkci neověří (beze změny).
 
 ## RUN 06 (Google demo + pilot)
-* `check-deployment.sh` / `hosted-verify.sh` umí jen OFF kontroly Gmailu a Kalendáře – pro produkční `=pilot` doplnit `EXPECT_*_PILOT` (viz `docs/run06/PRODUCTION_PILOT.md`).
+* Výběr událostí z Kalendáře neumí období v minulosti (pole „Od“) – nedávné události nelze připojit.
+* Odebrání odkazu (Disk/Gmail/Kalendář) používá nativní `confirm()`; vlastní potvrzovací dialog by byl konzistentní s UI a testovatelný.
 * Google slučuje souhlasy po projektu: seeder (`clearspace-dev`) se musí odvolat dřív, než demo účet připojí ClearSpace (postup v `docs/run06/GOOGLE_DEMO_SEEDER.md`).
 * Lokální testy na přetíženém stroji: GoTrue vrací 504/401 (`gdemo_live_accept.mjs` opakuje jen tento případ); starší HTTP sady opakování nemají.
 * Seeder neopakuje odpověď 5xx Googlu sám – stačí znovu spustit (idempotentní).

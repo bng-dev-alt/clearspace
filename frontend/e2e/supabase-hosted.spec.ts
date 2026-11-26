@@ -420,6 +420,37 @@ test('Calendar containment (E2E_EXPECT_CALENDAR=off): no Calendar consent, no Ca
   expect(privacy.text).not.toContain('data-testid="privacy-calendar"');
 });
 
+// RUN 05: a build that contains the notify code but runs with SLACK_INTEGRATION_ENABLED and TELEGRAM_INTEGRATION_ENABLED off (public
+// production). Signed in or not: every /api/notify route is closed first, nothing can be connected or sent, the settings page has no
+// notify card and the privacy policy says it is off.
+test('Notify containment (E2E_EXPECT_NOTIFY=off): every Slack / Telegram route closed, no card, privacy says off', async () => {
+  test.skip(process.env.E2E_EXPECT_NOTIFY !== 'off', 'only for a build with the notify code and both switches off');
+  const base = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://127.0.0.1:3410';
+  const call = async (method: string, path: string, body?: unknown, auth = true) => {
+    const res = await fetch(new URL(path, base), { method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...(auth ? { Authorization: `Bearer ${tokenA}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, json, text };
+  };
+  for (const [m, p, b] of [['GET', '/api/notify/status'], ['PUT', '/api/notify/preferences', { eventTypes: [], projectIds: null, hideTitles: false }],
+    ['POST', '/api/notify/channel', { provider: 'telegram', enabled: true }], ['POST', '/api/notify/test', { provider: 'slack' }],
+    ['POST', '/api/notify/slack/start', {}], ['POST', '/api/notify/slack/complete', {}], ['POST', '/api/notify/telegram/link', {}],
+    ['POST', '/api/notify/telegram/check', {}], ['POST', '/api/notify/telegram/confirm', { accept: true }], ['POST', '/api/notify/dispatch', { items: [] }]] as [string, string, unknown?][]) {
+    const r = await call(m, p, b);
+    expect(r.status, `${m} ${p}`).toBe(503);
+    expect(String(r.json?.error), `${m} ${p}`).toMatch(/^(notify|slack|telegram)_disabled$/);
+    expect(r.text).not.toMatch(/slack\.com|t\.me\/|xoxb-/);
+    expect((await call(m, p, b, false)).status, `anonymous ${m} ${p}`).toBe(503);
+  }
+  const privacy = await call('GET', '/privacy', undefined, false);
+  expect(privacy.text).toContain('privacy-notify-off');
+  expect(privacy.text).not.toContain('data-testid="privacy-notify"');
+  const about = await call('GET', '/about', undefined, false);
+  expect(about.text).not.toContain('about-notify');
+});
+
 test('every browser request to Supabase went to the NEW project only', async () => {
   expect([...supabaseHosts]).toEqual([`${EXPECTED_REF}.supabase.co`]);
 });

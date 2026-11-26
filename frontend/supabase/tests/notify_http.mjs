@@ -6,7 +6,8 @@
 //   eval "$(scripts/notify-stack.sh env)"; APP_LOG=<dev log> node supabase/tests/notify_http.mjs
 //   NOTIFY_EXPECT_OFF=1 node supabase/tests/notify_http.mjs     # against an app started with both switches 0
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { readFileSync, existsSync } from 'node:fs';
 
 const API = process.env.E2E_SUPABASE_URL;
@@ -358,6 +359,21 @@ for (let i = 1; i < bm.length; i++) assert.ok(bm[i].at - bm[i - 1].at >= 1050, `
 assert.equal((await deliveries(E.id)).filter((d) => burst.includes(d.card_id) && d.status === 'sent').length, 12);
 ok('N4: a burst of 12 to one chat is delivered completely, >= 1.1 s apart (provider limit ~1/s per chat)');
 
+// N15: two scheduler ticks at the same moment (pg_cron overlap / a manual tick) -> every message exactly once
+const sqlAsync = (q) => promisify(execFile)('docker', ['exec', '-i', '-e', 'PGPASSWORD=postgres', DBC, 'psql', '-h', 'localhost', '-U', 'supabase_admin', '-d', 'postgres', '-At', '-q', '-c', q], { encoding: 'utf8' }).then((r) => JSON.parse(r.stdout.trim()));
+const conc = [];
+for (let i = 0; i < 6; i++) conc.push(await newCard(`Souběh ${i + 1}`));
+for (const k of conc) await assign(k, E);
+const [ta, tb] = await Promise.all([sqlAsync('select public.notify_scheduler_tick()'), sqlAsync('select public.notify_scheduler_tick()')]);
+assert.equal((ta.sent ?? 0) + (tb.sent ?? 0), 6, `claimed ${ta.sent}+${tb.sent}`);
+for (const r of [ta.request, tb.request].filter(Boolean)) for (let i = 0; i < 150 && sql(`select count(*) from net._http_response where id = ${r}`) !== '1'; i++) await sleep(400);
+sql('select public.notify_scheduler_tick()');
+const cm = (await messages()).telegram.filter((x) => x.chatId === 7001 && /Souběh \d/.test(x.text));
+assert.equal(cm.length, 6, `messages: ${cm.length}`);
+assert.equal(new Set(cm.map((x) => x.text)).size, 6, 'no duplicates');
+assert.equal((await deliveries(E.id)).filter((d) => conc.includes(d.card_id) && d.status === 'sent').length, 6);
+ok('N15: two concurrent scheduler ticks never claim the same row (SKIP LOCKED) -- 6 messages, each exactly once, all recorded as sent');
+
 // ---------------------------------------------------------------- access lost before sending (N3) + in-app independence (N16)
 const k10 = await newCard('Po odebrání');
 await assign(k10, F);    // F: Slack (same workspace as O)
@@ -398,6 +414,7 @@ ok('N5: bot blocked -> channel "blocked", Slack token revoked at Slack -> channe
 
 // ---------------------------------------------------------------- disconnect (N14) with a shared Slack workspace
 await ctl('reset', {});
+sql(`delete from public.notification_channels where provider = 'slack' and user_id not in ('${O.id}', '${E.id}', '${F.id}')`);   // other local users of the mock workspace
 assert.equal((await slackConnect(O, 'T0MOCK01|U0MOCKANNA')).outcome, 'connected');
 assert.equal((await slackConnect(E, 'T0MOCK01|U0MOCKBOHD')).outcome, 'connected');
 assert.equal((await ctl('stats')).json.liveSlackTokens, 1, 'one bot token per workspace');

@@ -14,3 +14,11 @@ prints `http://127.0.0.1:<port>/?login=auto` (signed in as `alice@collab.test`, 
 Hand the user that single link. Reuse the existing mechanism (`src/lib/devLogin.ts`); never add another auth layer, never enable it for
 production/preview builds, never put credentials in the client bundle. Full rule: `docs/LOCAL_DEV.md` ("DEV LOGIN STANDARD").
 <!-- END:clearspace-dev-login-standard -->
+# RUN CLEANUP standard (applies to EVERY development RUN)
+
+A RUN is not finished until it has stopped everything it started: dev servers, mocks, loopback proxies, background jobs and its
+own Docker/Supabase stacks (`docker stop` / `supabase stop` WITHOUT `--no-backup`). Data the RUN still needs stays (volumes, dumps).
+Delete a RUN's test stack (`collab-stack.sh down` = `supabase stop --no-backup`, volume/image removal) only after (1) `pg_dump -Fc`
+to `/Volumes/WORKSPACE/_G2_BACKUP/<date>-<run>/` with SHA256SUMS and a verified restore, and (2) confirming the stack can be rebuilt
+from migrations + seed (`*-stack.sh up` + `seed`). Never touch other projects' containers, public demo services or tunnels; never
+`docker system prune -a --volumes`. Destructive deletions of data-bearing resources go to the owner as ONE consolidated list.

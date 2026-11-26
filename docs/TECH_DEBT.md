@@ -77,8 +77,16 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * `monograph-prodcheck.mjs`: přepínač/rail v navbaru se na odhlášené produkci neověří (beze změny).
 
 ## RUN 06 (Google demo + pilot)
+**OAuth**
+* `clearspace-prod` je v režimu **Testing**: refresh tokeny Gmailu/Kalendáře vyprší 7 dní po souhlasu → prezentující se musí týdně znovu připojit. Publikace = varování „neověřená aplikace“ a strop 100 uživatelů; veřejné použití `gmail.readonly` (restricted) vyžaduje ověření aplikace + CASA. Rozhodnutí vlastníka.
+* Pilotní seznamy (`GOOGLE_PILOT_USER_IDS`, `GOOGLE_PILOT_ACCOUNTS`) jsou proměnné prostředí → přidání / odebrání osoby vyžaduje redeploy; správa pilotu v aplikaci (admin UI / tabulka) není.
+* Odebrání jedné služby (Gmail / Kalendář) v ClearSpace nezruší scope u Googlu – Google ruší jen celý grant (Odpojit účet). Beze změny od RUN 03/04.
+* Seeder: `gmail.modify` / `calendar.events.owned` jen v dev projektu; filtry Gmailu nejdou nastavit bez `gmail.settings.basic` → v RUN 06 ručně ve webovém UI.
+**UX**
 * Výběr událostí z Kalendáře neumí období v minulosti (pole „Od“) – nedávné události nelze připojit.
 * Odebrání odkazu (Disk/Gmail/Kalendář) používá nativní `confirm()`; vlastní potvrzovací dialog by byl konzistentní s UI a testovatelný.
 * Google slučuje souhlasy po projektu: seeder (`clearspace-dev`) se musí odvolat dřív, než demo účet připojí ClearSpace (postup v `docs/run06/GOOGLE_DEMO_SEEDER.md`).
+* Google Picker v úzkém panelu (< 500 px) se vykresluje mimo viditelnou plochu / se zpožděním; výběr spolehlivě jen dvojklikem. Ověřit na mobilních šířkách.
+* Výběr e-mailů: pole „Hledat“ a „Předmět“ jsou v úzkém rozložení snadno zaměnitelná; Enter v poli spouští hledání, tlačítko je pod formulářem.
 * Lokální testy na přetíženém stroji: GoTrue vrací 504/401 (`gdemo_live_accept.mjs` opakuje jen tento případ); starší HTTP sady opakování nemají.
 * Seeder neopakuje odpověď 5xx Googlu sám – stačí znovu spustit (idempotentní).

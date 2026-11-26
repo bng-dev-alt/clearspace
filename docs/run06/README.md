@@ -57,7 +57,7 @@ Proto: **seeder se odvolá DŘÍV, než se připojí ClearSpace** (tak to bylo p
 dostal přesně 5 read-only scopů). Pravidlo je v `GOOGLE_DEMO_SEEDER.md` a `PRODUCTION_PILOT.md`.
 
 ## Zbývající kroky (vlastník)
-1. Smazat omylem vytvořenou Vercel proměnnou `ZZ_PROBE` (`vercel env rm ZZ_PROBE production`, potvrdit `y`).
+1. ~~`ZZ_PROBE`~~ – smazána ve Vercelu 2026-11-26 (běžící deployment ji ještě nese, nepoužívá se; zmizí s dalším deployem).
 2. Každých 7 dní (Testing) znovu připojit Google u prezentačního účtu, nebo rozhodnout o publikaci aplikace (varování „neověřená aplikace“, strop 100 uživatelů, Gmail restricted ⇒ CASA pro veřejné použití).
-3. `V1/frontend/.env.local` stále chybí (incident RUN 05) – obnovit ze svých záznamů (vzor `V1-consolidation/frontend/.env.local`).
+3. `V1/frontend/.env.local` obnoven 2026-11-26 jen z ověřených hodnot (URL + anon klíč == Supabase CLI); DEV login a Gemini klíč doplní vlastník ze svých záznamů, pokud je původní soubor měl.
 4. Konec pilotu: `GMAIL/CALENDAR_INTEGRATION_ENABLED=0` + redeploy; prezentující „Odpojit Google účet“.

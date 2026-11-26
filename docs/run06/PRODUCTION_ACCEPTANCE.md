@@ -37,4 +37,4 @@ ClearSpace / MicroCRM / Support / Sales / Demo + „nikdy do spamu“ – štít
 * Odebrání odkazu v UI používá nativní `confirm()` – v panelu prohlížeče agenta se automaticky zamítne; jeden omylem připojený dokument
   (checklist v projektu politik) proto odstraněn cíleným SQL (1 řádek, `linked_by` = prezentační účet).
 * Testing: grant demo účtu vyprší za 7 dní → prezentující znovu připojí (Nastavení → Propojené účty). Přechod do produkce = rozhodnutí vlastníka.
-* Vercel obsahuje omylem vytvořenou proměnnou `ZZ_PROBE` (hodnota „x“, nepoužívá ji kód) – CLI ji neinteraktivně nesmaže; odstranit ručně.
+* Omylem vytvořená Vercel proměnná `ZZ_PROBE` smazána (se schválením vlastníka); v běžícím deploymentu zůstává do dalšího nasazení (nepoužívá se).

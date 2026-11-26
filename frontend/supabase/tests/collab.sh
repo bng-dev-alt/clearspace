@@ -343,3 +343,58 @@ echo "ok - existing rows survive the 1500 rollback byte-identical"
 apply cs_kn "$NTF"
 [ "$(psql_admin -d cs_kn -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = "1" ] || { echo "FAIL: re-apply 1500 after rollback"; exit 1; }
 echo "ok - 20261129001500 applies again after its rollback"
+
+# ---------------------------------------------------------------- RUN 07: project communication hub (Slack channels / Telegram groups)
+echo "== Scenario K7: communication hub (management rights, link codes, service principal, chat tasks, sync, loops, PI view, purge) -- committed transactions"
+newdb cs_k7
+apply cs_k7 "$BASELINE" "${MIGRATIONS[@]}"
+out="$(mktemp)"
+if psql_admin -d cs_k7 -f - < "$HERE/collab/96_communication_hub.sql" >"$out" 2>&1; then
+  k=$(grep -cE "NOTICE:  ok" "$out" || true); TOTAL=$((TOTAL + k))
+  grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //'
+  echo "    ($k assertions)"; rm -f "$out"
+else
+  cat "$out"; rm -f "$out"; echo "FAIL: collab/96_communication_hub.sql"; exit 1
+fi
+
+echo "--- N12 parity (RUN 07): the same RUN 01 actions on 1500 and on 1600 leave identical in-app notifications"
+UPTO_1500=(); for f in "${MIGRATIONS[@]}"; do [[ "$(basename "$f")" > "20261129001500~" ]] || UPTO_1500+=("$f"); done
+newdb cs_kh5; apply cs_kh5 "$BASELINE" "${UPTO_1500[@]}"
+newdb cs_kh6; apply cs_kh6 "$BASELINE" "${MIGRATIONS[@]}"
+P5=$(psql_admin -d cs_kh5 -At -f - < "$HERE/collab/95_parity_scenario.sql" | grep '^parity:')
+P6=$(psql_admin -d cs_kh6 -At -f - < "$HERE/collab/95_parity_scenario.sql" | grep '^parity:')
+[ -n "$P5" ] && [ "$P5" = "$P6" ] || { echo "FAIL: in-app notifications differ: 1500 $P5 / 1600 $P6"; exit 1; }
+[ "$(psql_admin -d cs_kh6 -At -c "select count(*) from public.hub_outbox")" = "0" ] || { echo "FAIL: 1600 queued hub work without any destination"; exit 1; }
+echo "ok - in-app notifications identical on 1500 and 1600 ($P6); without destinations the hub queued nothing"
+
+echo "--- upgrade from run05/run06 (1500 with collaboration + notify data) -> 1600: existing rows unchanged"
+newdb cs_kh; apply cs_kh "$BASELINE" "${UPTO_1500[@]}"
+S1500=$(psql_admin -d cs_kh -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+EXT1500=$(psql_admin -d cs_kh -At -c "select string_agg(extname, ',' order by extname) from pg_extension")
+psql_admin -d cs_kh -At -f - < "$HERE/collab/95_parity_scenario.sql" >/dev/null
+FPH="select md5(string_agg(t::text, '|' order by t::text)) from (select 'n' k, n.id::text i, n.type x, n.title y from public.notifications n union all select 'a', a.id, a.action_type, a.details::text from public.activity_logs a union all select 'c', c.id, c.content, c.author_id::text from public.task_comments c union all select 'k', k.id, k.title, k.column_id from public.cards k union all select 'ch', ch.id::text, ch.status, ch.provider from public.notification_channels ch union all select 't', s.purpose, s.secret_sha256, null from public.server_trust s) t"
+BEFORE7=$(psql_admin -d cs_kh -At -c "$FPH")
+HUB="$FRONTEND/supabase/migrations/20261130001600_communication_hub.sql"
+apply cs_kh "$HUB"; apply cs_kh "$HUB"
+AFTER7=$(psql_admin -d cs_kh -At -c "$FPH")
+[ "$BEFORE7" = "$AFTER7" ] || { echo "FAIL: 1600 upgrade changed existing rows"; exit 1; }
+[ "$(psql_admin -d cs_kh -At -c "select string_agg(extname, ',' order by extname) from pg_extension")" = "$EXT1500" ] || { echo "FAIL: 1600 installed an extension"; exit 1; }
+echo "ok - upgrade 1500 -> 1600 keeps notifications, activity, comments, cards, notify channels and trust byte-identical; no extension; re-apply is a no-op"
+
+echo "--- hub rollback (1600): refused while hub data exists; otherwise restores the 1500 catalog exactly"
+DOWN7="$FRONTEND/supabase/rollback/20261130001600_communication_hub.down.sql"
+psql_admin -d cs_kh -q >/dev/null <<'SQL'
+insert into public.hub_slack_installations (team_hmac, team_label, secret_enc, scopes) values (repeat('7', 64), 'R', 'v1.0000beef.aaaa.bbbb.cccc', '{}');
+SQL
+if out=$(psql_admin -d cs_kh --single-transaction -f - < "$DOWN7" 2>&1); then echo "FAIL: 1600 rollback ran although hub data exists"; exit 1; fi
+echo "$out" | grep -q "hub rows" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+echo "ok - 1600 rollback refused while hub data exists, nothing changed"
+psql_admin -d cs_kh -q -c "delete from public.hub_slack_installations" >/dev/null
+psql_admin -d cs_kh --single-transaction -f - < "$DOWN7" >/dev/null
+SR7=$(psql_admin -d cs_kh -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+[ "$SR7" = "$S1500" ] || { echo "FAIL: catalog after 1600 rollback ($SR7) differs from 1500 ($S1500)"; exit 1; }
+[ "$(psql_admin -d cs_kh -At -c "$FPH")" = "$BEFORE7" ] || { echo "FAIL: rollback changed existing rows"; exit 1; }
+echo "ok - catalog after 1600 rollback == catalog at 1500 ($SR7); existing rows byte-identical"
+apply cs_kh "$HUB"
+[ "$(psql_admin -d cs_kh -At -c "select count(*) from public.clearspace_migrations where version = '20261130001600_communication_hub'")" = "1" ] || { echo "FAIL: re-apply 1600"; exit 1; }
+echo "ok - 20261130001600 applies again after its rollback"

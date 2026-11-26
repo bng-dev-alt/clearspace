@@ -398,3 +398,33 @@ echo "ok - catalog after 1600 rollback == catalog at 1500 ($SR7); existing rows 
 apply cs_kh "$HUB"
 [ "$(psql_admin -d cs_kh -At -c "select count(*) from public.clearspace_migrations where version = '20261130001600_communication_hub'")" = "1" ] || { echo "FAIL: re-apply 1600"; exit 1; }
 echo "ok - 20261130001600 applies again after its rollback"
+
+echo "== Scenario K7B: communication hub hardening (1700: durable inbox, locks, identity, PI bot scope, review fixes) -- committed transactions"
+out="$(mktemp)"
+if psql_admin -d cs_k7 -f - < "$HERE/collab/97_hub_hardening.sql" >"$out" 2>&1; then
+  k=$(grep -cE "NOTICE:  ok" "$out" || true); TOTAL=$((TOTAL + k))
+  grep -E "NOTICE:  ok" "$out" | sed -E 's/^.*NOTICE:  //'
+  echo "    ($k assertions)"; rm -f "$out"
+else
+  cat "$out"; rm -f "$out"; echo "FAIL: collab/97_hub_hardening.sql"; exit 1
+fi
+echo "--- upgrade 1600 -> 1700: existing rows unchanged, no extension, re-apply is a no-op"
+S1600=$(psql_admin -d cs_kh -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+HARD="$FRONTEND/supabase/migrations/20261201001700_hub_hardening.sql"
+apply cs_kh "$HARD"; apply cs_kh "$HARD"
+[ "$(psql_admin -d cs_kh -At -c "$FPH")" = "$BEFORE7" ] || { echo "FAIL: 1700 upgrade changed existing rows"; exit 1; }
+[ "$(psql_admin -d cs_kh -At -c "select string_agg(extname, ',' order by extname) from pg_extension")" = "$EXT1500" ] || { echo "FAIL: 1700 installed an extension"; exit 1; }
+echo "ok - upgrade 1600 -> 1700 keeps existing rows byte-identical; no extension; re-apply is a no-op"
+echo "--- hub hardening rollback (1700): refused while hub data exists; otherwise (down + 1600 re-apply) restores the 1600 catalog exactly"
+DOWN8="$FRONTEND/supabase/rollback/20261201001700_hub_hardening.down.sql"
+psql_admin -d cs_kh -q -c "insert into public.hub_slack_installations (team_hmac, team_label, secret_enc, scopes) values (repeat('8', 64), 'R', 'v1.0000beef.aaaa.bbbb.cccc', '{}')" >/dev/null
+if out=$(psql_admin -d cs_kh --single-transaction -f - < "$DOWN8" 2>&1); then echo "FAIL: 1700 rollback ran although hub data exists"; exit 1; fi
+echo "$out" | grep -q "hub rows" || { echo "FAIL: wrong refusal: $out"; exit 1; }
+psql_admin -d cs_kh -q -c "delete from public.hub_slack_installations" >/dev/null
+psql_admin -d cs_kh --single-transaction -f - < "$DOWN8" >/dev/null
+apply cs_kh "$HUB"
+SR8=$(psql_admin -d cs_kh -At -f - < "$FRONTEND/supabase/snapshot_catalog.sql" | tail -1)
+[ "$SR8" = "$S1600" ] || { echo "FAIL: catalog after 1700 rollback ($SR8) differs from 1600 ($S1600)"; exit 1; }
+[ "$(psql_admin -d cs_kh -At -c "$FPH")" = "$BEFORE7" ] || { echo "FAIL: 1700 rollback changed existing rows"; exit 1; }
+apply cs_kh "$HARD"
+echo "ok - 1700 rollback refused with data; clean rollback == 1600 catalog ($SR8); 1700 applies again"

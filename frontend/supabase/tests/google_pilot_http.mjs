@@ -13,7 +13,13 @@ let passed = 0;
 const ok = (m) => { passed++; console.log(`ok - ${m}`); };
 const GMAIL = 'https://www.googleapis.com/auth/gmail.readonly', CAL = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
 
-async function http(url, { method = 'GET', headers = {}, body, raw } = {}) {
+// ponytail: overloaded host -> local GoTrue 504 / spurious 401 unauthenticated; retry only that (a deliberate 401 stays 401)
+async function http(url, opts = {}, tries = 4) {
+  const r = await http1(url, opts);
+  const flaky = r.status === 504 || (r.status === 401 && /unauthenticated|request_timeout/.test(r.text));
+  return flaky && tries > 1 ? (await new Promise((z) => setTimeout(z, 3000)), http(url, opts, tries - 1)) : r;
+}
+async function http1(url, { method = 'GET', headers = {}, body, raw } = {}) {
   const res = await fetch(url, { method, headers, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)), redirect: 'manual' });
   const text = await res.text();
   let json = null; try { json = text ? JSON.parse(text) : null; } catch { json = text; }
@@ -78,7 +84,13 @@ assert.equal((await connect(bob, BOHDAN)).outcome, 'connected');
 s = await status(bob); assert.equal(s.connection.services.drive, true); assert.equal(s.connection.scopes.includes(GMAIL) || s.connection.scopes.includes(CAL), false);
 assert.equal((await app('/api/gmail/search?kind=thread', bob.token)).json.error, 'gmail_disabled');
 assert.equal((await app(EV, bob.token)).json.error, 'calendar_disabled');
-ok('non-pilot users: consent refused 503 *_disabled, no Google URL; Drive connects; Gmail/Calendar routes 503');
+const ID = '11111111-1111-4111-8111-111111111111';
+for (const u of [bob, outsider]) for (const [m, p] of [['POST', '/api/gmail/links'], ['GET', `/api/gmail/links/${ID}/preview`], ['POST', `/api/gmail/links/${ID}/refresh`],
+  ['POST', '/api/calendar/links'], ['POST', `/api/calendar/links/${ID}/refresh`], ['GET', `/api/calendar/links/${ID}/open`]]) {
+  const x = await app(p, u.token, { method: m, ...(m === 'POST' ? { body: {} } : {}) });
+  assert.equal(x.status, 503, `${m} ${p}`); assert.match(x.json.error, /^(gmail|calendar)_disabled$/);
+}
+ok('non-pilot users: consent refused 503 *_disabled, no Google URL; Drive connects; every Gmail/Calendar route 503 *_disabled before validation or lookup');
 
 // 3. pilot user + NON-pilot Google account: refused at completion, nothing stored
 let r = await connect(alice, CYRIL, { service: 'gmail' }); assert.equal(r.outcome, 'pilot_account');

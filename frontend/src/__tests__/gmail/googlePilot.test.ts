@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, googleConfig, serviceAllowedFor, serviceAllowedForAccount, serviceMode } from '../../lib/google/config';
-import { getAccessToken, requireCalendar, requireGmail, HttpError } from '../../lib/google/server';
+import { getAccessToken, requireCalendar, requireGmail, serviceCaller, HttpError } from '../../lib/google/server';
+import * as inv from '../../lib/collab/invitationServer';
 import { seal, tokenAad } from '../../lib/google/crypto';
 
 /** RUN 06 pilot mode: Gmail / Calendar on only for listed ClearSpace users with a listed Google account. */
@@ -27,6 +28,17 @@ const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catc
 afterEach(() => vi.unstubAllEnvs());
 
 describe('pilot mode', () => {
+  it('serviceCaller: a non-pilot caller gets *_disabled before the route does anything else', async () => {
+    for (const [k, v] of Object.entries({ ...ENV, ...P, GMAIL_INTEGRATION_ENABLED: 'pilot', CALENDAR_INTEGRATION_ENABLED: '1' })) vi.stubEnv(k, v);
+    const spy = vi.spyOn(inv, 'authenticateCaller');
+    spy.mockResolvedValue({ db: {} as SupabaseClient, userId: OTHER });
+    expect(await code(serviceCaller(new Request('http://x'), 'gmail'))).toBe('gmail_disabled');
+    expect(await code(serviceCaller(new Request('http://x'), 'calendar'))).toBe('ok');            // '1' = everyone
+    spy.mockResolvedValue({ db: {} as SupabaseClient, userId: PILOT });
+    expect(await code(serviceCaller(new Request('http://x'), 'gmail'))).toBe('ok');
+    spy.mockRestore();
+  });
+
   it('modes: only exact "1" and "pilot"; everything else is off', () => {
     for (const v of ['', '0', 'true', 'Pilot ', 'pilots', 'on']) expect(serviceMode('gmail', env({ GMAIL_INTEGRATION_ENABLED: v }))).toBe('off');
     expect(serviceMode('gmail', env({ GMAIL_INTEGRATION_ENABLED: ' pilot ' }))).toBe('pilot');

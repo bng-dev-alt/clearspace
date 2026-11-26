@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CALENDAR_TEXT, getEvent, isEventId, linkRef, sharedFields } from '../../../../lib/google/calendar';
 import { ENTITY_ID_RE } from '../../../../lib/google/drive';
-import { caller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, requireCalendar, withServiceToken } from '../../../../lib/google/server';
+import { serviceCaller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, requireCalendar, withServiceToken } from '../../../../lib/google/server';
 
 /**
  * POST /api/calendar/links { projectId, cardId?, eventIds: string[] (1..10) } -- attach events the caller explicitly selected in
@@ -13,7 +13,7 @@ import { caller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, req
 export async function POST(req: NextRequest) {
   try {
     const cfg = requireCalendar();
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'calendar');
     const body = await readJson<{ projectId?: unknown; cardId?: unknown; eventIds?: unknown }>(req);
     const projectId = typeof body.projectId === 'string' && ENTITY_ID_RE.test(body.projectId) ? body.projectId : null;
     const cardId = body.cardId == null ? null : typeof body.cardId === 'string' && ENTITY_ID_RE.test(body.cardId) ? body.cardId : undefined;

@@ -420,6 +420,43 @@ test('Calendar containment (E2E_EXPECT_CALENDAR=off): no Calendar consent, no Ca
   expect(privacy.text).not.toContain('data-testid="privacy-calendar"');
 });
 
+// RUN 06: GMAIL/CALENDAR_INTEGRATION_ENABLED=pilot in production. The disposable test user is NOT in the pilot: for them everything must
+// look exactly like OFF (no consent, no scope, every route 503 *_disabled, nothing available) -- only the named pilot user/account can use it.
+test('Pilot containment (E2E_EXPECT_GMAIL=pilot / E2E_EXPECT_CALENDAR=pilot): a non-pilot user gets the OFF answer everywhere', async () => {
+  const gmail = process.env.E2E_EXPECT_GMAIL === 'pilot', calendar = process.env.E2E_EXPECT_CALENDAR === 'pilot';
+  test.skip(!gmail && !calendar, 'only for a build with a Google service in pilot mode');
+  const base = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://127.0.0.1:3410';
+  const call = async (method: string, path: string, body?: unknown, auth = true) => {
+    const res = await fetch(new URL(path, base), { method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      headers: { 'Content-Type': 'application/json', ...bypassHeaders, ...(auth ? { Authorization: `Bearer ${tokenA}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, json, text };
+  };
+  const id = '11111111-1111-4111-8111-111111111111';
+  const services: [string, [string, string, unknown?][]][] = [];
+  if (gmail) services.push(['gmail', [['GET', '/api/gmail/search?kind=thread&text=x'], ['POST', '/api/gmail/links', { projectId: 'x', items: [] }], ['GET', `/api/gmail/links/${id}/preview`], ['POST', `/api/gmail/links/${id}/refresh`]]]);
+  if (calendar) services.push(['calendar', [['GET', '/api/calendar/events?from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z'], ['POST', '/api/calendar/links', { projectId: 'x', eventIds: [] }], ['POST', `/api/calendar/links/${id}/refresh`], ['GET', `/api/calendar/links/${id}/open`]]]);
+  for (const [svc, routes] of services) {
+    const start = await call('POST', '/api/google/oauth/start', { returnTo: '/settings', service: svc });
+    expect([start.status, start.json?.error], `${svc} consent`).toEqual([503, `${svc}_disabled`]);
+    expect(start.text).not.toContain('accounts.google.com');
+    for (const [m, p, b] of routes) {
+      expect([(await call(m, p, b)).json?.error], `${m} ${p}`).toEqual([`${svc}_disabled`]);
+      expect((await call(m, p, b, false)).status, `anonymous ${m} ${p}`).toBe(401);
+    }
+  }
+  const driveStart = await call('POST', '/api/google/oauth/start', { returnTo: '/settings' });
+  expect(driveStart.status).toBe(200);
+  expect(new URL(driveStart.json.url).searchParams.get('scope') ?? '').not.toMatch(/gmail|calendar/);
+  const status = await call('GET', '/api/google/connection');
+  expect([status.json?.gmailAvailable, status.json?.calendarAvailable]).toEqual([false, false]);
+  const privacy = await call('GET', '/privacy', undefined, false);
+  if (gmail) expect(privacy.text).toContain('privacy-gmail-pilot');
+  if (calendar) expect(privacy.text).toContain('privacy-calendar-pilot');
+});
+
 // RUN 05: a build that contains the notify code but runs with SLACK_INTEGRATION_ENABLED and TELEGRAM_INTEGRATION_ENABLED off (public
 // production). Signed in or not: every /api/notify route is closed first, nothing can be connected or sent, the settings page has no
 // notify card and the privacy policy says it is off.

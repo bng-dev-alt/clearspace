@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { googleConfig, secretFormat, SERVICE_SCOPE, serviceAllowedForAccount, serviceMode, type GoogleConfig, type GoogleService } from './config';
+import { googleConfig, secretFormat, SERVICE_SCOPE, serviceAllowedFor, serviceAllowedForAccount, serviceMode, type GoogleConfig, type GoogleService } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -63,6 +63,13 @@ export function requireGoogle(notConfigured: string = MSG.not_configured): Googl
 
 export async function caller(req: Request) {
   return authenticateCaller(req.headers.get('authorization'), 'Propojení s Google vyžaduje připojenou databázi.');
+}
+
+/** RUN 06: the caller of a Gmail / Calendar route; in pilot mode a non-pilot user gets exactly the OFF answer before anything else runs. */
+export async function serviceCaller(req: Request, service: 'gmail' | 'calendar') {
+  const c = await caller(req);
+  if (!serviceAllowedFor(service, c.userId)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);
+  return c;
 }
 
 /** Postgres error -> HTTP, keeping the database's own Czech message for the expected refusals. */

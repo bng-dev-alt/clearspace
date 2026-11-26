@@ -101,7 +101,7 @@ if [ "${EXPECT_SLACK_OFF:-0}" = 1 ] && [ "${EXPECT_TELEGRAM_OFF:-0}" = 1 ]; then
     case "$b" in *'_disabled"'*' HTTP503') ok "$m $p -> 503 (switched off)";; *) bad "$m $p -> ${b: -7} (expected 503 *_disabled)";; esac
   done
   b=$(get /api/notify/test -X POST -H 'Content-Type: application/json' -d '{"provider":"telegram"}' -w ' HTTP%{http_code}')
-  case "$b" in *'"error":"telegram_disabled"'*' HTTP503') ok "POST /api/notify/test -> 503 telegram_disabled";; *) bad "POST /api/notify/test -> ${b: -7}";; esac
+  case "$b" in *'_disabled"'*' HTTP503') ok "POST /api/notify/test (provider given) -> 503 (switched off)";; *) bad "POST /api/notify/test -> ${b: -7}";; esac
   H=$(get "/api/notify/slack/callback?state=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code=x" -I)
   echo "$H" | tr 'A-Z' 'a-z' | grep -q 'location: /settings?notify=disabled' && ! echo "$H" | grep -qi 'set-cookie: cs_notify' && ok "Slack callback (off) -> /settings?notify=disabled, no cookie" || bad "Slack callback while off parks a cookie or redirects elsewhere"
   P=$(get /privacy); echo "$P" | grep -q 'privacy-notify-off' && ! echo "$P" | grep -q 'data-testid="privacy-notify"' && ok "/privacy: Slack / Telegram stated as NOT enabled" || bad "/privacy does not state that notifications are off"

@@ -16,6 +16,9 @@ const TG_SECRET = process.env.TELEGRAM_HUB_WEBHOOK_SECRET ?? '';
 const BOT = process.env.TELEGRAM_HUB_BOT_USERNAME ?? '';
 const SHOTS = process.env.E2E_SHOTS_DIR;
 const STYLE = process.env.E2E_STYLE === 'monograph' ? 'monograph' : 'existing';
+// E2E_SCHEME=dark: the owner on a dark desktop and the member on a light phone (default: light desktop, dark phone)
+const OWNER_SCHEME: 'light' | 'dark' = process.env.E2E_SCHEME === 'dark' ? 'dark' : 'light';
+const MEMBER_SCHEME: 'light' | 'dark' = OWNER_SCHEME === 'dark' ? 'light' : 'dark';
 test.skip(!SB || !MOCK || !SIGNING || !TG_SECRET || !process.env.PLAYWRIGHT_TEST_BASE_URL, 'needs the local hub stack + mock (scripts/hub-stack.sh)');
 test.describe.configure({ mode: 'serial' });
 
@@ -38,8 +41,13 @@ async function rest(request: APIRequestContext, path: string, opts: { method?: s
 const ctl = (request: APIRequestContext, name: string, data?: unknown) => (data === undefined ? request.get(`${MOCK}/__control/${name}`) : request.post(`${MOCK}/__control/${name}`, { data }));
 const messages = async (request: APIRequestContext) => (await ctl(request, 'messages')).json();
 let upd = Number(`${Date.now()}`.slice(-8)) * 10, mid = 300;
-const tg = (request: APIRequestContext, u: Record<string, unknown>) => request.post(`${APP()}/api/hub/telegram/webhook`, {
-  headers: { 'x-telegram-bot-api-secret-token': TG_SECRET, 'Content-Type': 'application/json' }, data: JSON.stringify({ update_id: ++upd, ...u }) });
+// the webhook records the update and processes it right after answering (durable inbox): give it a moment
+const tg = async (request: APIRequestContext, u: Record<string, unknown>) => {
+  const r = await request.post(`${APP()}/api/hub/telegram/webhook`, {
+    headers: { 'x-telegram-bot-api-secret-token': TG_SECRET, 'Content-Type': 'application/json' }, data: JSON.stringify({ update_id: ++upd, ...u }) });
+  await new Promise((x) => setTimeout(x, 900));
+  return r;
+};
 const tgMsg = (chat: number, from: number, text: string, extra: Record<string, unknown> = {}, type = 'supergroup') => ({ message: { message_id: ++mid, date: Math.floor(Date.now() / 1000), text,
   chat: { id: chat, type, title: 'Klient – stěhování' }, from: { id: from, is_bot: false, first_name: 'Jana' }, ...extra } });
 const slackCommand = (request: APIRequestContext, text: string) => {
@@ -84,7 +92,7 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
   }
   const inv = await rest(request, '/rest/v1/rpc/create_project_invitation', { method: 'POST', token: A.token, data: { p_project_id: P, p_email: B.email, p_role: 'member' } });
   await rest(request, '/rest/v1/rpc/accept_workspace_invitation', { method: 'POST', token: B.token, data: { p_token: inv.json[0].token, p_display_name: B.name } });
-  const a = await login(browser, A);
+  const a = await login(browser, A, { width: 1280, height: 800 }, OWNER_SCHEME);
   const modal = () => a.page.getByTestId('hub-integrations-modal');
 
   await test.step('Settings: install the project Slack app (simulated consent) -> installed', async () => {
@@ -139,27 +147,40 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     const pi = dest.getByTestId('hub-cap-intelligence');
     if (await pi.isEnabled()) {
       await pi.click();
-      await expect(modal().getByTestId('hub-pi-confirm')).toContainText('jen zprávy, které projektový bot dostane');
+      await expect(modal().getByTestId('hub-pi-confirm')).toContainText('jen vybrané zprávy');      // honest scope (privacy mode)
       await modal().getByTestId('hub-pi-cancel').click();
+      await expect(pi).not.toBeChecked();
+      await pi.click();
+      await modal().getByTestId('hub-pi-accept').click();
+      await expect(dest.getByTestId('hub-pi-scope')).toContainText('jen vybrané zprávy');
+      const full = dest.getByTestId('hub-cap-full-ingest');
+      if (await full.count()) {                                                       // optional PI bot configured on this server
+        await full.click();
+        await expect(modal().getByTestId('hub-pi-confirm')).toContainText('celá komunikace skupiny');
+        await modal().getByTestId('hub-pi-accept').click();
+        await expect(dest.getByTestId('hub-pi-scope')).toContainText('samostatný PI bot');
+      }
+      await shot(a.page, `hub-pi-scope-${OWNER_SCHEME}`);
+      await pi.click();                                                                // off again: imports are deleted
       await expect(pi).not.toBeChecked();
     } else {
       await expect(dest).toContainText('Na serveru vypnuto');
     }
     await expect(modal().getByTestId('hub-audit')).toContainText('Historie změn');
-    await shot(a.page, 'hub-integrations');
+    await shot(a.page, `hub-integrations-${OWNER_SCHEME}`);
     await a.page.keyboard.press('Escape');
   });
 
-  await test.step('identity: /start to the bot -> link page (fragment) -> confirmed', async () => {
+  await test.step('identity (RUN 07B): code started in Settings -> sent from the Telegram account via the deep link -> linked', async () => {
     await ctl(request, 'telegram-chat', { chatId: 8801, type: 'private' });
-    await tg(request, tgMsg(8801, 8801, '/start', {}, 'private'));
-    const text = (await messages(request)).telegram.at(-1).text as string;
-    const url = /(http\S+\/integrations\/link#code=[A-Za-z0-9_-]+)/.exec(text)![1];
-    await a.page.goto(new URL(url).pathname + new URL(url).hash);
-    await expect(a.page).toHaveURL(/\/integrations\/link$/);            // the code left the address bar at once
-    await a.page.getByTestId('hub-link-confirm').click();
-    await expect(a.page.getByTestId('hub-link-result')).toContainText('je propojený');
     await a.page.goto('/settings');
+    await a.page.getByTestId('hub-identity-telegram').click();
+    const href = await a.page.getByTestId('hub-identity-link').getAttribute('href');
+    expect(href).toMatch(new RegExp(`^https://t\\.me/${BOT}\\?start=[A-Z2-9]{10}$`));
+    await tg(request, tgMsg(8801, 8801, `/start ${new URL(href!).searchParams.get('start')}`, {}, 'private'));
+    expect((await messages(request)).telegram.at(-1).text).toContain('Alena Vlastníková');
+    await shot(a.page, `hub-identity-${OWNER_SCHEME}`);
+    await a.page.getByTestId('hub-identity-refresh').click();
     await expect(a.page.getByTestId('hub-identities')).toContainText('Telegram: Jana');
   });
 
@@ -187,7 +208,7 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
   });
 
   await test.step('member (phone, dark): read-only integrations, no connect buttons, no overflow', async () => {
-    const b = await login(browser, B, { width: 375, height: 812 }, 'dark');
+    const b = await login(browser, B, { width: 375, height: 812 }, MEMBER_SCHEME);
     await b.page.goto(`/projects/${P}`);
     await b.page.getByTestId('project-integrations-btn').click();
     const m = b.page.getByTestId('hub-integrations-modal');
@@ -197,7 +218,7 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     await expect(m.getByTestId('hub-cap-notify').first()).toBeDisabled();
     await expect(m).toContainText('Propojení spravují vlastník a správci projektu');
     await noOverflow(b.page);
-    await shot(b.page, 'hub-member-mobile-dark');
+    await shot(b.page, `hub-member-mobile-${MEMBER_SCHEME}`);
     await b.ctx.close();
   });
 

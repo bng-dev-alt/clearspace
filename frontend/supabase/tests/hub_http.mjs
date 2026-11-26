@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 const API = process.env.E2E_SUPABASE_URL, ANON = process.env.E2E_SUPABASE_ANON_KEY, SERVICE = process.env.E2E_SUPABASE_SERVICE_KEY;
 const APP = process.env.E2E_BASE_URL, MOCK = process.env.HUB_MOCK_URL, SECRET = process.env.HUB_SERVER_SECRET;
 const SIGNING = process.env.SLACK_HUB_SIGNING_SECRET, TG_SECRET = process.env.TELEGRAM_HUB_WEBHOOK_SECRET, BOT = process.env.TELEGRAM_HUB_BOT_USERNAME;
+const PI_SECRET = process.env.TELEGRAM_HUB_PI_WEBHOOK_SECRET;
 const DBC = process.env.HUB_DB_CONTAINER || 'supabase_db_cs-notify-sb';
 const APP_LOG = process.env.APP_LOG;
 for (const u of [API, APP, MOCK]) {
@@ -48,13 +49,30 @@ const command = (team, channel, user, text, extra = {}) => slackForm('/api/hub/s
   user_id: user, user_name: extra.userName ?? 'anna', command: '/clearspace', text, response_url: `${MOCK}/slack/respond`, trigger_id: 'trig-cmd' }, extra);
 const interact = (payload, o) => slackForm('/api/hub/slack/interactivity', { payload: JSON.stringify(payload) }, o);
 let evN = 0;
-const slackEvent = (team, event, o = {}) => {
-  const raw = JSON.stringify({ type: 'event_callback', team_id: team, event_id: o.eventId ?? `Ev${run}${++evN}`, event });
-  return http(`${APP}/api/hub/slack/events`, { method: 'POST', raw, headers: { 'Content-Type': 'application/json', ...slackSig(raw, o.ts, o.secret) } });
+/** Wait until the durable inbox has finished an event (processing runs after the webhook answered). */
+async function settled(provider, key) {
+  for (let i = 0; i < 40; i++) {
+    const st = sql(`select coalesce((select status from public.hub_inbox where provider = '${provider}' and event_key = '${key}'), 'none')`);
+    if (st === 'completed' || st === 'failed' || st === 'none') return st;
+    await sleep(150);
+  }
+  return 'timeout';
+}
+const slackEvent = async (team, event, o = {}) => {
+  const id = o.eventId ?? `Ev${run}${++evN}`;
+  const raw = JSON.stringify({ type: 'event_callback', team_id: team, event_id: id, event });
+  const r = await http(`${APP}/api/hub/slack/events`, { method: 'POST', raw, headers: { 'Content-Type': 'application/json', ...slackSig(raw, o.ts, o.secret) } });
+  if (r.status === 200) r.inbox = await settled('slack', `e:${id}`);
+  return r;
 };
 let upd = Number(`${Date.now()}`.slice(-8)) * 10;
-const tgUpdate = (u, secret = TG_SECRET) => http(`${APP}/api/hub/telegram/webhook`, { method: 'POST', raw: JSON.stringify({ update_id: u.update_id ?? ++upd, ...u }),
-  headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-telegram-bot-api-secret-token': secret } : {}) } });
+const tgUpdate = async (u, secret = TG_SECRET, o = {}) => {
+  const id = u.update_id ?? ++upd;
+  const r = await http(`${APP}/api/hub/telegram/${o.pi ? 'pi-webhook' : 'webhook'}`, { method: 'POST', raw: JSON.stringify({ ...u, update_id: id }),
+    headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-telegram-bot-api-secret-token': secret } : {}) } });
+  if (r.status === 200) r.inbox = await settled('telegram', `${o.pi ? 'p' : 'u'}:${id}`);
+  return r;
+};
 let tgMsgId = 100;
 const tgMsg = (chat, from, text, extra = {}) => ({ message: { message_id: extra.id ?? ++tgMsgId, date: Math.floor(Date.now() / 1000), text,
   chat: { id: chat, type: extra.type ?? 'supergroup', title: extra.title ?? 'Stavba – tým' }, from: { id: from, is_bot: false, first_name: extra.name ?? 'Tomáš' }, ...extra.more } });
@@ -64,7 +82,7 @@ const settle = () => sleep(700);   // after() work of the Slack routes
 const USER_ROUTES = [['GET', '/api/hub/projects/x'], ['POST', '/api/hub/projects/x'], ['PATCH', '/api/hub/destinations/00000000-0000-4000-8000-000000000000'],
   ['POST', '/api/hub/destinations/00000000-0000-4000-8000-000000000000'], ['DELETE', '/api/hub/destinations/00000000-0000-4000-8000-000000000000'],
   ['GET', '/api/hub/identity'], ['POST', '/api/hub/identity'], ['POST', '/api/hub/slack/install/start'], ['POST', '/api/hub/slack/install/complete'],
-  ['POST', '/api/hub/slack/commands'], ['POST', '/api/hub/slack/interactivity'], ['POST', '/api/hub/slack/events'], ['POST', '/api/hub/telegram/webhook'], ['POST', '/api/hub/dispatch']];
+  ['POST', '/api/hub/slack/commands'], ['POST', '/api/hub/slack/interactivity'], ['POST', '/api/hub/slack/events'], ['POST', '/api/hub/telegram/webhook'], ['POST', '/api/hub/telegram/pi-webhook'], ['POST', '/api/hub/dispatch']];
 if (process.env.HUB_EXPECT_OFF === '1') {
   await ctl('reset', {});
   for (const [m, p] of USER_ROUTES) {
@@ -263,16 +281,24 @@ await ctl('telegram-chat', { chatId: TG, type: 'supergroup', admins: [ADMIN_TG] 
 const c5 = await code(O, 'telegram');
 await tgUpdate(tgMsg(TG, PLAIN_TG, `/link@${BOT} ${c5}`));
 let tm = (await messages()).telegram;
-assert.match(tm.at(-1).text, /jen její zakladatel nebo správce/);
-await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@other_bot ${c5}`));
-assert.equal((await messages()).telegram.length, tm.length, 'a command for another bot is ignored');
+assert.match(tm.at(-1).text, /jen její zakladatel nebo správce.*zneplatněn/s);
 await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@${BOT} ${c5}`));
+assert.match((await messages()).telegram.at(-1).text, /neplatný, vypršel/, 'R6: a code exposed by a non-admin attempt is burnt');
+const c5b = await code(O, 'telegram');
+tm = (await messages()).telegram;
+await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@other_bot ${c5b}`));
+assert.equal((await messages()).telegram.length, tm.length, 'a command for another bot is ignored');
+await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@${BOT} ${c5b}`, { name: 'Jana' }));
 tm = (await messages()).telegram;
 assert.match(tm.at(-1).text, /čeká na potvrzení/); assert.equal(tm.at(-1).parse_mode, null); assert.equal(tm.at(-1).preview?.is_disabled, true);
-await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@${BOT} ${c5}`));
-assert.match((await messages()).telegram.at(-1).text, /neplatný, vypršel nebo už byl použit/, 'A6: the Telegram code is single use');
+await tgUpdate(tgMsg(TG, ADMIN_TG, `/link@${BOT} ${c5b}`));
+assert.match((await messages()).telegram.at(-1).text, /čeká na potvrzení/, 'the same group repeating the same code = idempotent replay');
+await ctl('telegram-chat', { chatId: -1009998, type: 'supergroup', admins: [ADMIN_TG] });
+await tgUpdate(tgMsg(-1009998, ADMIN_TG, `/link@${BOT} ${c5b}`, { title: 'Jiná skupina' }));
+assert.match((await messages()).telegram.at(-1).text, /neplatný, vypršel nebo už byl použit/, 'A6: the Telegram code is single use (another group cannot reuse it)');
 st = (await app(`/api/hub/projects/${P}`, O.token)).json;
 const tgd = st.destinations.find((d) => d.provider === 'telegram');
+assert.equal(tgd.linkedBy, 'Telegram: Jana', 'R6: the manager sees who typed the code');
 assert.equal(tgd.kind, 'telegram_supergroup'); assert.equal(tgd.status, 'pending');
 assert.equal((await app(`/api/hub/destinations/${tgd.id}`, O.token, { method: 'PATCH', body: { decision: 'confirm' } })).json.status, 'active');
 // a rejected link disappears
@@ -333,29 +359,36 @@ for (const m of digest) assert.ok(m.text.split('\n').filter((l) => l.startsWith(
 ok('A10: notifications only to active destinations with notify on and the subscribed event types; titles escaped; one digest (≤10 lines) per destination per run; A9: nothing crosses projects');
 
 // ---------------------------------------------------------------- identities
-const slackIdentity = async (team, slackUser, u) => {
-  const res = await command(team, 'C0PUB0001', slackUser, 'ucet', { userName: 'anna' });
-  const link = /\/integrations\/link#code=([A-Za-z0-9_-]+)/.exec(res.json.text)?.[1];
-  assert.ok(link, res.json.text);
-  const c = await app('/api/hub/identity', u.token, { method: 'POST', body: { code: link } });
-  assert.equal(c.status, 200, JSON.stringify(c.json));
-  return link;
+const startId = async (u, provider) => {
+  const r = await app('/api/hub/identity', u.token, { method: 'POST', body: { provider } });
+  assert.equal(r.status, 200, JSON.stringify(r.json)); assert.match(r.json.code, /^[A-Z2-9]{10}$/);
+  return r.json;
 };
-const anna = await slackIdentity('T0HUB0001', 'U0ANNA001', M);
-assert.equal((await app('/api/hub/identity', O.token, { method: 'POST', body: { code: anna } })).status, 400, 'identity link is single use');
-await slackIdentity('T0HUB0001', 'U0VIKT001', V);
-// Telegram identity: private /start
+const slackIdentity = async (slackUser, u, name = 'anna') => {
+  const { code: c } = await startId(u, 'slack');
+  const res = await command('T0HUB0001', 'C0PUB0001', slackUser, `ucet ${c}`, { userName: name });
+  assert.match(res.json.text, /Hotovo: tento Slack účet je propojený/, res.json.text);
+  return c;
+};
+const anna = await slackIdentity('U0ANNA001', M);
+assert.match((await command('T0HUB0001', 'C0PUB0001', 'U0MALLORY', `ucet ${anna}`)).json.text, /neplatný nebo vypršel/, 'T7: a used code cannot bind another chat account');
+assert.match((await command('T0HUB0001', 'C0PUB0001', 'U0ANNA001', 'ucet')).json.text, /Kód si vytvořte v ClearSpace/, 'the chat side alone cannot start a link (RUN 07B review R1)');
+await slackIdentity('U0VIKT001', V, 'viktor');
 for (const id of [ADMIN_TG, VIEW_TG, PLAIN_TG]) await ctl('telegram-chat', { chatId: id, type: 'private' });
-await tgUpdate(tgMsg(ADMIN_TG, ADMIN_TG, '/start', { type: 'private' }));
-const tgLink = /#code=([A-Za-z0-9_-]+)/.exec((await messages()).telegram.at(-1).text)?.[1];
-assert.equal((await app('/api/hub/identity', O.token, { method: 'POST', body: { code: tgLink } })).status, 200);
-await tgUpdate(tgMsg(VIEW_TG, VIEW_TG, '/start', { type: 'private' }));
-assert.equal((await app('/api/hub/identity', V.token, { method: 'POST', body: { code: /#code=([A-Za-z0-9_-]+)/.exec((await messages()).telegram.at(-1).text)[1] } })).status, 200);
+const tgStart = await startId(O, 'telegram');
+assert.equal(tgStart.url, `https://t.me/${BOT}?start=${tgStart.code}`);
+const tgLink = tgStart.code;
+await tgUpdate(tgMsg(ADMIN_TG, ADMIN_TG, `/start ${tgStart.code}`, { type: 'private' }));
+assert.match((await messages()).telegram.at(-1).text, /propojený s účtem ClearSpace/);
+await tgUpdate(tgMsg(VIEW_TG, VIEW_TG, `/start ${(await startId(V, 'telegram')).code}`, { type: 'private' }));
+await tgUpdate(tgMsg(PLAIN_TG, PLAIN_TG, '/start', { type: 'private' }));
+assert.match((await messages()).telegram.at(-1).text, /Účet propojíte v ClearSpace/, 'a bare /start only explains');
 await tgUpdate(tgMsg(PLAIN_TG, PLAIN_TG, 'ahoj, tohle je soukromá zpráva', { type: 'private' }));
 assert.equal(sql(`select count(*) from public.hub_messages where text like '%soukromá zpráva%'`), '0', 'private chats are never stored');
 const mine = (await app('/api/hub/identity', M.token)).json.identities;
 assert.equal(mine.length, 1); assert.match(mine[0].label, /^Slack: anna/);
-ok('identity: linked only from the chat side + confirmed signed in (single-use link in the URL fragment); private chats never stored');
+assert.equal((await app('/api/hub/identity', X.token, { method: 'POST', body: { provider: 'slack' } })).status, 200, 'any signed-in user may link their own chat account');
+ok('identity (RUN 07B): started by the SIGNED-IN user, completed from the chat account with a single-use code; a forwarded link can no longer bind a stranger\'s chat account; private chats never stored');
 
 // ---------------------------------------------------------------- A12 / A14: task from a Slack message
 const shortcut = (user, ts, text, trigger = 'trig-1', channel = 'C0PUB0001') => interact({ type: 'message_action', callback_id: 'clearspace_create_task', trigger_id: trigger,
@@ -380,7 +413,7 @@ r = await submit('U0ANNA001', meta, 'Zkontrolovat rozpočet', 'Zkontrolovat rozp
 assert.equal(r.json.response_action, 'clear');
 await settle();
 const task = JSON.parse(sql(`select row_to_json(m)::text from public.hub_messages m where project_id = '${P}' and kind = 'task_source'`));
-assert.equal(task.verified, true); assert.equal(task.author_user_id, M.id); assert.match(task.permalink, /^https:\/\/slack\.invalid\/archives\/C0PUB0001\/p1800000100000200$/);
+assert.equal(task.verified, false); assert.equal(task.author_user_id, null); assert.equal(task.text, 'Zkontrolovat rozpočet\nčíslo 2 a 3', 'the ORIGINAL message text, not the preview edit'); assert.match(task.permalink, /^https:\/\/slack\.invalid\/archives\/C0PUB0001\/p1800000100000200$/);
 const card = JSON.parse(sql(`select row_to_json(c)::text from public.cards c where id = '${task.card_id}'`));
 assert.equal(card.title, 'Zkontrolovat rozpočet'); assert.equal(card.column_id, `${P}-todo`);
 assert.equal(sql(`select actor_id from public.activity_logs where card_id = '${task.card_id}' and action_type = 'card_created'`), M.id, 'attributed to the verified user');
@@ -415,7 +448,9 @@ await tgUpdate(tgMsg(TG, ADMIN_TG, `/task@${BOT} Zajistit příjezd bagru`, { mo
 const conf = (await messages()).telegram.at(-1);
 assert.match(conf.text, /Vytvořen úkol v ClearSpace: „Zajistit příjezd bagru"/); assert.equal(conf.replyTo, srcId);
 const tgTask = JSON.parse(sql(`select row_to_json(m)::text from public.hub_messages m where project_id = '${P}' and kind = 'task_source' and provider = 'telegram'`));
-assert.equal(tgTask.author_user_id, O.id); assert.equal(tgTask.text, 'Bagr přijede ve čtvrtek'); assert.equal(tgTask.permalink, `https://t.me/c/1234567890/${srcId}`);
+assert.equal(tgTask.author_user_id, null); assert.equal(tgTask.author_label, 'Telegram: Petr', 'the source keeps its own author');
+assert.equal(sql(`select actor_id from public.activity_logs where card_id = '${tgTask.card_id}' and action_type = 'card_created'`), O.id, 'the creator is the verified commander');
+assert.equal(tgTask.text, 'Bagr přijede ve čtvrtek'); assert.equal(tgTask.permalink, `https://t.me/c/1234567890/${srcId}`);
 assert.equal(sql(`select count(*) from public.hub_messages where text = 'Bagr přijede ve čtvrtek'`), '1', 'the plain group message itself was not stored (no PI)');
 ok('A13: Telegram /task@bot as a reply -> task as the verified mapped user, permalink, confirmation as a reply; unlinked / viewer / missing reply refused; plain group messages not stored without PI');
 
@@ -426,7 +461,9 @@ await slackEvent('T0HUB0001', { type: 'message', channel: 'C0PUB0001', user: 'U0
 await slackEvent('T0HUB0001', { type: 'message', channel: 'C0PUB0001', bot_id: 'B0HUB', subtype: 'bot_message', ts: '1800000200.000500', thread_ts: thread, text: 'Komentář v ClearSpace – echo' });
 await settle();
 const comments = JSON.parse(sql(`select coalesce(json_agg(row_to_json(c) order by created_at)::text, '[]') from public.task_comments c where card_id = '${task.card_id}'`));
-assert.equal(comments.length, 1); assert.equal(comments[0].author_id, M.id); assert.equal(comments[0].content, 'Rozpočet je o 5 % vyšší.');
+assert.equal(comments.length, 1); assert.equal(comments[0].author_id, M.id);
+assert.equal(sql(`select permalink from public.hub_messages where text = 'Rozpočet je o 5 % vyšší.'`), 'https://slack.invalid/archives/C0PUB0001/p1800000200000300', 'RUN 07B: the synced reply keeps its original Slack link');
+assert.equal(sql(`select l.direction || ':' || (m.permalink is not null) from public.hub_comment_links l join public.hub_messages m on m.id = l.message_id where l.comment_id = '${comments[0].id}'`), 'inbound:true', 'comment provenance with link'); assert.equal(comments[0].content, 'Rozpočet je o 5 % vyšší.');
 const unv = JSON.parse(sql(`select row_to_json(m)::text from public.hub_messages m where msg_key_hmac is not null and text like 'Ignorujte%'`));
 assert.equal(unv.verified, false); assert.equal(unv.author_user_id, null); assert.equal(unv.kind, 'thread_reply');
 assert.equal(sql(`select count(*) from public.hub_messages where text like '%echo%'`), '0', 'A16: the app\'s own message is never processed');
@@ -528,22 +565,29 @@ assert.equal(sql(`select count(*) from public.hub_outbox where destination_id = 
 await tgUpdate({ my_chat_member: { chat: { id: TG, type: 'supergroup' }, from: { id: ADMIN_TG }, date: 1, old_chat_member: { status: 'member' }, new_chat_member: { status: 'kicked', user: { id: 200000002, is_bot: true } } } });
 assert.equal(dest(tgd.id).status, 'removed_bot');
 await tgUpdate({ my_chat_member: { chat: { id: TG, type: 'supergroup' }, from: { id: ADMIN_TG }, date: 1, old_chat_member: { status: 'left' }, new_chat_member: { status: 'member', user: { id: 200000002, is_bot: true } } } });
-assert.equal(dest(tgd.id).status, 'active', 'added back -> active again');
+assert.equal(dest(tgd.id).status, 'removed_bot', 'R11: being added back does not re-activate by itself');
+await sleep(31_000);
+let rc = await app(`/api/hub/destinations/${tgd.id}`, O.token, { method: 'POST', body: {} });
+assert.equal(rc.json.reactivated, true, JSON.stringify(rc.json)); assert.equal(dest(tgd.id).status, 'active', 'a manager re-check (proven send) re-activates it');
 await slackEvent('T0HUB0001', { type: 'app_uninstalled' });
 await settle();
 assert.equal(sql(`select status from public.hub_slack_installations`), 'revoked');
 assert.equal(dest(priv.id).status, 'revoked');
 assert.match((await shortcut('U0ANNA001', '1800000500.000100', 'x', 'trig-9', 'G0PRIV001')).status.toString(), /^200$/);
 assert.equal(sql(`select count(*) from public.hub_messages where text = 'x'`), '0');
+sql(`update public.hub_link_codes set created_at = now() - interval '11 minutes' where created_by = '${O.id}'`);   // rate window (codes + installs)
 assert.equal((await slackInstall(O)).outcome, 'installed');
-assert.equal(dest(priv.id).status, 'active', 'reinstall reactivates revoked destinations');
-ok('A19: bot removed from a Slack channel -> removed_bot + queue cancelled; Telegram kick / re-add tracked; app_uninstalled -> workspace + its channels revoked at once; reinstall restores');
+assert.equal(dest(priv.id).status, 'revoked', 'R7: a reinstall does not silently re-activate destinations');
+rc = await app(`/api/hub/destinations/${priv.id}`, A.token, { method: 'POST', body: {} });
+assert.equal(rc.json.reactivated, true, JSON.stringify(rc.json)); assert.equal(dest(priv.id).status, 'active', 're-checked by the project manager');
+ok('A19: bot removed -> removed_bot + queue cancelled; Telegram kick tracked, re-add needs a manager re-check; app_uninstalled -> workspace + channels revoked at once; after a reinstall each manager re-checks (no silent cross-tenant re-activation)');
 
 // ---------------------------------------------------------------- Telegram group -> supergroup migration
 const G2 = -4000001;
 await ctl('telegram-chat', { chatId: G2, type: 'group', admins: [ADMIN_TG] });
-const lim = await app(`/api/hub/projects/${P}`, O.token, { method: 'POST', body: { provider: 'telegram' } });
-assert.equal(lim.status, 429, 'link codes + install states: max 10 per manager per 10 minutes');
+let limited = 0;
+for (let i = 0; i < 11 && !limited; i++) if ((await app(`/api/hub/projects/${P}`, O.token, { method: 'POST', body: { provider: 'telegram' } })).status === 429) limited = i + 1;
+assert.ok(limited > 0 && limited <= 11, 'link codes + install states: max 10 per manager per 10 minutes');
 sql(`update public.hub_link_codes set created_at = now() - interval '11 minutes' where created_by = '${O.id}'`);
 const c7 = await code(O, 'telegram');
 await tgUpdate(tgMsg(G2, ADMIN_TG, `/link ${c7}`, { type: 'group', title: 'Malá skupina' }));
@@ -579,6 +623,65 @@ sql(`insert into public.hub_messages (project_id, destination_id, destination_la
 await tick();
 assert.equal(sql(`select count(*) from public.hub_messages where msg_key_hmac = encode(sha256(convert_to('ret-${run}', 'UTF8')), 'hex')`), '0');
 ok('A24: disconnect removes binding + conversations at once (history kept unless purge), the Telegram bot leaves, later messages are refused; purge deletes records but never ClearSpace tasks; retention deletes expired imports');
+
+
+// ---------------------------------------------------------------- RUN 07B: durable inbound processing, PI bot scope, provenance
+{
+  // (1) a crashed request: the event was recorded but never processed -> the scheduler's dispatcher finishes it
+  const T2 = -1005550007;
+  await ctl('telegram-chat', { chatId: T2, type: 'supergroup', admins: [ADMIN_TG] });
+  const cc = await code(A, 'telegram');
+  const uid1 = ++upd;
+  const payload = JSON.stringify({ src: 'telegram', body: { update_id: uid1, ...tgMsg(T2, ADMIN_TG, `/link@${BOT} ${cc}`, { title: 'Po pádu' }) } });
+  sql(`insert into public.hub_inbox (provider, event_key, status, payload, received_at) values ('telegram', 'u:${uid1}', 'received', '${payload.replace(/'/g, "''")}'::jsonb, now() - interval '2 minutes')`);
+  const t1 = await tick();
+  assert.ok(t1.first.inbound >= 1, JSON.stringify(t1.first));
+  for (let i = 0; i < 40 && sql(`select status from public.hub_inbox where event_key = 'u:${uid1}'`) !== 'completed'; i++) await sleep(250);
+  assert.equal(sql(`select status || ':' || (payload is null) from public.hub_inbox where event_key = 'u:${uid1}'`), 'completed:true');
+  assert.ok((await app(`/api/hub/projects/${P}`, O.token)).json.destinations.some((d) => d.label === 'Po pádu'), 'the interrupted link was completed by the dispatcher');
+  assert.match((await messages()).telegram.at(-1).text, /čeká na potvrzení/);
+  // (2) the provider retries the same update after we recorded it: processed once, replied once
+  const before = (await messages()).telegram.length;
+  const again = await tgUpdate({ update_id: uid1, ...tgMsg(T2, ADMIN_TG, `/link@${BOT} ${cc}`, { title: 'Po pádu' }) });
+  assert.equal(again.status, 200); assert.equal((await messages()).telegram.length, before, 'no second reply');
+  // (3) two people answer /task to the same message at the same moment (different update ids): one task
+  const dst = (await app(`/api/hub/projects/${P}`, O.token)).json.destinations.find((d) => d.label === 'Po pádu');
+  await app(`/api/hub/destinations/${dst.id}`, O.token, { method: 'PATCH', body: { decision: 'confirm' } });
+  await cfgDest(dst.id, { interactive: true });
+  await tgUpdate(tgMsg(VIEW_TG, VIEW_TG, `/start ${(await startId(M, 'telegram')).code}`, { type: 'private' }));
+  const src = ++tgMsgId;
+  const reply = { message_id: src, date: 1800000000, text: 'Souběh', from: { id: PLAIN_TG, is_bot: false, first_name: 'Petr' } };
+  const rs = await Promise.all([tgUpdate(tgMsg(T2, ADMIN_TG, `/task@${BOT} Souběžný úkol`, { more: { reply_to_message: reply } })),
+                                tgUpdate(tgMsg(T2, VIEW_TG, `/task@${BOT} Souběžný úkol`, { more: { reply_to_message: reply } }))]);
+  assert.ok(rs.every((r) => r.inbox === 'completed'), JSON.stringify(rs.map((r) => r.inbox)));
+  assert.equal(sql(`select count(*) from public.cards where project_id = '${P}' and title = 'Souběžný úkol'`), '1', 'concurrent duplicates -> exactly one task');
+  // (4) PI bot: a group without full ingestion is ignored entirely; with it (opt-in + acknowledgement) every human group message is imported
+  const piMsg = (text) => ({ message: { message_id: ++tgMsgId, date: Math.floor(Date.now() / 1000), text, chat: { id: T2, type: 'supergroup', title: 'Po pádu' }, from: { id: PLAIN_TG, is_bot: false, first_name: 'Petr' } } });
+  assert.equal((await tgUpdate(piMsg('x'), 'wrong-secret-0000000000000000000000000', { pi: true })).status, 401, 'PI bot secret enforced');
+  await tgUpdate(piMsg('Obecná skupina bez opt-inu'), PI_SECRET, { pi: true });
+  assert.equal(sql(`select count(*) from public.hub_messages where text = 'Obecná skupina bez opt-inu'`), '0', 'no full ingestion without the opt-in');
+  const piAvail = (await app(`/api/hub/projects/${P}`, O.token)).json;
+  if (piAvail.intelligenceAvailable && piAvail.telegramPiBot) {
+    assert.equal((await cfgDest(dst.id, { interactive: true, intelligence: true, intelligenceAck: true, fullIngest: true })).status, 200);
+    assert.equal(dest(dst.id).full_ingest, true);
+    assert.equal((await cfgDest(dst.id, { interactive: true, intelligence: true, fullIngest: true }, O)).status, 200, 'already on: no new acknowledgement needed');
+    await tgUpdate(piMsg('Celá skupina – dodávka v pátek'), PI_SECRET, { pi: true });
+    await tgUpdate({ message: { ...piMsg('Odpověď botovi').message, reply_to_message: { message_id: 1, from: { id: 200000002, is_bot: true, username: BOT } } } }, PI_SECRET, { pi: true });
+    assert.equal(sql(`select kind from public.hub_messages where text = 'Celá skupina – dodávka v pátek'`), 'ingested');
+    assert.equal(sql(`select count(*) from public.hub_messages where text = 'Odpověď botovi'`), '0', 'replies to the project bot are left to the project bot');
+    await tgUpdate({ message: { ...piMsg('soukromé').message, chat: { id: PLAIN_TG, type: 'private' } } }, PI_SECRET, { pi: true });
+    assert.equal(sql(`select count(*) from public.hub_messages where text = 'soukromé'`), '0', 'the PI bot never reads private chats');
+    await cfgDest(dst.id, { interactive: true, intelligence: false });
+    assert.equal(sql(`select count(*) from public.hub_messages where text like 'Celá skupina%'`), '0', 'switching PI off deletes the imports at once');
+  } else {
+    await cfgDest(dst.id, { interactive: true, intelligence: true, intelligenceAck: true, fullIngest: true });
+    assert.equal(dest(dst.id).full_ingest, true);
+    await tgUpdate(piMsg('Kill switch'), PI_SECRET, { pi: true });
+    assert.equal(sql(`select count(*) from public.hub_messages where text = 'Kill switch'`), '0', 'server kill switch: the PI bot stores nothing');
+    await cfgDest(dst.id, { interactive: true, intelligence: false });
+  }
+  ok('RUN 07B: an interrupted event is finished by the dispatcher (payload dropped), a provider retry is processed and answered once, concurrent duplicate /task -> one task; the PI bot reads only opted-in confirmed groups (never private chats, never replies meant for the project bot), switching PI off deletes its imports');
+}
 
 // ---------------------------------------------------------------- dispatch contract
 const garbage = await app('/api/hub/dispatch', null, { method: 'POST', headers: { 'x-hub-secret': SECRET }, body: { items: [{ id: '00000000-0000-4000-8000-000000000000', provider: 'slack' }, 'x'] } });

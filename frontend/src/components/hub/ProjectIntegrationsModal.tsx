@@ -144,7 +144,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                       <span><strong>Project Intelligence</strong> – AI smí číst komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'}. Výchozí stav vypnuto.{!status.intelligenceAvailable && ' (Na serveru vypnuto.)'}
                         {d.intelligence && <><br /><em data-testid="hub-pi-scope">Rozsah: {piScope(d)}.</em></>}</span></label>
                     {d.provider === 'telegram' && d.intelligence && status.telegramPiBot && (
-                      <label className="notify-check hub-events"><input type="checkbox" checked={d.fullIngest}
+                      <label className="notify-check" style={{ paddingLeft: "1.4rem" }}><input type="checkbox" checked={d.fullIngest}
                         onChange={(e) => (e.target.checked ? setPiAsk({ d, full: true }) : save(d, { fullIngest: false }))} data-testid="hub-cap-full-ingest" />
                         <span><strong>Celá komunikace skupiny</strong> – přidejte do skupiny také PI bota @{status.telegramPiBot} (jen čte, nikdy nepíše).</span></label>
                     )}

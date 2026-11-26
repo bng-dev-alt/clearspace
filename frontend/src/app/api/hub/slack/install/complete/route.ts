@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCaller } from '../../../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE } from '../../../../../../lib/google/server';
-import { HUB_INSTALL_COOKIE, HUB_INSTALL_COOKIE_PATH, HUB_INSTALL_RESULT_COOKIE, hubKey } from '../../../../../../lib/hub/config';
+import { HUB_INSTALL_COOKIE, HUB_INSTALL_COOKIE_PATH, HUB_INSTALL_RESULT_COOKIE } from '../../../../../../lib/hub/config';
 import { clean } from '../../../../../../lib/notify/message';
 import { slackHubExchange } from '../../../../../../lib/hub/providers';
-import { hubLog, requireHubSlack, sealRef } from '../../../../../../lib/hub/server';
+import { hubLog, keys, requireHubSlack, sealRef } from '../../../../../../lib/hub/server';
 
 /**
  * POST /api/hub/slack/install/complete -- finishes the workspace install under the user's session: parked answer + this browser's nonce must
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (parked.error) { hubLog('slack_install_denied', { error: parked.error }); return done('denied'); }
     const ex = await slackHubExchange(slack, parked.code ?? '');
     if (!ex.ok) { hubLog('slack_install_refused', { reason: ex.reason }); return done(ex.reason); }
-    const teamHmac = hubKey(cfg.serverSecret, 'slack', 'team', ex.grant.teamId);
+    const teamHmac = keys(cfg.routingKey).slackTeam(ex.grant.teamId);
     const { data: installation, error } = await db.rpc('hub_slack_install_lookup', { p_server_secret: cfg.serverSecret, p_state_hash: sha256hex(`${parked.state}.${nonce}`), p_team_hmac: teamHmac });
     if (error) throw dbError(error);
     if (typeof installation !== 'string') return done('expired');

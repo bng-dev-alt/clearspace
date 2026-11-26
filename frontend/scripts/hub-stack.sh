@@ -45,12 +45,13 @@ hub_env() {
 DISPATCH_URL=${HUB_DISPATCH_URL:-http://host.docker.internal:$PORT/api/hub/dispatch}
 case "${1:-}" in
   up)
-    if [ -n "$(docker ps -q --filter name=supabase_db_cs-notify-sb)" ] && [ "$(psql_db -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = 1 ]; then
-      # running stack: re-apply ONLY the hub migration (re-applying older ones can collide with later test data, e.g. the 1300 provider check)
-      for m in 20261130001600_communication_hub 20261201001700_hub_hardening; do psql_db --single-transaction -f - < "$HERE/supabase/migrations/$m.sql" >/dev/null; done
-    else
-      "$HERE/scripts/notify-stack.sh" up
-    fi
+    # a stopped stack is started through the RUN 01 launcher (loopback-only Docker proxy, refuses LAN exposure); its migration loop may stop
+    # at an older migration that collides with later test data (1300 provider check, TECH_DEBT) -- the stack itself is up by then
+    [ -n "$(docker ps -q --filter name=supabase_db_cs-notify-sb)" ] || "$HERE/scripts/notify-stack.sh" up || true
+    [ -n "$(docker ps -q --filter name=supabase_db_cs-notify-sb)" ] || { echo "stack did not start"; exit 1; }
+    if docker ps --filter name=cs-notify-sb --format '{{.Ports}}' | tr ',' '\n' | grep -qE '(0\.0\.0\.0|\[::\]):[0-9]+->'; then echo "REFUSING: stack is LAN-reachable"; exit 1; fi
+    [ "$(psql_db -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = 1 ] || { echo "stack lacks 1500"; exit 1; }
+    for m in 20261130001600_communication_hub 20261201001700_hub_hardening; do psql_db --single-transaction -f - < "$HERE/supabase/migrations/$m.sql" >/dev/null; done
     "$HERE/scripts/notify-stack.sh" seed >/dev/null
     gen_hub
     # the service principal: a plain Auth user without any project membership; registered + server_trust('hub') via the ops script

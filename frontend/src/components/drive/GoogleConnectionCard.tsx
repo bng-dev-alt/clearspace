@@ -21,6 +21,7 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
   // RUN 03
   gmail_connected: { kind: 'info', text: 'Gmail je připojený (jen čtení). E-maily do projektů připojujete vždy sami.' },
   gmail_denied: { kind: 'error', text: 'Přístup ke Gmailu nebyl povolen. Ostatní propojení (Google Disk) zůstávají beze změny.' },
+  pilot_account: { kind: 'error', text: 'Tento účet Google není zařazený do pilotního provozu Gmailu a Google Kalendáře. Nic se nezměnilo.' },
   account_mismatch: { kind: 'error', text: 'Gmail nebo Google Kalendář je potřeba připojit ze stejného účtu Google, který už máte připojený. Nic se nezměnilo.' },
   // RUN 04
   calendar_connected: { kind: 'info', text: 'Google Kalendář je připojený (jen čtení). Události do projektů připojujete vždy sami; vaše ostatní události vidíte jen vy.' },

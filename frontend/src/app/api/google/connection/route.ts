@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { calendarFeatureEnabled, gmailFeatureEnabled, googleConfig } from '../../../../lib/google/config';
+import { googleConfig, serviceAllowedFor, serviceAllowedForAccount } from '../../../../lib/google/config';
 import { open, tokenAad } from '../../../../lib/google/crypto';
 import { hasService, revokeToken } from '../../../../lib/google/oauth';
 import { caller, dbError, errorResponse, MSG, NO_STORE, requireGoogle } from '../../../../lib/google/server';
@@ -7,18 +7,20 @@ import { caller, dbError, errorResponse, MSG, NO_STORE, requireGoogle } from '..
 /** GET /api/google/connection -- is the integration configured, and the caller's connection (never a token). */
 export async function GET(req: NextRequest) {
   try {
-    const { db } = await caller(req);
+    const { db, userId } = await caller(req);
     const cfg = googleConfig();
     const { data, error } = await db.rpc('google_connection_status');
     if (error) throw dbError(error);
     const row = (Array.isArray(data) ? data[0] : data) as { google_email: string; scopes: string[]; status: string; connected_at: string; last_error_code: string | null } | undefined;
+    const available = (s: 'gmail' | 'calendar') => cfg.enabled && (row ? serviceAllowedForAccount(s, userId, row.google_email) : serviceAllowedFor(s, userId));
     return NextResponse.json({
       configured: cfg.enabled,
       message: cfg.enabled ? undefined : MSG.not_configured,
       simulated: cfg.enabled && cfg.mock,           // local test provider, never presented as real Google
       // RUN 03: one Google grant, per-service state (what ClearSpace uses) + the Gmail feature switch
-      gmailAvailable: cfg.enabled && gmailFeatureEnabled(),
-      calendarAvailable: cfg.enabled && calendarFeatureEnabled(),     // RUN 04
+      // RUN 06 pilot: available only to a listed user (and, once connected, a listed Google account)
+      gmailAvailable: available('gmail'),
+      calendarAvailable: available('calendar'),     // RUN 04
       pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
       connection: row ? {
         email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at,

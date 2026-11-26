@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, type GoogleService } from '../../../../../lib/google/config';
+import { CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, serviceAllowedForAccount, serviceMode, type GoogleService } from '../../../../../lib/google/config';
 import { open, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { exchangeCode, GoogleOAuthError, hasDriveScope, hasService, parseIdToken, revokeToken } from '../../../../../lib/google/oauth';
 import { caller, errorResponse, NO_STORE, oauthLog, requireGoogle } from '../../../../../lib/google/server';
 
 type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied'
-  | 'calendar_connected' | 'calendar_denied' | 'account_mismatch' | 'unavailable';
+  | 'calendar_connected' | 'calendar_denied' | 'account_mismatch' | 'unavailable' | 'pilot_account';
 
 /**
  * POST /api/google/oauth/complete -- finishes connecting a Google account, under the user's ClearSpace session.
@@ -67,6 +67,13 @@ export async function POST(req: NextRequest) {
         await dropUnused();
         return reply('account_mismatch', row.return_to);
       }
+      const pilotRefuses = (sv: GoogleService) => sv !== 'drive' && serviceMode(sv) === 'pilot' && !serviceAllowedForAccount(sv, userId, id.email);
+      if (pilotRefuses(service)) {
+        // RUN 06 pilot: Gmail / Calendar only for a listed Google account; nothing is stored, an existing connection stays as it was
+        oauthLog('pilot_account_refused', { service });
+        if (!existing) await dropUnused();
+        return reply('pilot_account', row.return_to);
+      }
       if (!granted) {
         // The user unticked the requested service on Google's (granular) consent screen. An existing connection is left
         // exactly as it was -- revoking here would also end Drive (or Gmail) access granted earlier.
@@ -80,7 +87,9 @@ export async function POST(req: NextRequest) {
       // in ClearSpace -- that one stays off until the user enables it again.
       const { data: stData } = await db.rpc('google_connection_status');
       const before = (existing === id.sub ? ((Array.isArray(stData) ? stData[0] : stData) as { scopes?: string[] } | undefined)?.scopes : null) ?? [];
-      const keep = t.scopes.filter((sc) => !Object.values(SERVICE_SCOPE).includes(sc) || sc === SERVICE_SCOPE[service] || before.includes(sc));
+      const keep = t.scopes.filter((sc) => !Object.values(SERVICE_SCOPE).includes(sc) || sc === SERVICE_SCOPE[service] || before.includes(sc))
+        // RUN 06: in pilot mode never store a Gmail / Calendar scope of an account outside the pilot ('1'/off: unchanged)
+        .filter((sc) => (Object.keys(SERVICE_SCOPE) as GoogleService[]).every((sv) => SERVICE_SCOPE[sv] !== sc || !pilotRefuses(sv)));
       const { error: saveErr } = await db.rpc('google_oauth_complete', {
         p_server_secret: cfg.serverSecret,
         p_state_sha256: stateHash,

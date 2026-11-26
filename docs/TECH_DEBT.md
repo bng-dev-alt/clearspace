@@ -90,3 +90,19 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Výběr e-mailů: pole „Hledat“ a „Předmět“ jsou v úzkém rozložení snadno zaměnitelná; Enter v poli spouští hledání, tlačítko je pod formulářem.
 * Lokální testy na přetíženém stroji: GoTrue vrací 504/401 (`gdemo_live_accept.mjs` opakuje jen tento případ); starší HTTP sady opakování nemají.
 * Seeder neopakuje odpověď 5xx Googlu sám – stačí znovu spustit (idempotentní).
+
+## RUN 07 (Project Communication Hub) – vědomá omezení
+* **Živě neověřeno** (mock ≠ poskytovatel): celé A1–A25 živě BLOCKED; zvlášť `getChatMember` pro bota bez admin práv, `views.open` v 3 s na Vercelu (cold start),
+  Slack Events retry chování, Telegram `migrate_to_chat_id`.
+* Příchozí události jsou **at-most-once** (D20): když zpracování po zápisu do `hub_inbox` selže, Slack/Telegram ho nezopakuje – uživatel akci zopakuje.
+* Telegram: synchronizují se jen **odpovědi na potvrzovací zprávu bota**; odpověď na synchronizovaný komentář bota se do úkolu nepropíše. Telegram botům
+  neoznamuje mazání zpráv (záznam zůstane do odpojení / retence). Odkaz na zprávu jen u superskupin.
+* Slack: příchozí odpovědi ve vlákně se ukládají bez permalinku (jen zdrojová zpráva úkolu má permalink – šetří API volání); autor bez propojené
+  identity se zobrazí jako „Člen kanálu (Slack)“ (bez `users:read`). Typ kanálu (veřejný/soukromý) se nezjišťuje.
+* Kanál, ze kterého byl bot odebrán, se po znovupřidání sám neobnoví (Slack bez `channels:read` nedostane událost) – odpojit a propojit znovu.
+* Checkboxy schopností v modalu jsou řízené serverem (stav se změní až po uložení, žádný optimistický update).
+* `/integrations/link` odstraní kód z adresy hned po načtení: nepřihlášený uživatel si po přihlášení musí vyžádat nový odkaz.
+* Odpojení používá nativní `confirm()` (dva dotazy: odpojit, smazat historii) – stejné jako RUN 06, vlastní dialog = LATER.
+* Plánovač hubu = druhý cron job (D15); každý běh max 20 položek (souhrny se proto mohou rozdělit do dvou zpráv).
+* `hub-stack.sh up` na běžícím stacku aplikuje jen migraci 1600 (opakované aplikování starší 1300 naráží na pozdější testovací data – `external_resource_links_provider_check`).
+* Vitest v sandboxu: testy s lokálními sockety (SMTP, STT) padají na zákazu bindování portů; mimo sandbox 1423/1423.

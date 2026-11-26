@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 05)
+# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 07)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -17,6 +17,9 @@
 | později | Produkční Kalendář (pilot v Testing / ověření – sensitive, bez CASA); Meeting Intelligence „porada z události“; Project Intelligence nad událostmi | rozhodnutí vlastníka / návrh | `docs/run04/HANDOFF_NEXT_RUNS.md`, `MEETING_INTELLIGENCE_COMPAT.md` |
 | **05** | **Slack & Telegram** (oznámení mimo aplikaci: připojení/odpojení, šifrované údaje, přiřazení, připomínka termínu 09:00 Europe/Prague den předem, zmínky/komentáře/dokončení/změna termínu/členství, odkazy do ClearSpace, předvolby typů a projektů, režim bez názvů; outbox s idempotencí, retry, rate limitem; plánovač `pg_cron` + `pg_net` v DB) | **HOTOVO lokálně + v `main` a v produkci s oběma přepínači VYPNUTÝMI** (`dpl_Gp6omv6…`, migrace 1500, tag `run05-complete`): mock + DB + E2E + regrese PASS, produkční brány 147/147 + hosted 19/19; **živá akceptace BLOCKED** (čeká na owner block – dev Slack app + bot) | `docs/run05/NOTIFICATIONS.md`, `LIVE_ACCEPTANCE.md`, `PRODUCTION_ACCEPTANCE.md` |
 | později | Živá akceptace Slack/Telegram (owner block) → rozhodnutí o zapnutí (pilot / veřejně); obousměrné zprávy, digesty, kanály – LATER | vlastník | `docs/run05/HANDOFF_NEXT_RUNS.md` |
+| 06 | Google demo + pilot (Gmail/Kalendář pro prezentujícího + demo účet) | **v produkci** (pilot) | `docs/run06/` |
+| **07** | **Project Communication Hub** (projekt ↔ vybrané Slack kanály a Telegram skupiny: propojení kódem + potvrzení, oznámení se souhrny, úkol ze zprávy, synchronizace vlákna ↔ komentáře, identita, záložka Komunikace, PI opt-in se zdrojem `comm:`, demo simulace) | **merge-ready lokálně, tag `run07-mock-complete`** (nepushnuto, nenasazeno, produkce beze změny); mock/DB/HTTP/E2E + zkouška na replice produkce PASS; **živá akceptace BLOCKED** (owner block: staging s veřejným HTTPS, Slack app, bot) | `docs/run07/HANDOFF.md`, `ACCEPTANCE.md`, `PRODUCTION_ROLLOUT.md` |
+| později (LATER z RUN 07) | Plnohodnotní klienti chatu, kontakty, soukromé konverzace, celoworkspace indexace, historický import, hovory, zrcadlení souborů, autonomní AI odpovědi, další poskytovatelé (Teams, Discord, e-mail), volitelný ingest bot pro Telegram, přehled kanálů pro výběr (`channels:read`) | návrh | `docs/run07/DECISIONS.md` |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
 * Webhooky Resend (stav *Delivered/Bounced* v `invitation_deliveries`) – dnes je znám jen „server převzal“.

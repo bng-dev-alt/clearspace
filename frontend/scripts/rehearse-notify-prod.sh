@@ -135,8 +135,14 @@ echo "ok - synthetic data loaded (projects/columns/cards/members/events/links/co
 # parity baseline: a clone of the production DDL at 1400 (before the migration)
 adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'rep_b' and pid <> pg_backend_pid()" >/dev/null
 adm -d template1 -c "CREATE DATABASE rep_b_pre TEMPLATE rep_b" >/dev/null
-adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('postgres', 'rep_b') and pid <> pg_backend_pid()" >/dev/null
-adm -d template1 -c "ALTER DATABASE postgres RENAME TO postgres_template" >/dev/null
+renamed=0   # background workers reconnect to "postgres": terminate + rename, retried like newdb()
+for _ in 1 2 3 4 5 6 7 8; do
+  adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname in ('postgres', 'rep_b') and pid <> pg_backend_pid()" >/dev/null
+  if adm -d template1 -c "ALTER DATABASE postgres RENAME TO postgres_template" >/dev/null 2>&1; then renamed=1; break; fi
+  sleep 1
+done
+[ $renamed = 1 ] || fail "could not rename the template database (sessions keep reconnecting)"
+adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'rep_b' and pid <> pg_backend_pid()" >/dev/null
 adm -d template1 -c "ALTER DATABASE rep_b RENAME TO postgres" >/dev/null
 if ! ( cd "$ROOT" && REHEARSAL_CONTAINER="$NAME" REHEARSAL_PGPASSWORD=rehearsal REHEARSAL_USER=postgres CONFIRM_NOTIFY=rehearsal TMPDIR="$T" \
     bash "$FRONTEND/scripts/apply-notify-hosted.sh" ) | sed 's/^/   | /'; then fail "apply-notify-hosted.sh rehearsal failed"; fi
@@ -146,9 +152,12 @@ C_AFTER=$(adm -d postgres -At -c "$CNT")
 
 # ---------- 4. DB suites on a clone of the migrated replica ----------
 echo "== 4. Drive + Gmail + Calendar contracts (deployed code) + notify suite on a clone of replica B (autocommit, like the harness)"
-adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()" >/dev/null
-adm -d template1 -c "CREATE DATABASE rep_b_suite TEMPLATE postgres" >/dev/null
-adm -d template1 -c "CREATE DATABASE rep_b_post TEMPLATE postgres" >/dev/null
+for db in rep_b_suite rep_b_post; do
+  for _ in 1 2 3 4 5 6 7 8; do
+    adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()" >/dev/null
+    adm -d template1 -c "CREATE DATABASE $db TEMPLATE postgres" >/dev/null 2>&1 && break; sleep 1
+  done
+done
 # the suites register their own trust secret and users: start them from the migrated schema without the synthetic Google rows
 adm -d rep_b_suite -c "delete from public.external_resource_links; delete from public.google_connections; delete from public.integration_audit; delete from public.server_trust where purpose = 'google'" >/dev/null
 for s in 92_google_drive 93_gmail 94_google_calendar 95_notification_channels; do

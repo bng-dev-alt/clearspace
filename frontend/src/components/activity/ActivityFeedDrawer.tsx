@@ -8,6 +8,7 @@ import {
 import type { ProjectActivityLog } from '../../types/kanban';
 import { collaborationService, mapActivityRow } from '../../services/collaborationService';
 import { onProjectActivity, onProjectResync, type DbActivityRow } from '../../hooks/useRealtimeBoard';
+import CommunicationList from '../hub/CommunicationList';
 import { describeActivity, formatRelativeTime, type ActivityKind } from '../../lib/collab/activityText';
 
 interface ActivityFeedDrawerProps {
@@ -18,6 +19,9 @@ interface ActivityFeedDrawerProps {
   onOpenCard?: (cardId: string) => void;
   /** Ids of tasks currently on the board. */
   existingCardIds?: Set<string>;
+  /** RUN 07: a "Komunikace" tab with the project's recorded chat communication (hub switched on). */
+  showCommunication?: boolean;
+  memberNames?: Map<string, string>;
 }
 
 const ICONS: Record<ActivityKind, React.ComponentType<{ size?: number }>> = {
@@ -35,7 +39,8 @@ const ICONS: Record<ActivityKind, React.ComponentType<{ size?: number }>> = {
   other: Sparkles,
 };
 
-export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenCard, existingCardIds }: ActivityFeedDrawerProps) {
+export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenCard, existingCardIds, showCommunication = false, memberNames }: ActivityFeedDrawerProps) {
+  const [tab, setTab] = useState<'activity' | 'communication'>('activity');
   // null = ještě nenačteno (loading); [] = načteno, prázdné.
   const [activities, setActivities] = useState<ProjectActivityLog[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -110,8 +115,16 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
           </button>
         </div>
 
+        {showCommunication && (
+          <div className="hub-tabs" role="tablist" aria-label="Zobrazení">
+            <button type="button" role="tab" aria-selected={tab === 'activity'} className={`hub-tab${tab === 'activity' ? ' is-active' : ''}`} onClick={() => setTab('activity')} data-testid="activity-tab-all">Změny</button>
+            <button type="button" role="tab" aria-selected={tab === 'communication'} className={`hub-tab${tab === 'communication' ? ' is-active' : ''}`} onClick={() => setTab('communication')} data-testid="activity-tab-communication">Komunikace</button>
+          </div>
+        )}
         <div className="drawer-scroll-area">
-          {activities === null ? (
+          {showCommunication && tab === 'communication' ? (
+            <CommunicationList projectId={projectId} names={memberNames} onOpenCard={onOpenCard ? (id) => { onOpenCard(id); onClose(); } : undefined} />
+          ) : activities === null ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--gray-text)' }}>Načítání…</p>
           ) : failed ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--danger)' }} role="alert">

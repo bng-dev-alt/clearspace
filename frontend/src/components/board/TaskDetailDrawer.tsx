@@ -1,5 +1,6 @@
 'use client';
 
+import { TaskConversation } from '../hub/CommunicationList';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { X, Trash2, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, AlignRight, Maximize2 } from 'lucide-react';
@@ -51,9 +52,12 @@ interface TaskDetailDrawerProps {
   /** A collaboration notice (e.g. a refused concurrent edit) shown while the drawer covers the page. */
   notice?: string | null;
   onDismissNotice?: () => void;
+  /** RUN 07: show the linked Slack / Telegram thread of this task (hub switched on). */
+  showChatConversation?: boolean;
 }
 
 export default function TaskDetailDrawer({
+  showChatConversation = false,
   isOpen,
   onClose,
   card,
@@ -856,6 +860,7 @@ export default function TaskDetailDrawer({
               onEdit={onEditComment ? (commentId, content, mentions) => onEditComment(card.id, commentId, content, mentions) : undefined}
               onDelete={onDeleteComment ? (commentId) => onDeleteComment(card.id, commentId) : undefined}
             />
+            {showChatConversation && <TaskConversation cardId={card.id} names={new Map((mentionables ?? []).map((m) => [m.profileId, m.name]))} />}
           </div>
 
           <div className="drawer-divider" />

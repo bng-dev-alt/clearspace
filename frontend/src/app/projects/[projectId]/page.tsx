@@ -22,6 +22,8 @@ const AiProjectManagerModal = dynamic(() => import('../../../components/board/Ai
 const AiDailyBriefModal = dynamic(() => import('../../../components/board/AiDailyBriefModal'), { ssr: false });
 const AiCapacityPlannerModal = dynamic(() => import('../../../components/board/AiCapacityPlannerModal'), { ssr: false });
 const GlobalSearchModal = dynamic(() => import('../../../components/search/GlobalSearchModal'), { ssr: false });
+const ProjectIntegrationsModal = dynamic(() => import('../../../components/hub/ProjectIntegrationsModal'), { ssr: false });
+import { hubService } from '../../../services/hubService';
 const ActivityFeedDrawer = dynamic(() => import('../../../components/activity/ActivityFeedDrawer'), { ssr: false });
 const DriveLinksPanel = dynamic(() => import('../../../components/drive/DriveLinksPanel'), { ssr: false });
 const GmailLinksPanel = dynamic(() => import('../../../components/gmail/GmailLinksPanel'), { ssr: false });
@@ -169,6 +171,15 @@ export default function ProjectBoardPage() {
   const [isActivityFeedOpen, setIsActivityFeedOpen] = useState(false);
   // RUN 02: project files (Google Drive). Google's redirect back lands here with ?google=<outcome>.
   const [isFilesOpen, setIsFilesOpen] = useState(false);
+  // RUN 07: project communication hub (Slack / Telegram). null = switched off on this server (no button, no tab).
+  const [hubOn, setHubOn] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
+  useEffect(() => {
+    if (!hasSupabaseConfig || !projectId) return;
+    let active = true;
+    hubService.project(projectId).then((s) => { if (active) setHubOn(s !== null); }).catch(() => { if (active) setHubOn(false); });
+    return () => { active = false; };
+  }, [projectId]);
   const [filesNotice, setFilesNotice] = useState<string | null>(null);
   useEffect(() => {
     const outcome = new URLSearchParams(window.location.search).get('google');
@@ -609,6 +620,7 @@ export default function ProjectBoardPage() {
         onManageTeam={() => setIsProjectMembersModalOpen(true)}
         onOpenActivityFeed={() => setIsActivityFeedOpen(true)}
         onOpenFiles={hasSupabaseConfig && !accessRevoked ? () => setIsFilesOpen(true) : undefined}
+        onOpenIntegrations={hubOn && !accessRevoked ? () => setIsIntegrationsOpen(true) : undefined}
         activeUsers={activeUsers}
         syncStatus={syncStatus}
       />
@@ -828,6 +840,7 @@ export default function ProjectBoardPage() {
           currentUserId={user?.id}
           canModerate={canManage}
           mentionables={mentionables}
+          showChatConversation={hubOn}
           onEditComment={editComment}
           onDeleteComment={deleteComment}
           conflictText={conflict && conflict.cardId === selectedCard.id ? conflictText : null}
@@ -1079,6 +1092,10 @@ export default function ProjectBoardPage() {
         />
       )}
 
+      {isIntegrationsOpen && hubOn && !accessRevoked && (
+        <ProjectIntegrationsModal projectId={projectId} onClose={() => setIsIntegrationsOpen(false)} />
+      )}
+
       {isFilesOpen && !accessRevoked && (
         <ModalShell isOpen onClose={() => { setIsFilesOpen(false); setFilesNotice(null); }} title="Soubory, e-maily a události projektu" maxWidth={720} testId="project-files-modal">
           <DriveLinksPanel
@@ -1111,6 +1128,8 @@ export default function ProjectBoardPage() {
           projectId={projectId}
           onOpenCard={openCardById}
           existingCardIds={new Set(columns.flatMap((c) => c.cards.map((card) => card.id)))}
+          showCommunication={hubOn}
+          memberNames={new Map(mentionables.map((m) => [m.profileId, m.name]))}
         />
       )}
 

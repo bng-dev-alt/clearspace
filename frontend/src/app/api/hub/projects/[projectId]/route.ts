@@ -22,6 +22,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/api/hub/projects
     return NextResponse.json({
       ...(data as object),
       providers: { slack: slackReady, telegram: telegramReady },
+      simulated: { slack: slackReady && !('error' in cfg.slack) && cfg.slack.mock, telegram: telegramReady && !('error' in cfg.telegram) && cfg.telegram.mock },
       telegramBot: telegramReady && !('error' in cfg.telegram) ? cfg.telegram.botUsername : null,
       intelligenceAvailable: hubIntelligenceEnabled(),
     }, { headers: NO_STORE });

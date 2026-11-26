@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History, HardDrive } from 'lucide-react';
+import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History, HardDrive, Plug } from 'lucide-react';
 import { Column, TeamMember } from '../../types/kanban';
 import TagDropdown from './TagDropdown';
 import { PresenceStack, SyncIndicator } from '../collab/PresenceStack';
@@ -41,6 +41,8 @@ interface ToolbarProps {
   onOpenActivityFeed: () => void;
   /** RUN 02: project files (Google Drive links); absent = no button (demo mode). */
   onOpenFiles?: () => void;
+  /** RUN 07: Slack / Telegram integrations of the project; absent = no button (hub off / demo). */
+  onOpenIntegrations?: () => void;
   /** Other people currently on this project (realtime presence). */
   activeUsers?: PresenceUser[];
   syncStatus?: SyncStatus;
@@ -67,6 +69,7 @@ export default function Toolbar({
   onManageTeam,
   onOpenActivityFeed,
   onOpenFiles,
+  onOpenIntegrations,
   activeUsers = [],
   syncStatus = 'off',
 }: ToolbarProps) {
@@ -324,6 +327,21 @@ export default function Toolbar({
               data-testid="project-files-btn"
             >
               <HardDrive size={18} />
+            </button>
+          )}
+          {onOpenIntegrations && (
+            <button
+              type="button"
+              onClick={onOpenIntegrations}
+              className="toolbar-settings-btn"
+              title="Integrace projektu (Slack, Telegram)"
+              aria-label="Integrace projektu (Slack, Telegram)"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', color: 'var(--gray-text)', transition: 'color 0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--dark-navy)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gray-text)'; }}
+              data-testid="project-integrations-btn"
+            >
+              <Plug size={18} />
             </button>
           )}
 

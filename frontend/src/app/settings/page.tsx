@@ -4,20 +4,24 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../../components/layout/Navbar';
 import GoogleConnectionCard from '../../components/drive/GoogleConnectionCard';
 import NotificationChannelsCard from '../../components/notify/NotificationChannelsCard';
+import HubSettingsCard from '../../components/hub/HubSettingsCard';
 import { hasSupabaseConfig } from '../../lib/supabase';
 
 export default function SettingsPage() {
   const [outcome, setOutcome] = useState<string | null | undefined>(undefined);
   const [notifyOutcome, setNotifyOutcome] = useState<string | null | undefined>(undefined);
+  const [hubOutcome, setHubOutcome] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('google');
     const n = params.get('notify');   // RUN 05: back from Slack (?notify=slack)
+    const h = params.get('hub');      // RUN 07: back from the project Slack app install (?hub=slack)
     // keep the first answer: React dev mode runs this effect twice, the second time after the URL was cleaned
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOutcome((prev) => prev ?? q);
     setNotifyOutcome((prev) => prev ?? n);
-    if (q || n) window.history.replaceState(null, '', '/settings');
+    setHubOutcome((prev) => prev ?? h);
+    if (q || n || h) window.history.replaceState(null, '', '/settings');
   }, []);
 
   return (
@@ -40,6 +44,7 @@ export default function SettingsPage() {
           <>
             <GoogleConnectionCard returnOutcome={outcome} />
             <NotificationChannelsCard returnOutcome={notifyOutcome} />
+            <HubSettingsCard returnOutcome={hubOutcome} />
           </>
         )}
       </main>

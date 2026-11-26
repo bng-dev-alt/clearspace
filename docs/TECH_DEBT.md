@@ -62,3 +62,16 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Živě NEOVĚŘENO: odškrtnutí Calendar na granulární obrazovce (Google ho pro jeden scope neukáže), `confidential` (UI ho nenabízí), podzimní DST,
   410 Gone, druhý Google účet, 7denní expirace, revokace z myaccount (viz `docs/run04/LIVE_ACCEPTANCE.md` §D).
 * `monograph-prodcheck.mjs`: přepínač/rail v navbaru se na produkci odhlášeně neověří (beze změny z RUN 03C).
+
+## RUN 05 (Slack & Telegram) – vědomá omezení a zjištění
+* TD-1 a TD-2 padají stejně (E2E RUN 01: 10 passed + 2 failed + 1 skipped); v prvním běhu jednorázově selhal `collaboration.spec.ts:62` na studeném `next dev`
+  (čekání na `accept-invite-preview`), samostatně i v opakovaném běhu celé sady PASS – kandidát na delší timeout/warm-up v testu.
+* **Živá akceptace Slack/Telegram BLOCKED** (owner block) – mock není důkaz živé integrace; produkce zůstává vypnutá.
+* **Incident: smazaný `V1/frontend/.env.local` vlastníka** (brána 12 RUN 05) – obnoví vlastník; hostované ověření jen z dočasného exportu.
+* `next.config.ts` bezpečnostní hlavičky přepisují `Referrer-Policy: no-referrer` callbacků (Google od RUN 02, Slack RUN 05) na `strict-origin-when-cross-origin`:
+  kód z OAuth neodchází mimo origin; čistší by bylo vynechat callbacky z globální hlavičky.
+* Odpověď dávky se zapisuje až dalším tickem (≤ 1 min); ztracená odpověď ⇒ `ambiguous` po 5 min (at-most-once, zpráva mohla dorazit).
+* Připomínka termínu: jedna pevná hodina 09:00 a jedno pásmo (Europe/Prague) pro všechny; nastavitelnost = LATER.
+* Supabase Free plán (pravděpodobně – plán organizace přes API neověřen) pozastaví projekt po týdnu nečinnosti: plánovač pak neběží (po probuzení dožene dle M4).
+* Produkční DB nemá marker `20261118000800_stt_stabilization_repair` (zjištěno v auditu RUN 05, mimo rozsah) – ověřit v samostatném úkolu.
+* `monograph-prodcheck.mjs`: přepínač/rail v navbaru se na odhlášené produkci neověří (beze změny).

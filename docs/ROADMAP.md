@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 04)
+# ClearSpace V1 – roadmapa (stav k 2026-11-26, aktualizováno po RUN 05)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -15,6 +15,8 @@
 | později | **Veřejná syntetická ukázka Gmailu** pro návštěvníky portfolia (bez připojení vlastní schránky; syntetická schránka na serveru, jasně označená) | návrh, neimplementováno | `docs/run03/HANDOFF_NEXT_RUNS.md` |
 | **04** | **Google Calendar** (inkrementální `calendar.events.owned.readonly` – sensitive; osobní vrstva v kalendáři projektu jen pro uživatele, připojení vlastních událostí k projektům a úkolům se sdílenými metadaty a soukromým zdrojem, soukromé události nelze připojit, realtime, aktivita bez názvu, přepínač) | **HOTOVO 2026-11-26, tag `run04-complete`; v `main` a v produkci s Kalendářem VYPNUTÝM** (`dpl_FeGsSgZx…`, migrace 1400): mock + DB + E2E PASS, **živá akceptace proti skutečnému Googlu PASS** (E1–E10 kromě NOT VERIFIED v LIVE_ACCEPTANCE §D), produkční brány 122/122 + hosted 18/18 | `docs/run04/CALENDAR.md`, `LIVE_ACCEPTANCE.md`, `PRODUCTION_ACCEPTANCE.md` |
 | později | Produkční Kalendář (pilot v Testing / ověření – sensitive, bez CASA); Meeting Intelligence „porada z události“; Project Intelligence nad událostmi | rozhodnutí vlastníka / návrh | `docs/run04/HANDOFF_NEXT_RUNS.md`, `MEETING_INTELLIGENCE_COMPAT.md` |
+| **05** | **Slack & Telegram** (oznámení mimo aplikaci: připojení/odpojení, šifrované údaje, přiřazení, připomínka termínu 09:00 Europe/Prague den předem, zmínky/komentáře/dokončení/změna termínu/členství, odkazy do ClearSpace, předvolby typů a projektů, režim bez názvů; outbox s idempotencí, retry, rate limitem; plánovač `pg_cron` + `pg_net` v DB) | **HOTOVO lokálně + v `main` a v produkci s oběma přepínači VYPNUTÝMI** (`dpl_Gp6omv6…`, migrace 1500, tag `run05-complete`): mock + DB + E2E + regrese PASS, produkční brány 147/147 + hosted 19/19; **živá akceptace BLOCKED** (čeká na owner block – dev Slack app + bot) | `docs/run05/NOTIFICATIONS.md`, `LIVE_ACCEPTANCE.md`, `PRODUCTION_ACCEPTANCE.md` |
+| později | Živá akceptace Slack/Telegram (owner block) → rozhodnutí o zapnutí (pilot / veřejně); obousměrné zprávy, digesty, kanály – LATER | vlastník | `docs/run05/HANDOFF_NEXT_RUNS.md` |
 
 ## Kandidáti po RUN 02 (z known limitations a provozních poznatků; bez závazku)
 * Webhooky Resend (stav *Delivered/Bounced* v `invitation_deliveries`) – dnes je znám jen „server převzal“.
@@ -40,3 +42,7 @@
 * Před nasazením RUN 02: Google Cloud (dev + prod projekt), rozhodnutí Testing vs. ověření značky (vlastní doména), migrace 1200 (`apply-drive-hosted.sh`).
 * Napojení obsahu Drive do Project Intelligence je připravené rozhraním (`getTextContent`), ale vědomě neaktivované (placené AI volání + rozhodnutí o soukromí).
 * Dva E2E testy z dřívějška padají i na `run01-complete` (AI brána owner-only 403 vs. očekávaných 400; test „neuložené karty“) – kandidát na úklid testů.
+
+## Poznámky z RUN 05
+* Slack/Telegram produkčně jen po živé akceptaci a rozhodnutí vlastníka (`docs/run05/PRODUCTION_ROLLOUT.md` §0–1); plánovač se zapíná ops skriptem, ne migrací.
+* In-app notifikace beze změny (parita 1400 = 1500 ověřena v harness i na replice produkčního DDL).

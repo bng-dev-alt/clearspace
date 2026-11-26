@@ -4,7 +4,7 @@
 # production: the replica holds the production DDL and SYNTHETIC rows only (incl. synthetic Drive-, Gmail- and RUN 01-era rows).
 # Template: rehearse-calendar-prod.sh (RUN 04).
 #
-#   EXPECT_SHA_1500=... EXPECT_SHA_1500_DOWN=... frontend/scripts/rehearse-notify-prod.sh    (needs Docker + the DB password in the Keychain)
+#   frontend/scripts/rehearse-notify-prod.sh            (needs Docker + the DB password in the Keychain)
 #
 #  1. production read-only: markers end at 1400, no notify objects, catalog line set + schema-only dump
 #  2. replica A = baseline + migrations 0100..1400 (repository chain) -> catalog must EQUAL production

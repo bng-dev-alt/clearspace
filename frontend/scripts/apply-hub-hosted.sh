@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RUN 07: apply the communication-hub migration 20261130001600 to the HOSTED ClearSpace V1 Supabase (twjlnsxjtuntujarwner).
+# RUN 07/07B: apply the communication-hub migrations 20261130001600 + 20261201001700 (ONE transaction) to the HOSTED ClearSpace V1 Supabase (twjlnsxjtuntujarwner).
 # Only within the owner's rollout approval (docs/run07/PRODUCTION_ROLLOUT.md), BEFORE any build that switches the hub on. The deployed code
 # (hub switches 0) works with and without 1600. 1600 installs NO extension, schedules nothing, registers no service principal / trust row.
 #
@@ -37,8 +37,11 @@ fi
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 S=frontend/supabase
 M=$S/migrations/20261130001600_communication_hub.sql; D=$S/rollback/20261130001600_communication_hub.down.sql
+M2=$S/migrations/20261201001700_hub_hardening.sql; D2=$S/rollback/20261201001700_hub_hardening.down.sql
 [ "$(sha $M)" = "197b34499a50d1da12354ecb8d673435078e3adb66c2bfc7d13623f79992da2a" ] || { echo "refusing: 1600 differs from the rehearsed file"; exit 2; }
 [ "$(sha $D)" = "cefcf28a6d0832626a505c051a08dc9ca3958594da986588e228167e8e1f01a7" ] || { echo "refusing: 1600 rollback differs from the rehearsed one"; exit 2; }
+[ "$(sha $M2)" = "8d870e9101cec47910ce481973ced67ce8a0aff7a17295d36d5ab0f8644bc415" ] || { echo "refusing: 1700 differs from the rehearsed file"; exit 2; }
+[ "$(sha $D2)" = "af5766494594653ef8d900b7fa07de2dc6c7771bac052ace60866ea8d914b442" ] || { echo "refusing: 1700 rollback differs from the rehearsed one"; exit 2; }
 ro() { { echo "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;"; cat; } | pg -At -q -v ON_ERROR_STOP=1 -f - | grep -v '^SET'; }
 counts() { echo "select 'projects='||(select count(*) from public.projects)||' columns='||(select count(*) from public.columns)||' cards='||(select count(*) from public.cards)||' assignees='||(select count(*) from public.card_assignees)||' members='||(select count(*) from public.project_members)||' comments='||(select count(*) from public.task_comments)||' events='||(select count(*) from public.activity_logs)||' notifications='||(select count(*) from public.notifications)||' profiles='||(select count(*) from public.profiles)||' auth.users='||(select count(*) from auth.users)||' links='||(select count(*) from public.external_resource_links)||' connections='||(select count(*) from public.google_connections)||' audit='||(select count(*) from public.integration_audit)||' trust='||(select count(*) from public.server_trust)||' gmail_sources='||(select count(*) from public.gmail_link_sources)||' calendar_sources='||(select count(*) from public.calendar_link_sources)||' notify_channels='||(select count(*) from public.notification_channels)||' notify_deliveries='||(select count(*) from public.notification_deliveries);" | ro; }
 FPCOLS=$(echo "select string_agg(table_name || ':' || cols, ' ') from (select table_name, string_agg(column_name, ',' order by ordinal_position) cols from information_schema.columns where table_schema = 'public' and table_name in ('notifications', 'activity_logs', 'card_assignees', 'task_comments', 'external_resource_links', 'google_connections', 'integration_audit', 'server_trust', 'gmail_link_sources', 'calendar_link_sources', 'notification_channels', 'notification_preferences', 'notification_deliveries') group by table_name) t;" | ro)
@@ -70,7 +73,7 @@ echo "$CAT0" > "$BK/catalog-before.txt"; echo "$C0" > "$BK/counts-before.txt"; e
 echo "ok - backup $(du -h "$BK/public.dump" | cut -f1)"
 
 echo "== 2. apply (ONE transaction)"
-if { echo "SET client_min_messages = warning;"; cat "$M"; } | pg -q -v ON_ERROR_STOP=1 --single-transaction -f - >/dev/null; then echo "applied 20261130001600_communication_hub"
+if { echo "SET client_min_messages = warning;"; cat "$M" "$M2"; } | pg -q -v ON_ERROR_STOP=1 --single-transaction -f - >/dev/null; then echo "applied 20261130001600_communication_hub + 20261201001700_hub_hardening (one transaction)"
 else echo "FAILED: the migration changed nothing (single transaction). STOP and report; do not retry blindly."; exit 1; fi
 
 echo "== 3. verify (read-only)"
@@ -79,7 +82,7 @@ C1=$(counts); [ "$C1" = "$C0" ] && echo "ok - row counts unchanged" || { echo "r
 F1=$(fingerprint); [ "$F1" = "$F0" ] && echo "ok - activity, comments, notifications, RUN 05 channels, links, Google rows and trust unchanged (content fingerprint)" || { echo "fingerprint changed: $F1"; fail=1; }
 E1=$(echo "$EXT" | ro); [ "$E1" = "$E0" ] && echo "ok - no extension installed (hub scheduler stays off)" || { echo "extensions changed: $E1"; fail=1; }
 v=$(cat <<'SQL' | ro
-select 'marker=' || (select count(*) from public.clearspace_migrations where version = '20261130001600_communication_hub')
+select 'marker=' || (select count(*) from public.clearspace_migrations where version in ('20261130001600_communication_hub', '20261201001700_hub_hardening'))
   || ' rls=' || (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname like 'hub\_%' and c.relrowsecurity)
   || ' anon_exec=' || (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'hub\_%' and has_function_privilege('anon', p.oid, 'EXECUTE'))
   || ' dispatch_exec=' || (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and (p.proname like 'hub\_dispatch\_%' or p.proname in ('hub_scheduler_tick', 'hub_act_as', 'hub_require_manager')) and has_function_privilege('authenticated', p.oid, 'EXECUTE'))
@@ -87,10 +90,11 @@ select 'marker=' || (select count(*) from public.clearspace_migrations where ver
   || ' destinations=' || (select count(*) from public.hub_destinations)
   || ' outbox=' || (select count(*) from public.hub_outbox)
   || ' principal=' || (select count(*) from public.hub_service_principal)
-  || ' hub_trust=' || (select count(*) from public.server_trust where purpose = 'hub');
+  || ' hub_trust=' || (select count(*) from public.server_trust where purpose = 'hub')
+  || ' inbox=' || (select count(*) from public.hub_inbox);
 SQL
 )
 echo "$v"
-[ "$v" = "marker=1 rls=12 anon_exec=0 dispatch_exec=0 triggers=2 destinations=0 outbox=0 principal=0 hub_trust=0" ] && echo "ok - hub state as rehearsed (empty, switched off)" || fail=1
+[ "$v" = "marker=2 rls=12 anon_exec=0 dispatch_exec=0 triggers=2 destinations=0 outbox=0 principal=0 hub_trust=0 inbox=0" ] && echo "ok - hub state as rehearsed (empty, switched off)" || fail=1
 if [ $fail = 1 ]; then echo "UNEXPECTED state -- STOP and report. Rollback (as the owner, one transaction): $D ; backup: $BK"; exit 1; fi
-echo "DONE: communication-hub migration applied and verified (backup $BK). Next (docs/run07/PRODUCTION_ROLLOUT.md): the deployed build keeps serving; staged build of the RUN 07 code with the hub switches 0."
+echo "DONE: communication-hub migrations applied and verified (backup $BK). Next (docs/run07/PRODUCTION_ROLLOUT.md): the deployed build keeps serving; staged build of the RUN 07 code with the hub switches 0."

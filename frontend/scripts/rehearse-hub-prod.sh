@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RUN 07: rehearse migration 20261130001600 (project communication hub) against a faithful LOCAL replica of the production schema.
+# RUN 07/07B: rehearse migrations 20261130001600 + 20261201001700 (project communication hub + hardening) against a faithful LOCAL replica of the production schema.
 # Production is only READ (catalog + markers, READ ONLY transactions, schema-only dump of `public`). No production data leaves production:
 # the replica holds the production DDL and SYNTHETIC rows only (Drive / Gmail / RUN 01 / RUN 05-era rows). Template: rehearse-notify-prod.sh.
 #
@@ -151,7 +151,7 @@ adm -d template1 -c "select pg_terminate_backend(pid) from pg_stat_activity wher
 adm -d template1 -c "ALTER DATABASE rep_b RENAME TO postgres" >/dev/null
 if ! ( cd "$ROOT" && REHEARSAL_CONTAINER="$NAME" REHEARSAL_PGPASSWORD=rehearsal REHEARSAL_USER=postgres CONFIRM_HUB=rehearsal TMPDIR="$T" \
     bash "$FRONTEND/scripts/apply-hub-hosted.sh" ) | sed 's/^/   | /'; then fail "apply-hub-hosted.sh rehearsal failed"; fi
-[ "$(adm -d postgres -At -c "select count(*) from public.clearspace_migrations where version = '20261130001600_communication_hub'")" = 1 ] || fail "apply-hub-hosted.sh did not apply 1600"
+[ "$(adm -d postgres -At -c "select count(*) from public.clearspace_migrations where version in ('20261130001600_communication_hub', '20261201001700_hub_hardening')")" = 2 ] || fail "apply-hub-hosted.sh did not apply 1600 + 1700"
 C_AFTER=$(adm -d postgres -At -c "$CNT")
 [ "$C_AFTER" = "$C_BEFORE" ] && echo "ok - synthetic row counts unchanged by the migration" || fail "row counts changed: $C_BEFORE -> $C_AFTER"
 
@@ -165,26 +165,32 @@ for db in rep_b_suite rep_b_post; do
 done
 # the suites register their own trust secret and users: start them from the migrated schema without the synthetic Google rows
 adm -d rep_b_suite -c "delete from public.external_resource_links; delete from public.google_connections; delete from public.integration_audit; delete from public.server_trust where purpose = 'google'; delete from public.notification_channels" >/dev/null
-for s in 92_google_drive 93_gmail 94_google_calendar 95_notification_channels 96_communication_hub; do
+for s in 92_google_drive 93_gmail 94_google_calendar 95_notification_channels 96_communication_hub 97_hub_hardening; do
   OUT=$(docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U supabase_admin -v ON_ERROR_STOP=1 -X -q -d rep_b_suite \
     < "$FRONTEND/supabase/tests/collab/$s.sql" 2>&1) || { echo "$OUT" | grep -E 'ERROR|DETAIL' | head -5; fail "$s failed on the migrated replica"; }
-  echo "ok - $s on production DDL + 1600: $(echo "$OUT" | grep -c 'NOTICE:  ok') assertions"
+  echo "ok - $s on production DDL + 1600/1700: $(echo "$OUT" | grep -c 'NOTICE:  ok') assertions"
   adm -d rep_b_suite -c "delete from public.external_resource_links; delete from public.google_connections; delete from public.integration_audit; delete from public.server_trust where purpose = 'google'" >/dev/null
 done
 
 PAR() { docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U supabase_admin -v ON_ERROR_STOP=1 -X -q -At -d "$1" < "$FRONTEND/supabase/tests/collab/95_parity_scenario.sql" 2>/dev/null | grep '^parity:'; }
 P_PRE=$(PAR rep_b_pre); P_POST=$(PAR rep_b_post)
 [ -n "$P_PRE" ] && [ "$P_PRE" = "$P_POST" ] || fail "parity: in-app notifications differ on production DDL: 1500 $P_PRE / 1600 $P_POST"
-echo "ok - parity on the production DDL: RUN 01 actions leave identical in-app notifications on 1500 and 1600 ($P_POST)"
+echo "ok - parity on the production DDL: RUN 01 actions leave identical in-app notifications on 1500 and 1600+1700 ($P_POST)"
 
 # ---------- 5. rollback ----------
-echo "== 5. rollback of 1600"
+echo "== 5. rollback of 1700 then 1600"
 DOWN="$FRONTEND/supabase/rollback/20261130001600_communication_hub.down.sql"
+DOWN2="$FRONTEND/supabase/rollback/20261201001700_hub_hardening.down.sql"
 adm -d postgres -c "insert into public.hub_destinations (project_id, provider, ext_key_hmac, ext_ref_enc, label, kind, created_by) values ('rp1', 'telegram', repeat('a', 64), 'v1.0000beef.aaaa.bbbb.cccc', 'R', 'telegram_group', '00000000-0000-0000-0000-00000000000a')" >/dev/null
+if docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - < "$DOWN2" >/dev/null 2>&1; then fail "1700 rollback ran although a destination exists"; fi
 if docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - < "$DOWN" >/dev/null 2>&1; then fail "rollback ran although a destination exists"; fi
 [ "$(adm -d postgres -At -c "select count(*) from public.clearspace_migrations where version = '20261130001600_communication_hub'")" = 1 ] || fail "refused rollback changed data"
 echo "ok - rollback REFUSED while a hub destination exists, nothing changed"
 adm -d postgres -c "delete from public.hub_destinations; delete from public.hub_audit" >/dev/null
+docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - < "$DOWN2" >/dev/null || fail "1700 rollback as role postgres failed"
+docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - < "$FRONTEND/supabase/migrations/20261130001600_communication_hub.sql" >/dev/null || fail "1600 re-apply after the 1700 rollback failed"
+[ "$(adm -d postgres -At -c "select count(*) from public.clearspace_migrations where version = '20261201001700_hub_hardening'")" = 0 ] || fail "1700 marker left"
+echo "ok - 1700 rollback (down + 1600 re-apply) as role postgres"
 docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - < "$DOWN" >/dev/null \
   || fail "rollback as role postgres failed on a clean state"
 lines_of postgres | pubonly > "$T/b1.lines"
@@ -194,5 +200,7 @@ C_RB=$(adm -d postgres -At -c "$CNT")
 [ "$C_RB" = "$C_BEFORE" ] && echo "ok - synthetic row counts (links, Gmail source, connection, notifications, comments, RUN 05 channel) unchanged after rollback" || fail "row counts after rollback: $C_RB"
 docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - \
   < "$FRONTEND/supabase/migrations/20261130001600_communication_hub.sql" >/dev/null || fail "1600 does not apply again after its rollback"
-echo "ok - 1600 applies again after its rollback"
+docker exec -i -e PGPASSWORD=rehearsal "$NAME" psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -X -q --single-transaction -f - \
+  < "$FRONTEND/supabase/migrations/20261201001700_hub_hardening.sql" >/dev/null || fail "1700 does not apply again after its rollback"
+echo "ok - 1600 + 1700 apply again after their rollback"
 echo "REHEARSAL PASS (production catalog $PCAT)"

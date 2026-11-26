@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -90,6 +90,24 @@ if [ "${EXPECT_CALENDAR_OFF:-0}" = 1 ]; then
   A=$(get /about); echo "$A" | grep -q 'about-calendar' && bad "/about presents Calendar although it is off" || ok "/about: no Calendar section"
 fi
 
+# RUN 05 (EXPECT_SLACK_OFF=1 and EXPECT_TELEGRAM_OFF=1, a build with the notify code and both switches off): every /api/notify route is
+# closed BEFORE any auth, config or database access (503 notify_disabled / slack_disabled / telegram_disabled) -- the scheduler endpoint
+# too (with any header); the Slack callback parks nothing; /privacy says notifications are off; /about has no section.
+if [ "${EXPECT_SLACK_OFF:-0}" = 1 ] && [ "${EXPECT_TELEGRAM_OFF:-0}" = 1 ]; then
+  for mp in "GET /api/notify/status" "PUT /api/notify/preferences" "POST /api/notify/channel" "POST /api/notify/slack/start" "POST /api/notify/slack/complete" \
+            "POST /api/notify/telegram/link" "POST /api/notify/telegram/check" "POST /api/notify/telegram/confirm" "POST /api/notify/dispatch"; do
+    m=${mp%% *}; p=${mp#* }
+    b=$(get "$p" -X "$m" -H 'Content-Type: application/json' -H 'x-notify-secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' -d '{}' -w ' HTTP%{http_code}')
+    case "$b" in *'_disabled"'*' HTTP503') ok "$m $p -> 503 (switched off)";; *) bad "$m $p -> ${b: -7} (expected 503 *_disabled)";; esac
+  done
+  b=$(get /api/notify/test -X POST -H 'Content-Type: application/json' -d '{"provider":"telegram"}' -w ' HTTP%{http_code}')
+  case "$b" in *'"error":"telegram_disabled"'*' HTTP503') ok "POST /api/notify/test -> 503 telegram_disabled";; *) bad "POST /api/notify/test -> ${b: -7}";; esac
+  H=$(get "/api/notify/slack/callback?state=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code=x" -I)
+  echo "$H" | tr 'A-Z' 'a-z' | grep -q 'location: /settings?notify=disabled' && ! echo "$H" | grep -qi 'set-cookie: cs_notify' && ok "Slack callback (off) -> /settings?notify=disabled, no cookie" || bad "Slack callback while off parks a cookie or redirects elsewhere"
+  P=$(get /privacy); echo "$P" | grep -q 'privacy-notify-off' && ! echo "$P" | grep -q 'data-testid="privacy-notify"' && ok "/privacy: Slack / Telegram stated as NOT enabled" || bad "/privacy does not state that notifications are off"
+  A=$(get /about); echo "$A" | grep -q 'about-notify' && bad "/about presents notifications although they are off" || ok "/about: no notifications section"
+fi
+
 echo "== client bundle"
 CHUNKS=$(get /login | grep -oE '/_next/static/[^"]+\.js' | sort -u)
 [ -n "$CHUNKS" ] && ok "found $(echo "$CHUNKS" | wc -l | tr -d ' ') script chunks" || bad "no script chunks found (blocked by protection?)"
@@ -101,7 +119,9 @@ has "$EXPECT_REF" && ok "bundle contains the NEW Supabase ref" || bad "bundle do
 has "$FORBID_REF" && bad "bundle still contains the retired ref $FORBID_REF" || ok "no retired Supabase ref"
 for pat in 'dev-login-btn' 'api/dev/login' 'x-clearspace-dev-login' 'DEV_LOGIN' 'service_role' 'AIza' 'GEMINI_API_KEY' 'AI_OWNER_USER_IDS' 'GEMINI_BASE_URL' 'SONIOX_API_KEY' 'SONIOX_BASE_URL' 'STT_SERVER_SECRET' 'STT_TEST_PUBLIC_STORAGE_ORIGIN' 'p_server_secret' 'api.soniox.com' 'fake-soniox' 'fake-gemini' \
            'GOCSPX-' 'GOOGLE_OAUTH_CLIENT_SECRET' 'GOOGLE_SERVER_SECRET' 'GOOGLE_TOKEN_ENCRYPTION_KEY' 'GOOGLE_API_MOCK_BASE' 'google_credentials_get' 'refresh_token_enc' 'mock-at.' '__control/' 'PRIVACY_CONTACT_EMAIL' 'auth/gmail' 'gmail.googleapis.com' 'GMAIL_INTEGRATION_ENABLED' 'gmail_link_source' \
-           'auth/calendar' 'www.googleapis.com/calendar' 'CALENDAR_INTEGRATION_ENABLED' 'calendar_link_source' 'attendees(responseStatus)'; do
+           'auth/calendar' 'www.googleapis.com/calendar' 'CALENDAR_INTEGRATION_ENABLED' 'calendar_link_source' 'attendees(responseStatus)' \
+           'SLACK_INTEGRATION_ENABLED' 'TELEGRAM_INTEGRATION_ENABLED' 'NOTIFY_SERVER_SECRET' 'NOTIFY_TOKEN_ENCRYPTION_KEY' 'SLACK_CLIENT_SECRET' 'TELEGRAM_BOT_TOKEN' \
+           'slack.com/api' 'api.telegram.org' 'xoxb-' 'notify_scheduler_tick' 'notify_link_begin' 'secret_enc'; do
   has "$pat" && bad "bundle contains '$pat'" || ok "no '$pat' in the bundle"
 done
 roles=$(grep -oE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' "$BUNDLE" | sort -u | python3 -c "

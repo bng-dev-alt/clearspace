@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run after `npm run build`: the PUBLIC client bundle (.next/static) must not contain the dev-login helper, a
-# privileged Supabase key, a Google API key, Google OAuth secrets/tokens/server RPC names (RUN 02), Gmail server RPCs / API host / scope / feature switch (RUN 03), Calendar server RPCs / API host / scope / feature switch / fields (RUN 04), a speech-to-text provider key/host/test seam, or the retired Supabase project. Also decodes every JWT in the bundle:
+# privileged Supabase key, a Google API key, Google OAuth secrets/tokens/server RPC names (RUN 02), Gmail server RPCs / API host / scope / feature switch (RUN 03), Calendar server RPCs / API host / scope / feature switch / fields (RUN 04), Slack/Telegram switches, secrets, API hosts, tokens and notify RPCs (RUN 05), a speech-to-text provider key/host/test seam, or the retired Supabase project. Also decodes every JWT in the bundle:
 # only the `anon` role may appear. Exit 1 on any finding.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -13,10 +13,16 @@ for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_
   'gmail_link_refresh' 'gmail_links_purge_mine' 'gmail_link_sources' 'google_service_remove' 'google_service_audit' 'google_connection_sub' \
   'gmail_caller_sub' 'mock-rt.' 'mock-code.' 'mock-grant-gmail' \
   'CALENDAR_INTEGRATION_ENABLED' 'auth/calendar' 'www.googleapis.com/calendar' '/calendar/v3' 'calendar_link_add' 'calendar_link_source' \
-  'calendar_link_refresh' 'calendar_links_purge_mine' 'calendar_link_sources' 'calendar_caller_sub' 'mock-grant-calendar' 'attendees(responseStatus)'; do
+  'calendar_link_refresh' 'calendar_links_purge_mine' 'calendar_link_sources' 'calendar_caller_sub' 'mock-grant-calendar' 'attendees(responseStatus)' \
+  'SLACK_INTEGRATION_ENABLED' 'TELEGRAM_INTEGRATION_ENABLED' 'NOTIFY_SERVER_SECRET' 'NOTIFY_TOKEN_ENCRYPTION_KEY' 'SLACK_CLIENT_SECRET' 'SLACK_CLIENT_ID' \
+  'TELEGRAM_BOT_TOKEN' 'SLACK_API_MOCK_BASE' 'TELEGRAM_API_MOCK_BASE' 'slack.com/api' 'api.telegram.org' 'oauth.v2.access' 'chat.postMessage' \
+  'xoxb-' 'xoxp-' 'MOCKmockMOCK' 'x-notify-secret' 'notify_dispatch' 'notify_scheduler_tick' 'notify_link_begin' 'notify_slack_complete' \
+  'notify_telegram_attach' 'notify_test_begin' 'secret_enc' 'cs_notify_slack'; do
   n=$(grep -rlF -- "$pat" .next/static 2>/dev/null | wc -l | tr -d ' ')
   if [ "$n" != 0 ]; then echo "FAIL: '$pat' found in $n client file(s)"; bad=1; else echo "ok - no '$pat' in the client bundle"; fi
 done
+# RUN 05: a Telegram bot token (digits:35+ chars) or a Slack token never appears, whatever its name
+if grep -rqE '[0-9]{6,12}:AA[A-Za-z0-9_-]{30,}|xox[abp]-[0-9A-Za-z-]{10,}' .next/static 2>/dev/null; then echo "FAIL: a Telegram bot token / Slack token pattern in the client bundle"; bad=1; else echo "ok - no Telegram bot token / Slack token pattern in the client bundle"; fi
 roles=$(grep -rhoE 'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}' .next/static | sort -u | python3 -c "
 import sys,base64,json
 for l in sys.stdin:

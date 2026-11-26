@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateCaller } from '../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
 import { TEST_MESSAGE } from '../../../../lib/notify/message';
-import { notifyLog, parseProvider, requireSlack, requireTelegram, rpcRow, sendWith } from '../../../../lib/notify/server';
+import { notifyLog, parseProvider, requireNotify, requireSlack, requireTelegram, rpcRow, sendWith } from '../../../../lib/notify/server';
 
 const OUTCOME_TEXT: Record<string, string> = {
   sent: 'Zkušební zpráva odeslána.',
@@ -15,6 +15,7 @@ const OUTCOME_TEXT: Record<string, string> = {
 /** POST /api/notify/test { provider } -- a test message to the caller's own channel (at most one per 30 s). */
 export async function POST(req: NextRequest) {
   try {
+    requireNotify();                                   // the switch first (both off -> 503 before anything else)
     const b = await readJson<{ provider?: unknown }>(req);
     const provider = parseProvider(b.provider);
     const { cfg } = provider === 'slack' ? requireSlack() : requireTelegram();

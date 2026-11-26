@@ -39,9 +39,13 @@ export default function CommunicationList({ projectId, onOpenCard, names }: { pr
   const [failed, setFailed] = useState(false);
   const [q, setQ] = useState('');
   const [source, setSource] = useState<'all' | HubProvider>('all');
+  const [extra, setExtra] = useState<Map<string, string>>(new Map());
+  const allNames = useMemo(() => new Map([...(names ?? new Map()), ...extra]), [names, extra]);
   useEffect(() => {
     let active = true;
-    hubService.messages(projectId).then((r) => { if (active) setRows(r); }).catch(() => { if (active) { setRows([]); setFailed(true); } });
+    hubService.messages(projectId)
+      .then(async (r) => { const n = await hubService.names(r.filter((m) => m.verified && m.author_user_id).map((m) => m.author_user_id!)); if (active) { setExtra(n); setRows(r); } })
+      .catch(() => { if (active) { setRows([]); setFailed(true); } });
     return () => { active = false; };
   }, [projectId]);
   const shown = useMemo(() => {
@@ -63,7 +67,7 @@ export default function CommunicationList({ projectId, onOpenCard, names }: { pr
       {rows === null ? <p className="hub-muted">Načítání…</p>
         : failed ? <p role="alert" className="drive-message is-error">Komunikaci se nepodařilo načíst.</p>
         : shown.length === 0 ? <p className="hub-muted">{rows.length === 0 ? 'Zatím žádná zaznamenaná komunikace.' : 'Nic neodpovídá filtru.'}</p>
-        : <ol className="hub-msgs" data-testid="hub-msg-list">{shown.map((m) => <MessageRow key={m.id} m={m} names={names} onOpenCard={onOpenCard} />)}</ol>}
+        : <ol className="hub-msgs" data-testid="hub-msg-list">{shown.map((m) => <MessageRow key={m.id} m={m} names={allNames} onOpenCard={onOpenCard} />)}</ol>}
     </div>
   );
 }
@@ -71,17 +75,21 @@ export default function CommunicationList({ projectId, onOpenCard, names }: { pr
 /** Task detail → Konverzace: the chat thread linked to this task (nothing when there is none). */
 export function TaskConversation({ cardId, names }: { cardId: string; names?: Map<string, string> }) {
   const [rows, setRows] = useState<HubMessage[]>([]);
+  const [extra, setExtra] = useState<Map<string, string>>(new Map());
   useEffect(() => {
     let active = true;
-    hubService.taskConversation(cardId).then((r) => { if (active) setRows(r); }).catch(() => undefined);
+    hubService.taskConversation(cardId)
+      .then(async (r) => { const n = await hubService.names(r.filter((m) => m.verified && m.author_user_id).map((m) => m.author_user_id!)); if (active) { setExtra(n); setRows(r); } })
+      .catch(() => undefined);
     return () => { active = false; };
   }, [cardId]);
+  const allNames = useMemo(() => new Map([...(names ?? new Map()), ...extra]), [names, extra]);
   if (rows.length === 0) return null;
   return (
     <section className="hub-task-conv" aria-label="Konverzace v chatu" data-testid="hub-task-conversation">
       <h4 className="drawer-section-title">Konverzace v chatu</h4>
       <p className="hub-muted">Odpovědi ve vlákně se propisují do komentářů a komentáře zpět do vlákna.</p>
-      <ol className="hub-msgs">{rows.map((m) => <MessageRow key={m.id} m={m} names={names} />)}</ol>
+      <ol className="hub-msgs">{rows.map((m) => <MessageRow key={m.id} m={m} names={allNames} />)}</ol>
     </section>
   );
 }

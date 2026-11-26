@@ -99,6 +99,13 @@ export const hubService = {
     if (error) throw new DriveError('db', 'Komunikaci se nepodařilo načíst.');
     return (data ?? []) as HubMessage[];
   },
+  /** Display names of verified authors (profiles visible to the caller under RLS). */
+  async names(ids: string[]): Promise<Map<string, string>> {
+    const want = [...new Set(ids)].filter(Boolean);
+    if (!hasSupabaseConfig || want.length === 0) return new Map();
+    const { data } = await supabase.from('profiles').select('id, display_name').in('id', want);
+    return new Map(((data ?? []) as Array<{ id: string; display_name: string | null }>).filter((r) => r.display_name).map((r) => [r.id, r.display_name!]));
+  },
   /** The chat conversation of one task (source message + synced thread replies), oldest first. */
   async taskConversation(cardId: string): Promise<HubMessage[]> {
     if (!hasSupabaseConfig) return HUB_DEMO_MESSAGES.filter((m) => m.card_id === cardId).reverse();

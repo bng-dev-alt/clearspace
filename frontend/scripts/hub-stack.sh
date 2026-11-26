@@ -52,7 +52,8 @@ case "${1:-}" in
     [ -n "$(docker ps -q --filter name=supabase_db_cs-notify-sb)" ] || { echo "stack did not start"; exit 1; }
     if docker ps --filter name=cs-notify-sb --format '{{.Ports}}' | tr ',' '\n' | grep -qE '(0\.0\.0\.0|\[::\]):[0-9]+->'; then echo "REFUSING: stack is LAN-reachable"; exit 1; fi
     [ "$(psql_db -At -c "select count(*) from public.clearspace_migrations where version = '20261129001500_notification_channels'")" = 1 ] || { echo "stack lacks 1500"; exit 1; }
-    for m in 20261130001600_communication_hub 20261201001700_hub_hardening; do psql_db --single-transaction -f - < "$HERE/supabase/migrations/$m.sql" >/dev/null; done
+    # 1400+ again: the launcher loop above may have re-applied OLDER function definitions (1200) before stopping at 1300 (TECH_DEBT)
+    for m in 20261128001400_google_calendar 20261129001500_notification_channels 20261130001600_communication_hub 20261201001700_hub_hardening; do psql_db --single-transaction -f - < "$HERE/supabase/migrations/$m.sql" >/dev/null; done
     "$HERE/scripts/notify-stack.sh" seed >/dev/null
     gen_hub
     # the service principal: a plain Auth user without any project membership; registered + server_trust('hub') via the ops script

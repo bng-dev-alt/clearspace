@@ -7,6 +7,7 @@
 # redirect stay on https://localhost:3472 (self-signed, loopback). DEV login is never reachable from outside.
 # Credentials live ONLY in the macOS Keychain; typed at hidden prompts, handed to `security -i` via stdin, never on a command line / in a file.
 #
+#   frontend/scripts/hub-live.sh setup           # RUN 08: ONE guided session for every missing item (tunnel, 3 bots, 2 Slack apps)
 #   frontend/scripts/hub-live.sh set-slack       # project Slack app: Client ID, Client Secret (hidden), Signing Secret (hidden)
 #   frontend/scripts/hub-live.sh set-telegram    # project Telegram bot: token (hidden) + username     (privacy mode stays ON)
 #   frontend/scripts/hub-live.sh set-pi          # OPTIONAL Project Intelligence bot: token (hidden) + username (privacy mode OFF)
@@ -23,6 +24,8 @@ SVC=${HUB_LIVE_KEYCHAIN_SERVICE:-ClearSpace V1 - Hub dev (live)}
 NSVC=${NOTIFY_LIVE_KEYCHAIN_SERVICE:-ClearSpace V1 - Notify dev (live)}
 DIR=${NOTIFY_STACK_DIR:-${TMPDIR:-/tmp}/cs-notify-sb}
 HTTPS_PORT=${HTTPS_PORT:-3472} GATE_PORT=${GATE_PORT:-3473}
+# RUN 08: dedicated named tunnel "clearspace-hub-live" (ingress only cs-hub-live.luffast.com -> 127.0.0.1:3473, everything else 404)
+HUB_PUBLIC_URL=${HUB_PUBLIC_URL:-https://cs-hub-live.luffast.com}; export HUB_PUBLIC_URL
 ACC=$DIR/collab-accounts.env
 kc_get() { security find-generic-password -s "${2:-$SVC}" -a "$1" -w 2>/dev/null; }
 kc_has() { security find-generic-password -s "${2:-$SVC}" -a "$1" >/dev/null 2>&1; }
@@ -64,6 +67,29 @@ load_env() {
   unset SLACK_HUB_API_MOCK_BASE TELEGRAM_HUB_API_MOCK_BASE SLACK_API_MOCK_BASE TELEGRAM_API_MOCK_BASE
 }
 case "${1:-}" in
+  setup)   # RUN 08: everything in ONE session, only what is still missing (hidden prompts, Keychain); safe to re-run
+    have() { kc_has "$1" "${2:-$SVC}"; }
+    echo "== ClearSpace live setup -- each value goes straight into the macOS Keychain; nothing is shown or stored elsewhere"
+    if ! have cloudflare_tunnel_token; then echo "-- 1/5 Cloudflare tunnel token (Zero Trust -> Networks -> Tunnels -> clearspace-hub-live -> Configure -> the long token after 'service install')"
+      t=$(ask 'Tunnel token' '^[A-Za-z0-9._=-]{50,600}$' 1) && kc_put cloudflare_tunnel_token "$t"; fi
+    if ! { have telegram_bot_token "$NSVC" && have telegram_bot_username "$NSVC"; }; then echo "-- 2/5 PERSONAL notification bot (RUN 05)"
+      t=$(ask 'Personal bot token' '^[0-9]{6,12}:[A-Za-z0-9_-]{30,64}$' 1) && printf 'add-generic-password -U -s "%s" -a "%s" -w "%s"\n' "$NSVC" telegram_bot_token "$t" | security -i >/dev/null 2>&1
+      u=$(ask 'Personal bot username (without @)' '^[A-Za-z][A-Za-z0-9_]{3,31}$' 0) && printf 'add-generic-password -U -s "%s" -a "%s" -w "%s"\n' "$NSVC" telegram_bot_username "$u" | security -i >/dev/null 2>&1; fi
+    if ! { have telegram_hub_bot_token && have telegram_hub_bot_username; }; then echo "-- 3/5 PROJECT bot (privacy mode stays ON)"
+      t=$(ask 'Project bot token' '^[0-9]{6,12}:[A-Za-z0-9_-]{30,64}$' 1) && kc_put telegram_hub_bot_token "$t"
+      u=$(ask 'Project bot username (without @)' '^[A-Za-z][A-Za-z0-9_]{3,31}$' 0) && kc_put telegram_hub_bot_username "$u"; fi
+    if ! { have telegram_pi_bot_token && have telegram_pi_bot_username; }; then echo "-- 4/5 OPTIONAL read-only PI bot (privacy OFF) -- press Enter to skip"
+      read -rsp "PI bot token (hidden, Enter = skip): " t </dev/tty; echo >&2; t=$(printf '%s' "$t" | tr -d '[:space:]')
+      if [ -n "$t" ]; then [[ "$t" =~ ^[0-9]{6,12}:[A-Za-z0-9_-]{30,64}$ ]] && kc_put telegram_pi_bot_token "$t" || echo "  rejected"
+        u=$(ask 'PI bot username (without @)' '^[A-Za-z][A-Za-z0-9_]{3,31}$' 0) && kc_put telegram_pi_bot_username "$u"; fi; fi
+    if ! { have slack_client_id "$NSVC" && have slack_client_secret "$NSVC"; }; then echo "-- 5a/5 Slack PERSONAL app (Basic Information)"
+      i=$(ask 'Client ID' '^[0-9]{3,20}\.[0-9]{3,20}$' 0) && printf 'add-generic-password -U -s "%s" -a "%s" -w "%s"\n' "$NSVC" slack_client_id "$i" | security -i >/dev/null 2>&1
+      c=$(ask 'Client Secret' '^[A-Za-z0-9]{20,64}$' 1) && printf 'add-generic-password -U -s "%s" -a "%s" -w "%s"\n' "$NSVC" slack_client_secret "$c" | security -i >/dev/null 2>&1; fi
+    if ! { have slack_hub_client_id && have slack_hub_client_secret && have slack_hub_signing_secret; }; then echo "-- 5b/5 Slack PROJECT app (Basic Information)"
+      i=$(ask 'Client ID' '^[0-9]{3,20}\.[0-9]{3,20}$' 0) && kc_put slack_hub_client_id "$i"
+      c=$(ask 'Client Secret' '^[A-Za-z0-9]{20,64}$' 1) && kc_put slack_hub_client_secret "$c"
+      g=$(ask 'Signing Secret' '^[A-Za-z0-9]{20,64}$' 1) && kc_put slack_hub_signing_secret "$g"; fi
+    echo "== done. Present items:"; "$0" status | grep -c '^present' | xargs echo "  present:";;
   set-slack)
     id=$(ask 'Slack PROJECT app Client ID (Basic Information)' '^[0-9]{3,20}\.[0-9]{3,20}$' 0) && kc_put slack_hub_client_id "$id"
     s=$(ask 'Slack PROJECT app Client Secret' '^[A-Za-z0-9]{20,64}$' 1) && kc_put slack_hub_client_secret "$s"
@@ -95,10 +121,12 @@ case "${1:-}" in
     # tunnel: a NAMED tunnel of the owner (stable https hostname routed to http://127.0.0.1:$GATE_PORT; token in the Keychain) when
     # HUB_PUBLIC_URL is set, else a temporary quick tunnel (random hostname; Cloudflare may rate-limit account-less tunnels)
     TOKF=""
-    if [ -n "${HUB_PUBLIC_URL:-}" ] && kc_has cloudflare_tunnel_token; then
-      umask 077; TOKF=$DIR/.hub-tunnel-token; kc_get cloudflare_tunnel_token > "$TOKF"
+    if [ "${HUB_QUICK_TUNNEL:-0}" != 1 ]; then
+      kc_has cloudflare_tunnel_token || { echo "no tunnel token in the Keychain (hub-live.sh setup)"; kill $P1 $P2; exit 2; }
+      umask 077; TOKF=$DIR/.hub-tunnel-token; kc_get cloudflare_tunnel_token > "$TOKF"     # mode 600, removed on exit
       cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:20249 run --token-file "$TOKF" > "$DIR/hub-tunnel.log" 2>&1 & P3=$!
     else
+      HUB_PUBLIC_URL=""
       cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:20249 --url "http://127.0.0.1:$GATE_PORT" > "$DIR/hub-tunnel.log" 2>&1 & P3=$!
     fi
     cleanup() {
@@ -132,5 +160,5 @@ case "${1:-}" in
   forget)
     for a in slack_hub_client_id slack_hub_client_secret slack_hub_signing_secret telegram_hub_bot_token telegram_hub_bot_username telegram_pi_bot_token telegram_pi_bot_username cloudflare_tunnel_token; do
       security delete-generic-password -s "$SVC" -a "$a" >/dev/null 2>&1 || true; done; echo "forgotten";;
-  *) echo "usage: $0 set-slack|set-telegram|set-pi|status|app|gate|forget"; exit 2;;
+  *) echo "usage: $0 setup|set-slack|set-telegram|set-pi|set-tunnel|status|app|manifest|gate|forget"; exit 2;;
 esac

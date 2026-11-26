@@ -72,7 +72,7 @@ case "${1:-}" in
     unset NEXT_PUBLIC_FORCE_DEMO VERCEL VERCEL_ENV
     # E-mail goes ONLY to the stack's Mailpit (loopback, capture only); reserved/test domains allowed there and nowhere else.
     export EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=$SMTP_PORT SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
-      APP_BASE_URL="http://127.0.0.1:$PORT" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET"
+      APP_BASE_URL="${APP_BASE_URL_OVERRIDE:-http://127.0.0.1:$PORT}" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET"
     cd "$HERE" && node scripts/local-auth-preflight.mjs   # refuses non-loopback Auth, demo mode, dead stack or a broken identity
     echo ">>> ONE-CLICK LOGIN: open http://127.0.0.1:$PORT/?login=auto  (signed in automatically as $DEV_LOGIN_EMAIL; real Auth session)"
     exec npx next dev -p "$PORT" -H 127.0.0.1;;

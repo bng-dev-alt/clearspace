@@ -6,21 +6,26 @@
 import { readFileSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-const NAMES = (process.env.REDACT_ENV ?? 'STAGED_BYPASS_SECRET,E2E_BYPASS_SECRET,BYPASS,SRK,ANON,PW,E2E_PASSWORD,PGPASSWORD,SERVICE_ROLE_KEY').split(',');
+// RUN 05: + notify secrets and provider credentials (only when set in the environment of the command being filtered)
+const NAMES = (process.env.REDACT_ENV ?? 'STAGED_BYPASS_SECRET,E2E_BYPASS_SECRET,BYPASS,SRK,ANON,PW,E2E_PASSWORD,PGPASSWORD,SERVICE_ROLE_KEY,NOTIFY_SERVER_SECRET,NOTIFY_TOKEN_ENCRYPTION_KEY,SLACK_CLIENT_SECRET,TELEGRAM_BOT_TOKEN').split(',');
 const secrets = () => NAMES.map((n) => [n, process.env[n]]).filter(([, v]) => v && v.length >= 8);
 export function redact(text, list = secrets()) {
   let out = text;
   for (const [n, v] of list) out = out.split(v).join(`<redacted:${n}>`);
-  return out.replace(/(x-vercel-protection-bypass["']?\s*[:=]\s*["']?)[A-Za-z0-9_-]{8,}/gi, '$1<redacted>');
+  return out.replace(/(x-vercel-protection-bypass["']?\s*[:=]\s*["']?)[A-Za-z0-9_-]{8,}/gi, '$1<redacted>')
+    .replace(/(x-notify-secret["']?\s*[:=]\s*["']?)[A-Za-z0-9_-]{8,}/gi, '$1<redacted>')        // RUN 05 scheduler header
+    .replace(/xox[abp]-[0-9A-Za-z-]{10,}/g, '<redacted:slack-token>')
+    .replace(/\b[0-9]{6,12}:AA[A-Za-z0-9_-]{30,}/g, '<redacted:telegram-bot-token>');
 }
 function* files(p) { let st; try { st = statSync(p); } catch { return; } if (st.isDirectory()) for (const n of readdirSync(p)) yield* files(join(p, n)); else yield p; }
 
 const [mode, ...dirs] = process.argv.slice(2);
 if (mode === '--selftest') {
   const l = [['BYPASS', 'abcDEF1234567890abcDEF1234567890']];
-  const t = 'POST x\n  - x-vercel-protection-bypass: abcDEF1234567890abcDEF1234567890\nraw abcDEF1234567890abcDEF1234567890 and x-vercel-protection-bypass=zzzzzzzzzzzz';
+  const t = 'POST x\n  - x-vercel-protection-bypass: abcDEF1234567890abcDEF1234567890\nraw abcDEF1234567890abcDEF1234567890 and x-vercel-protection-bypass=zzzzzzzzzzzz'
+    + ' x-notify-secret: yyyyyyyyyyyyyyyy xoxb-1234567890-abcdefghijkl 123456789:AAEabcdefghijklmnopqrstuvwxyz0123456';
   const r = redact(t, l);
-  if (/abcDEF|zzzzzz/.test(r) || !r.includes('<redacted:BYPASS>')) { console.error('selftest FAILED'); process.exit(1); }
+  if (/abcDEF|zzzzzz|yyyyyy|xoxb-1|AAEabc/.test(r) || !r.includes('<redacted:BYPASS>')) { console.error('selftest FAILED'); process.exit(1); }
   console.log('selftest ok'); process.exit(0);
 } else if (mode === '--scan') {
   const list = secrets(); let bad = 0;

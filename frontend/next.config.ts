@@ -27,7 +27,8 @@ export const securityHeaders = [
  * do not print request URLs this way; this only concerns development.
  */
 // RUN 03: Gmail search URLs carry the user's search terms (private) -- never printed either.
-export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/, /\/api\/gmail\//, /\/api\/calendar\//];
+// RUN 05: the Slack OAuth callback carries a single-use code -- /api/notify/ is never printed either.
+export const noRequestLogPaths = [/\/api\/google\/oauth\/callback/, /\/api\/gmail\//, /\/api\/calendar\//, /\/api\/notify\//];
 
 const nextConfig: NextConfig = {
   logging: { incomingRequests: { ignore: noRequestLogPaths } },

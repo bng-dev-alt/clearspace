@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
 import { calendarFeatureEnabled } from '../../lib/google/config';
+import { slackFeatureEnabled, telegramFeatureEnabled } from '../../lib/notify/config';
 
 export const metadata: Metadata = { title: 'O aplikaci – ClearSpace' };
 
@@ -27,6 +28,13 @@ export default function AboutPage() {
           <h2>Propojení s Google Kalendářem</h2>
           <p>Po povolení jen pro čtení vidíte v kalendáři projektu své vlastní události (jen vy) a můžete k projektu nebo úkolu připojit vybrané události. Členové projektu uvidí jen název, čas, počet účastníků a organizátora. ClearSpace v kalendáři nic nevytváří ani nemění; soukromé události připojit nelze.</p>
           <p style={{ marginTop: '0.5rem' }}>Podrobnosti: <Link href="/privacy#calendar">Ochrana osobních údajů – Google Kalendář</Link>.</p>
+        </section>
+      )}
+      {(slackFeatureEnabled() || telegramFeatureEnabled()) && (
+        <section className="settings-card" id="notifikace" data-testid="about-notify">
+          <h2>Oznámení do Slacku a Telegramu</h2>
+          <p>Vybraná oznámení (přiřazení úkolu, blížící se termín, zmínky a další) vám ClearSpace může posílat i do Slacku nebo Telegramu – jen vám osobně, s odkazem zpět do aplikace. Bez textu komentářů a bez příloh.</p>
+          <p style={{ marginTop: '0.5rem' }}>Podrobnosti: <Link href="/privacy#notifikace">Ochrana osobních údajů – oznámení mimo aplikaci</Link>.</p>
         </section>
       )}
       <section className="settings-card">

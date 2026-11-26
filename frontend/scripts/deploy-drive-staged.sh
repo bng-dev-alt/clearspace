@@ -4,6 +4,9 @@
 # explicit GMAIL_INTEGRATION_ENABLED variable, and `check` adds the Gmail containment checks (EXPECT_GMAIL_OFF=1).
 # RUN 04 (Calendar code, Calendar OFF): EXPECT_CALENDAR_MIGRATION=1 -> also requires migration 1400 in production and the explicit
 # CALENDAR_INTEGRATION_ENABLED variable (Production only), and `check` adds the Calendar containment checks (EXPECT_CALENDAR_OFF=1).
+# RUN 05 (Slack/Telegram code, both OFF): EXPECT_NOTIFY_MIGRATION=1 -> also requires migration 1500 in production and the explicit
+# SLACK_INTEGRATION_ENABLED + TELEGRAM_INTEGRATION_ENABLED variables (Production only), no notify secret / mock variable anywhere, and
+# `check` adds the notify containment checks (EXPECT_SLACK_OFF=1 EXPECT_TELEGRAM_OFF=1).
 # Deploys only with CONFIRM_DRIVE_DEPLOY=<full commit sha> AND the owner's written approval (docs/run02/PRODUCTION_ROLLOUT.md §10).
 #
 #   frontend/scripts/deploy-drive-staged.sh preflight            read-only: commit/branch/tree, Vercel env NAMES, production DB state
@@ -16,7 +19,7 @@ FRONTEND="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; ROOT="$(cd "$FRONTE
 SCOPE=bng-dev-alt-webadvisor; PROJECT=clearspace; REF=twjlnsxjtuntujarwner; BRANCH=${RELEASE_BRANCH:-release/run02-google-drive}
 V=$(ls -d ~/.npm/_npx/*/node_modules/.bin/vercel 2>/dev/null | tail -1); [ -x "$V" ] || V=vercel
 REQUIRED="GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_SERVER_SECRET GOOGLE_TOKEN_ENCRYPTION_KEY GOOGLE_PICKER_API_KEY GOOGLE_CLOUD_PROJECT_NUMBER APP_BASE_URL PRIVACY_CONTROLLER PRIVACY_CONTACT_EMAIL"
-FORBIDDEN="GOOGLE_API_MOCK_BASE GOOGLE_MOCK_PORT MOCK_REDIRECT_URIS CLEARSPACE_DEV_LOGIN CLEARSPACE_DEV_AUTO_LOGIN NEXT_PUBLIC_DEV_LOGIN NEXT_PUBLIC_DEV_AUTO_LOGIN DEV_LOGIN_EMAIL DEV_LOGIN_PASSWORD GOOGLE_TOKEN_ENCRYPTION_KEY_PREVIOUS"
+FORBIDDEN="SLACK_API_MOCK_BASE TELEGRAM_API_MOCK_BASE NOTIFY_MOCK_PORT NOTIFY_ALLOW_TIME_OVERRIDE GOOGLE_API_MOCK_BASE GOOGLE_MOCK_PORT MOCK_REDIRECT_URIS CLEARSPACE_DEV_LOGIN CLEARSPACE_DEV_AUTO_LOGIN NEXT_PUBLIC_DEV_LOGIN NEXT_PUBLIC_DEV_AUTO_LOGIN DEV_LOGIN_EMAIL DEV_LOGIN_PASSWORD GOOGLE_TOKEN_ENCRYPTION_KEY_PREVIOUS"
 fail=0; ok() { echo "ok   - $1"; }; bad() { echo "FAIL - $1"; fail=1; }
 
 preflight() {
@@ -55,6 +58,19 @@ for e in json.load(sys.stdin)["envs"]:
       || bad "CALENDAR_INTEGRATION_ENABLED not set explicitly in Production (set it to 0)"
     echo "$names" | grep -qx "preview:CALENDAR_INTEGRATION_ENABLED" && bad "CALENDAR_INTEGRATION_ENABLED must not exist for Preview" || ok "no Preview CALENDAR_INTEGRATION_ENABLED"
   fi
+  if [ "${EXPECT_NOTIFY_MIGRATION:-0}" = 1 ]; then
+    st=$(printf "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\nselect count(*) from public.clearspace_migrations where version='20261129001500_notification_channels';\n" \
+      | docker run --rm -i -e PGPASSWORD public.ecr.aws/supabase/postgres:17.6.1.147 psql "$DB" -X -At -q 2>/dev/null | grep -v '^SET')
+    [ "$st" = 1 ] && ok "migration 1500 applied (the RUN 05 triggers + outbox, notifications on or off)" || bad "migration 1500 NOT applied -- run apply-notify-hosted.sh first"
+    for n in SLACK_INTEGRATION_ENABLED TELEGRAM_INTEGRATION_ENABLED; do
+      echo "$names" | grep -qx "production:$n" && ok "$n explicitly set (value checked black-box: notify routes must answer *_disabled)" || bad "$n not set explicitly in Production (set it to 0)"
+      echo "$names" | grep -qx "preview:$n" && bad "$n must not exist for Preview" || ok "no Preview $n"
+    done
+    # with both switches off nothing notify-related is needed: a secret here would mean someone started switching it on
+    for n in NOTIFY_SERVER_SECRET NOTIFY_TOKEN_ENCRYPTION_KEY SLACK_CLIENT_ID SLACK_CLIENT_SECRET TELEGRAM_BOT_TOKEN TELEGRAM_BOT_USERNAME; do
+      echo "$names" | grep -qE "^(production|preview):$n$" && bad "$n present although notifications stay OFF (not approved)" || ok "no $n"
+    done
+  fi
   unset PGPASSWORD
 }
 
@@ -79,7 +95,8 @@ case "${1:-}" in
     # Monograph is the default in every build since RUN 02C (only NEXT_PUBLIC_ENABLE_MONOGRAPH=0 turns it off); the deploy still passes =1 explicitly
     keys "$host" | grep -qx NEXT_PUBLIC_ENABLE_MONOGRAPH && ok "NEXT_PUBLIC_ENABLE_MONOGRAPH passed explicitly" || ok "no NEXT_PUBLIC_ENABLE_MONOGRAPH in build.env (Monograph stays the default)"
     echo "== black-box checks"
-    MODE=vercel DEPLOYMENT="$URL" EXPECT_DRIVE=1 EXPECT_GMAIL_OFF=${EXPECT_GMAIL_MIGRATION:-0} EXPECT_CALENDAR_OFF=${EXPECT_CALENDAR_MIGRATION:-0} bash "$FRONTEND/scripts/check-deployment.sh" "$URL" || fail=1
+    MODE=vercel DEPLOYMENT="$URL" EXPECT_DRIVE=1 EXPECT_GMAIL_OFF=${EXPECT_GMAIL_MIGRATION:-0} EXPECT_CALENDAR_OFF=${EXPECT_CALENDAR_MIGRATION:-0} \
+      EXPECT_SLACK_OFF=${EXPECT_NOTIFY_MIGRATION:-0} EXPECT_TELEGRAM_OFF=${EXPECT_NOTIFY_MIGRATION:-0} bash "$FRONTEND/scripts/check-deployment.sh" "$URL" || fail=1
     echo "NOTE: Google OAuth cannot be exercised on the staged URL (not an authorized redirect URI): it is accepted after promote (PRODUCTION_ACCEPTANCE.md)."
     ;;
   *) echo "usage: $0 preflight | deploy | check <staged-url>"; exit 2;;

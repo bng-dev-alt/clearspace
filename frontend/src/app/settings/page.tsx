@@ -3,16 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../../components/layout/Navbar';
 import GoogleConnectionCard from '../../components/drive/GoogleConnectionCard';
+import NotificationChannelsCard from '../../components/notify/NotificationChannelsCard';
 import { hasSupabaseConfig } from '../../lib/supabase';
 
 export default function SettingsPage() {
   const [outcome, setOutcome] = useState<string | null | undefined>(undefined);
+  const [notifyOutcome, setNotifyOutcome] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('google');
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('google');
+    const n = params.get('notify');   // RUN 05: back from Slack (?notify=slack)
     // keep the first answer: React dev mode runs this effect twice, the second time after the URL was cleaned
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOutcome((prev) => prev ?? q);
-    if (q) window.history.replaceState(null, '', '/settings');
+    setNotifyOutcome((prev) => prev ?? n);
+    if (q || n) window.history.replaceState(null, '', '/settings');
   }, []);
 
   return (
@@ -32,7 +37,10 @@ export default function SettingsPage() {
         {!hasSupabaseConfig ? (
           <section className="settings-card"><p>Propojení účtů je dostupné po přihlášení do ClearSpace s databází (v ukázkovém režimu není k dispozici).</p></section>
         ) : outcome === undefined ? null : (
-          <GoogleConnectionCard returnOutcome={outcome} />
+          <>
+            <GoogleConnectionCard returnOutcome={outcome} />
+            <NotificationChannelsCard returnOutcome={notifyOutcome} />
+          </>
         )}
       </main>
     </div>

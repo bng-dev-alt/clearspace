@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
 import { calendarFeatureEnabled, gmailFeatureEnabled } from '../../lib/google/config';
+import { slackFeatureEnabled, telegramFeatureEnabled } from '../../lib/notify/config';
 
 export const metadata: Metadata = { title: 'Ochrana osobních údajů – ClearSpace' };
 // The controller's identity and contact come from SERVER env (PRIVACY_CONTROLLER, PRIVACY_CONTACT_EMAIL): never hard-coded in the
@@ -15,6 +16,8 @@ export default function PrivacyPage() {
   const email = process.env.PRIVACY_CONTACT_EMAIL?.trim();
   const gmail = gmailFeatureEnabled();
   const calendar = calendarFeatureEnabled();
+  const slack = slackFeatureEnabled();
+  const telegram = telegramFeatureEnabled();
   const contact = email && /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(email) ? email : null;
 
   return (
@@ -83,6 +86,22 @@ export default function PrivacyPage() {
         )}
       </section>
 
+      <section className="settings-card" id="notifikace">
+        <h2>3c. Oznámení mimo aplikaci – Slack a Telegram (volitelné)</h2>
+        {!slack && !telegram ? (
+          <p data-testid="privacy-notify-off">Oznámení do Slacku ani Telegramu nejsou na tomto serveru zapnutá. ClearSpace zde nikam mimo aplikaci oznámení neposílá.</p>
+        ) : (
+          <ul data-testid="privacy-notify">
+            <li><strong>Komu:</strong> jen vám osobně – do přímých zpráv od aplikace ClearSpace ve vašem Slacku{telegram ? ' nebo do soukromého chatu s botem ClearSpace v Telegramu' : ''}. Nikdy do kanálů, skupin ani jiným lidem. Propojení zapínáte sami v Nastavení; v Telegramu ho navíc potvrzujete v ClearSpace.</li>
+            <li><strong>Co zpráva obsahuje:</strong> typ události (např. přiřazení úkolu, blížící se termín), jméno toho, kdo změnu udělal, název úkolu a projektu, termín a odkaz do ClearSpace. Volbou „Neposílat názvy“ omezíte zprávu na typ a odkaz. <strong>Nikdy</strong> text komentářů, popisy úkolů, přílohy ani údaje z Google Disku, Gmailu či Kalendáře.</li>
+            <li><strong>Kontrola přístupu:</strong> těsně před každým odesláním se znovu ověří, že k projektu a úkolu stále máte přístup a že máte daný typ oznámení zapnutý; jinak se zpráva nepošle.</li>
+            <li><strong>Co ukládáme:</strong> šifrovaně přístupový údaj (Slack: token aplikace pro váš workspace a vaše ID ve Slacku; Telegram: ID chatu), název workspace nebo jméno v Telegramu (vidíte jen vy) a frontu odeslaných oznámení bez textu (jen identifikátory a stav) po dobu 30 dní.</li>
+            <li><strong>Slack a Telegram</strong> jsou samostatní správci zpráv, které vám doručí; zprávy u sebe ukládají podle svých pravidel. Odpojením v ClearSpace smažeme přístupové údaje (u Slacku zrušíme i token, pokud ho nepoužívají další lidé z vašeho workspace).</li>
+            <li>Údaje z oznámení se neposílají žádnému poskytovateli umělé inteligence.</li>
+          </ul>
+        )}
+      </section>
+
       <section className="settings-card" id="retention">
         <h2>4. Uchování a výmaz</h2>
         <ul>
@@ -102,6 +121,7 @@ export default function PrivacyPage() {
           <li>Vercel – provoz webové aplikace.</li>
           <li>Google – propojení s Google Diskem{gmail ? ', Gmailem' : ''}{calendar ? ' a Google Kalendářem' : ''} (jen pokud ho zapnete).</li>
           <li>Resend – odesílání e-mailů (potvrzení účtu, pozvánky do projektů).</li>
+          {(slack || telegram) && <li>{[slack && 'Slack', telegram && 'Telegram'].filter(Boolean).join(' a ')} – doručení oznámení, která si sami zapnete (bod 3c).</li>}
           <li>U volitelných AI funkcí a přepisu záznamů porad (jsou-li pro váš účet zapnuté) zpracovávají text nebo zvuk, který do nich sami vložíte, poskytovatelé Google (Gemini) a Soniox. Obsah souborů z Google Disku se jim neposílá.</li>
         </ul>
       </section>

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicPage from '../../components/legal/PublicPage';
-import { calendarFeatureEnabled, gmailFeatureEnabled } from '../../lib/google/config';
+import { serviceMode } from '../../lib/google/config';
 import { slackFeatureEnabled, telegramFeatureEnabled } from '../../lib/notify/config';
 
 export const metadata: Metadata = { title: 'Ochrana osobních údajů – ClearSpace' };
@@ -14,8 +14,12 @@ const VERSION = '25. listopadu 2026';
 export default function PrivacyPage() {
   const controller = process.env.PRIVACY_CONTROLLER?.trim();
   const email = process.env.PRIVACY_CONTACT_EMAIL?.trim();
-  const gmail = gmailFeatureEnabled();
-  const calendar = calendarFeatureEnabled();
+  // RUN 06: 'pilot' = on for a few listed accounts only -- the same rules apply to them, so the section is shown with a pilot note
+  const gmailMode = serviceMode('gmail');
+  const calendarMode = serviceMode('calendar');
+  const gmail = gmailMode !== 'off';
+  const calendar = calendarMode !== 'off';
+  const pilotNote = (what: string) => <li data-testid={`privacy-${what}-pilot`}><strong>Pilotní provoz:</strong> na tomto serveru je propojení zapnuté jen pro několik předem určených testovacích účtů; ostatní uživatelé ho nevidí a ClearSpace k jejich údajům nepřistupuje.</li>;
   const slack = slackFeatureEnabled();
   const telegram = telegramFeatureEnabled();
   const contact = email && /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(email) ? email : null;
@@ -58,6 +62,7 @@ export default function PrivacyPage() {
           <p data-testid="privacy-gmail-off">Propojení s Gmailem není na tomto serveru zapnuté. ClearSpace zde k vaší e-mailové schránce nepřistupuje a o povolení přístupu ke Gmailu nežádá.</p>
         ) : (
           <ul data-testid="privacy-gmail">
+            {gmailMode === 'pilot' && pilotNote('gmail')}
             <li><strong>Oprávnění:</strong> jen čtení (<code>gmail.readonly</code>), o které žádáte zvlášť tlačítkem „Připojit Gmail“. ClearSpace e-maily neodesílá, nemaže, nepřesouvá ani neoznačuje a schránku nesynchronizuje.</li>
             <li><strong>Co se čte:</strong> jen výsledky hledání, které sami zadáte, a e-maily nebo konverzace, které sami připojíte k projektu nebo úkolu.</li>
             <li><strong>Co ukládáme:</strong> u připojeného e-mailu předmět, jméno odesílatele (nebo jen doménu), datum, počet zpráv a příloh, kdo a kdy ho připojil. Odděleně a nepřístupně pro ostatní uživatele ukládáme identifikátor zprávy a vašeho účtu Google, aby šel e-mail znovu otevřít. Obsah e-mailů, adresy a přílohy neukládáme.</li>
@@ -75,6 +80,7 @@ export default function PrivacyPage() {
           <p data-testid="privacy-calendar-off">Propojení s Google Kalendářem není na tomto serveru zapnuté. ClearSpace zde k vašemu kalendáři nepřistupuje a o povolení přístupu ke Kalendáři nežádá.</p>
         ) : (
           <ul data-testid="privacy-calendar">
+            {calendarMode === 'pilot' && pilotNote('calendar')}
             <li><strong>Oprávnění:</strong> jen čtení událostí v kalendářích, které vlastníte (<code>calendar.events.owned.readonly</code>), o které žádáte zvlášť tlačítkem „Připojit Google Kalendář“. ClearSpace čte jen váš hlavní kalendář; události nevytváří, nemění, nemaže, nikoho nezve a kalendář nesynchronizuje.</li>
             <li><strong>Vaše vrstva v kalendáři projektu:</strong> vaše události se načítají jen na vaši žádost pro zobrazené období, vidíte je jen vy a neukládají se.</li>
             <li><strong>Co ukládáme u připojené události:</strong> název, začátek a konec, zda jde o celodenní nebo opakovanou událost, časové pásmo události, počet účastníků, jméno organizátora (nebo jen doménu), kdo a kdy událost připojil. Odděleně a nepřístupně pro ostatní uživatele ukládáme identifikátor události a vašeho účtu Google, aby šla událost obnovit. <strong>Neukládáme</strong> popis, místo, adresy ani jména účastníků, odkazy na online schůzky (Google Meet) ani přílohy – ClearSpace je od Google vůbec nepožaduje.</li>

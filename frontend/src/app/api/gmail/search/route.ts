@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildQuery, GMAIL_TEXT, PAGE_TOKEN_RE, search, type GmailKind } from '../../../../lib/google/gmail';
-import { caller, errorResponse, GMAIL_STATUS, HttpError, MSG, NO_STORE, requireGmail, withGmailToken } from '../../../../lib/google/server';
+import { serviceCaller, errorResponse, GMAIL_STATUS, HttpError, MSG, NO_STORE, requireGmail, withGmailToken } from '../../../../lib/google/server';
 
 /**
  * GET /api/gmail/search?kind=thread|message&text=&from=&subject=&after=YYYY-MM-DD&before=&pageToken=&pageSize=
@@ -10,7 +10,7 @@ import { caller, errorResponse, GMAIL_STATUS, HttpError, MSG, NO_STORE, requireG
 export async function GET(req: NextRequest) {
   try {
     const cfg = requireGmail();
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'gmail');
     const p = req.nextUrl.searchParams;
     const kind: GmailKind | null = (p.get('kind') ?? 'thread') === 'thread' ? 'thread' : p.get('kind') === 'message' ? 'message' : null;
     const pageToken = p.get('pageToken');

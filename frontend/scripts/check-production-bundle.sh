@@ -12,7 +12,7 @@ for pat in 'dev-login-btn' 'api/dev/login' 'clearspace-dev-autologin' 'DEV_AUTO_
   'GMAIL_INTEGRATION_ENABLED' 'gmail.googleapis.com' 'auth/gmail.readonly' '/gmail/v1/users' 'metadataHeaders' 'gmail_link_add' 'gmail_link_source' \
   'gmail_link_refresh' 'gmail_links_purge_mine' 'gmail_link_sources' 'google_service_remove' 'google_service_audit' 'google_connection_sub' \
   'gmail_caller_sub' 'mock-rt.' 'mock-code.' 'mock-grant-gmail' \
-  'CALENDAR_INTEGRATION_ENABLED' 'auth/calendar' 'www.googleapis.com/calendar' '/calendar/v3' 'calendar_link_add' 'calendar_link_source' \
+  'CALENDAR_INTEGRATION_ENABLED' 'GOOGLE_PILOT_USER_IDS' 'GOOGLE_PILOT_ACCOUNTS' 'auth/calendar' 'www.googleapis.com/calendar' '/calendar/v3' 'calendar_link_add' 'calendar_link_source' \
   'calendar_link_refresh' 'calendar_links_purge_mine' 'calendar_link_sources' 'calendar_caller_sub' 'mock-grant-calendar' 'attendees(responseStatus)' \
   'SLACK_INTEGRATION_ENABLED' 'TELEGRAM_INTEGRATION_ENABLED' 'NOTIFY_SERVER_SECRET' 'NOTIFY_TOKEN_ENCRYPTION_KEY' 'SLACK_CLIENT_SECRET' 'SLACK_CLIENT_ID' \
   'TELEGRAM_BOT_TOKEN' 'SLACK_API_MOCK_BASE' 'TELEGRAM_API_MOCK_BASE' 'slack.com/api' 'api.telegram.org' 'oauth.v2.access' 'chat.postMessage' \

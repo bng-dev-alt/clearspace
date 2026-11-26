@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CALENDAR_STATUS, CALENDAR_TEXT, listEvents, PAGE_TOKEN_RE, parseRange } from '../../../../lib/google/calendar';
-import { caller, errorResponse, HttpError, MSG, NO_STORE, requireCalendar, withServiceToken } from '../../../../lib/google/server';
+import { serviceCaller, errorResponse, HttpError, MSG, NO_STORE, requireCalendar, withServiceToken } from '../../../../lib/google/server';
 
 /**
  * GET /api/calendar/events?from=<ISO>&to=<ISO>[&q=][&pageToken=][&pageSize=1..250]
@@ -11,7 +11,7 @@ import { caller, errorResponse, HttpError, MSG, NO_STORE, requireCalendar, withS
 export async function GET(req: NextRequest) {
   try {
     const cfg = requireCalendar();
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'calendar');
     const p = req.nextUrl.searchParams;
     const range = parseRange(p.get('from'), p.get('to'));
     if (!range) throw new HttpError(400, CALENDAR_TEXT.range, 'invalid_range');

@@ -15,6 +15,9 @@ import { keyFromBase64, type KeyRing } from './crypto';
  *   GOOGLE_API_MOCK_BASE                                 -- local tests only: honoured only outside production AND on loopback
  *   GMAIL_INTEGRATION_ENABLED                            -- RUN 03 feature switch, '1' = Gmail on (independent of Drive; default OFF)
  *   CALENDAR_INTEGRATION_ENABLED                         -- RUN 04 feature switch, '1' = Google Calendar on (independent; default OFF)
+ *                                                           RUN 06: both switches also take 'pilot' = on ONLY for the users below
+ *   GOOGLE_PILOT_USER_IDS                                -- pilot: comma-separated ClearSpace user ids (never a shared public-demo identity)
+ *   GOOGLE_PILOT_ACCOUNTS                                -- pilot: comma-separated Google account e-mails allowed to grant Gmail/Calendar
  *   GOOGLE_OAUTH_PUBLISHING                              -- 'production' only once the consent screen is published (In production);
  *                                                           anything else = Testing: the UI says only approved test users can connect
  */
@@ -49,6 +52,28 @@ export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SC
 export const gmailFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.GMAIL_INTEGRATION_ENABLED?.trim() === '1';
 /** Calendar feature switch (RUN 04), independent of Drive, Gmail and the Google grant. Default OFF. */
 export const calendarFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.CALENDAR_INTEGRATION_ENABLED?.trim() === '1';
+
+/**
+ * RUN 06 pilot mode for the server-side services: '1' = on for everyone, 'pilot' = on only for a listed ClearSpace user whose
+ * connected Google account is listed too, anything else = off. Fail closed: 'pilot' with an empty list is off for everyone.
+ */
+export type ServiceMode = 'on' | 'pilot' | 'off';
+export function serviceMode(service: 'gmail' | 'calendar', env: NodeJS.ProcessEnv = process.env): ServiceMode {
+  const v = (service === 'gmail' ? env.GMAIL_INTEGRATION_ENABLED : env.CALENDAR_INTEGRATION_ENABLED)?.trim();
+  return v === '1' ? 'on' : v === 'pilot' ? 'pilot' : 'off';
+}
+const csv = (raw: string | undefined) => (raw ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+/** May this ClearSpace user use the service (before the Google account is known)? Drive is not gated here. */
+export function serviceAllowedFor(service: GoogleService, userId: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (service === 'drive') return true;
+  const mode = serviceMode(service, env);
+  return mode === 'on' || (mode === 'pilot' && csv(env.GOOGLE_PILOT_USER_IDS).includes(userId.toLowerCase()) && csv(env.GOOGLE_PILOT_ACCOUNTS).length > 0);
+}
+/** ... and with this Google account (the account check of the pilot). */
+export function serviceAllowedForAccount(service: GoogleService, userId: string, email: string | null | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!serviceAllowedFor(service, userId, env)) return false;
+  return service === 'drive' || serviceMode(service as 'gmail' | 'calendar', env) === 'on' || (!!email && csv(env.GOOGLE_PILOT_ACCOUNTS).includes(email.trim().toLowerCase()));
+}
 
 export interface GoogleEndpoints {
   auth: string;

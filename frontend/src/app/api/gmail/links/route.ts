@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ENTITY_ID_RE } from '../../../../lib/google/drive';
 import { getItem, GMAIL_TEXT, isGmailId, linkRef, sharedSender, type GmailKind } from '../../../../lib/google/gmail';
-import { caller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, requireGmail, withGmailToken } from '../../../../lib/google/server';
+import { serviceCaller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, requireGmail, withGmailToken } from '../../../../lib/google/server';
 
 /**
  * POST /api/gmail/links { projectId, cardId?, items: [{ kind: 'message'|'thread', id }] } -- attach e-mails the caller
@@ -12,7 +12,7 @@ import { caller, dbError, errorResponse, HttpError, MSG, NO_STORE, readJson, req
 export async function POST(req: NextRequest) {
   try {
     const cfg = requireGmail();
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'gmail');
     const body = await readJson<{ projectId?: unknown; cardId?: unknown; items?: unknown }>(req);
     const projectId = typeof body.projectId === 'string' && ENTITY_ID_RE.test(body.projectId) ? body.projectId : null;
     const cardId = body.cardId == null ? null : typeof body.cardId === 'string' && ENTITY_ID_RE.test(body.cardId) ? body.cardId : undefined;

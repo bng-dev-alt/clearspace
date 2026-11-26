@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getContent, GMAIL_TEXT, gmailWebUrl } from '../../../../../../lib/google/gmail';
 import { ownSource, storeShared } from '../../../../../../lib/google/gmailLinks';
-import { caller, errorResponse, GMAIL_STATUS, HttpError, NO_STORE, requireGmail, withGmailToken } from '../../../../../../lib/google/server';
+import { serviceCaller, errorResponse, GMAIL_STATUS, HttpError, NO_STORE, requireGmail, withGmailToken } from '../../../../../../lib/google/server';
 
 /**
  * GET /api/gmail/links/:id/preview -- plain-text preview of ONE linked e-mail / conversation, for the person who linked
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   try {
     const cfg = requireGmail();
     const { id } = await ctx.params;
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'gmail');
     const src = await ownSource(db, cfg, id);
     const r = await withGmailToken(db, cfg, 2, (token) => getContent(cfg, token, src.kind, src.gmailId));
     if (!r.ok) {

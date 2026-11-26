@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateCaller, HttpError } from '../collab/invitationServer';
-import { calendarFeatureEnabled, gmailFeatureEnabled, googleConfig, secretFormat, SERVICE_SCOPE, type GoogleConfig, type GoogleService } from './config';
+import { googleConfig, secretFormat, SERVICE_SCOPE, serviceAllowedFor, serviceAllowedForAccount, serviceMode, type GoogleConfig, type GoogleService } from './config';
 import { open, seal, tokenAad, isStale } from './crypto';
 import { GoogleOAuthError, refreshAccessToken } from './oauth';
 
@@ -30,6 +30,7 @@ export const MSG = {
 } as const;
 /** The refusal when the stored grant lacks the service a route needs (RUN 03/04). */
 const NOT_GRANTED: Record<GoogleService, string> = { drive: MSG.drive_not_granted, gmail: MSG.gmail_not_granted, calendar: MSG.calendar_not_granted };
+export const DISABLED: Record<GoogleService, string> = { drive: MSG.not_configured, gmail: MSG.gmail_disabled, calendar: MSG.calendar_disabled };
 
 /**
  * Structured server log of the Google integration (RUN 02B). One JSON line per event, WHITELISTED fields only: phases, booleans,
@@ -62,6 +63,13 @@ export function requireGoogle(notConfigured: string = MSG.not_configured): Googl
 
 export async function caller(req: Request) {
   return authenticateCaller(req.headers.get('authorization'), 'Propojení s Google vyžaduje připojenou databázi.');
+}
+
+/** RUN 06: the caller of a Gmail / Calendar route; in pilot mode a non-pilot user gets exactly the OFF answer before anything else runs. */
+export async function serviceCaller(req: Request, service: 'gmail' | 'calendar') {
+  const c = await caller(req);
+  if (!serviceAllowedFor(service, c.userId)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);
+  return c;
 }
 
 /** Postgres error -> HTTP, keeping the database's own Czech message for the expected refusals. */
@@ -110,8 +118,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function getAccessToken(db: SupabaseClient, cfg: GoogleConfig, opts: { cost?: number; force?: boolean; service?: GoogleService } = {}): Promise<{ token: string; expiresAt: number; userId: string }> {
   let row = await readCreds(db, cfg, opts.cost ?? 1);
+  // RUN 06 pilot: without a connection the pilot cannot be verified -> the OFF answer (a non-pilot user must not learn that it is on)
+  if (!row && opts.service && opts.service !== 'drive' && serviceMode(opts.service) === 'pilot') throw new HttpError(503, DISABLED[opts.service], `${opts.service}_disabled`);
   if (!row) throw new HttpError(409, MSG.not_connected, 'not_connected');
   if (row.status === 'revoked') throw new HttpError(409, MSG.revoked, 'revoked');
+  // RUN 06 pilot: a Gmail/Calendar token only for a listed user AND listed Google account (checked on every use and BEFORE the
+  // grant check, so a non-pilot user gets the same answer as with the switch off; removing someone from the pilot list takes effect at once even though their stored grant still holds the scope)
+  if (opts.service && opts.service !== 'drive' && serviceMode(opts.service) === 'pilot') {
+    const { data: st } = await db.rpc('google_connection_status');
+    const email = ((Array.isArray(st) ? st[0] : st) as { google_email?: string } | undefined)?.google_email;
+    if (!serviceAllowedForAccount(opts.service, row.user_id, email)) throw new HttpError(503, DISABLED[opts.service], `${opts.service}_disabled`);
+  }
   // RUN 03: one Google grant, several services. A route asks for ITS service; a token never serves a service the user
   // did not enable in ClearSpace (e.g. Gmail removed in ClearSpace while Google still holds the grant).
   if (opts.service && !row.scopes?.includes(SERVICE_SCOPE[opts.service])) {
@@ -200,14 +217,15 @@ export async function getNarrowAccessToken(db: SupabaseClient, cfg: GoogleConfig
 /** RUN 03: Gmail routes need the Google integration AND the Gmail feature switch (independent of Drive). */
 export function requireGmail(): GoogleConfig {
   // the switch first: with Gmail off (production default) every Gmail route says exactly that, whatever the Google config
-  if (!gmailFeatureEnabled()) throw new HttpError(503, MSG.gmail_disabled, 'gmail_disabled');
+  // (RUN 06 'pilot' passes here; the per-user/account pilot check is in getAccessToken and oauth/start|complete)
+  if (serviceMode('gmail') === 'off') throw new HttpError(503, MSG.gmail_disabled, 'gmail_disabled');
   return requireGoogle(MSG.gmail_not_configured);
 }
 
 /** RUN 04: Calendar routes need the Google integration AND the Calendar feature switch (independent of Drive and Gmail). */
 export function requireCalendar(): GoogleConfig {
   // the switch first: with Calendar off (production default) every Calendar route says exactly that, whatever the Google config
-  if (!calendarFeatureEnabled()) throw new HttpError(503, MSG.calendar_disabled, 'calendar_disabled');
+  if (serviceMode('calendar') === 'off') throw new HttpError(503, MSG.calendar_disabled, 'calendar_disabled');
   return requireGoogle(MSG.calendar_not_configured);
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getItem, GMAIL_TEXT, sharedSender } from '../../../../../../lib/google/gmail';
 import { ownSource, storeShared } from '../../../../../../lib/google/gmailLinks';
-import { caller, errorResponse, GMAIL_STATUS, HttpError, NO_STORE, requireGmail, withGmailToken } from '../../../../../../lib/google/server';
+import { serviceCaller, errorResponse, GMAIL_STATUS, HttpError, NO_STORE, requireGmail, withGmailToken } from '../../../../../../lib/google/server';
 
 /**
  * POST /api/gmail/links/:id/refresh -- the person who linked an e-mail re-reads its metadata from their own mailbox
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const cfg = requireGmail();
     const { id } = await ctx.params;
-    const { db } = await caller(req);
+    const { db } = await serviceCaller(req, 'gmail');
     const src = await ownSource(db, cfg, id);
     const r = await withGmailToken(db, cfg, 1, (token) => getItem(cfg, token, src.kind, src.gmailId));
     if (!r.ok) {

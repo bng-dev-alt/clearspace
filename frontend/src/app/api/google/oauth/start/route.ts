@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { calendarFeatureEnabled, gmailFeatureEnabled, OAUTH_COOKIE, SERVICE_SCOPES, type GoogleService } from '../../../../../lib/google/config';
+import { OAUTH_COOKIE, SERVICE_SCOPES, serviceAllowedFor, serviceAllowedForAccount, type GoogleService } from '../../../../../lib/google/config';
 import { pkcePair, randomToken, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { buildAuthUrl } from '../../../../../lib/google/oauth';
-import { caller, dbError, errorResponse, HttpError, NO_STORE, readJson, requireGoogle } from '../../../../../lib/google/server';
+import { caller, dbError, DISABLED, errorResponse, HttpError, NO_STORE, readJson, requireGoogle } from '../../../../../lib/google/server';
 
 const RETURN_TO = /^\/(settings|projects\/[A-Za-z0-9_-]{1,100})$/;
 
@@ -17,18 +17,20 @@ const RETURN_TO = /^\/(settings|projects\/[A-Za-z0-9_-]{1,100})$/;
 export async function POST(req: NextRequest) {
   try {
     const cfg = requireGoogle();
-    const { db } = await caller(req);
+    const { db, userId } = await caller(req);
     const body = await readJson<{ returnTo?: unknown; service?: unknown }>(req);
     const returnTo = typeof body.returnTo === 'string' && RETURN_TO.test(body.returnTo) ? body.returnTo : '/settings';
     const service: GoogleService | null = body.service === undefined || body.service === 'drive' ? 'drive'
       : body.service === 'gmail' ? 'gmail' : body.service === 'calendar' ? 'calendar' : null;
     if (!service) throw new HttpError(400, 'Neplatná služba.', 'invalid');
-    if (service === 'gmail' && !gmailFeatureEnabled()) throw new HttpError(503, 'Propojení s Gmailem není na serveru zapnuté.', 'gmail_disabled');
-    if (service === 'calendar' && !calendarFeatureEnabled()) throw new HttpError(503, 'Propojení s Google Kalendářem není na serveru zapnuté.', 'calendar_disabled');
+    // off, or (RUN 06) pilot and this user is not in it: the same answer as off -- nothing reveals that a pilot exists
+    if (!serviceAllowedFor(service, userId)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);
     const scopes = SERVICE_SCOPES[service];
     // adding a service to an existing connection: pre-select the same Google account on Google's screen
     const { data: st } = await db.rpc('google_connection_status');
     const current = (Array.isArray(st) ? st[0] : st) as { google_email?: string } | undefined;
+    // RUN 06 pilot: the already-connected Google account must be a pilot account too (oauth/complete checks the new one)
+    if (current?.google_email && !serviceAllowedForAccount(service, userId, current.google_email)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);
     const state = randomToken(32);
     const nonce = randomToken(32);
     const { verifier, challenge } = pkcePair();

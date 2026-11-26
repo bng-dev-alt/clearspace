@@ -23,7 +23,14 @@ let passed = 0;
 const ok = (m) => { passed++; console.log(`ok - ${m}`); };
 const CAL = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
 
-async function http(url, { method = 'GET', headers = {}, body, raw } = {}) {
+// ponytail: on an overloaded host the local GoTrue times out (504) or a fresh token is refused (401 unauthenticated); retry only that.
+// A deliberate 401 (anonymous call) just comes back the same after the retries.
+async function http(url, opts = {}, tries = 4) {
+  const r = await http1(url, opts);
+  const flaky = r.status === 504 || (r.status === 401 && /unauthenticated|request_timeout/.test(r.text));
+  return flaky && tries > 1 ? (await new Promise((z) => setTimeout(z, 3000)), http(url, opts, tries - 1)) : r;
+}
+async function http1(url, { method = 'GET', headers = {}, body, raw } = {}) {
   const res = await fetch(url, { method, headers, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)), redirect: 'manual' });
   const text = await res.text();
   let json = null; try { json = text ? JSON.parse(text) : null; } catch { json = text; }

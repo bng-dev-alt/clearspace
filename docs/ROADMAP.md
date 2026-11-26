@@ -43,6 +43,10 @@
 * Napojení obsahu Drive do Project Intelligence je připravené rozhraním (`getTextContent`), ale vědomě neaktivované (placené AI volání + rozhodnutí o soukromí).
 * Dva E2E testy z dřívějška padají i na `run01-complete` (AI brána owner-only 403 vs. očekávaných 400; test „neuložené karty“) – kandidát na úklid testů.
 
+## RUN 06 (2026-11-26, větev `feature/google-demo-pilot`, nenasazeno)
+* Google demo účet naplněn datasetem CS-GDEMO (Gmail / Disk / Kalendář), seeder s vlastním OAuth klientem a ochranou identity.
+* Pilotní režim `=pilot` pro Gmail a Kalendář; živá akceptace s demo účtem PASS; produkční pilot = návrh k rozhodnutí (`docs/run06/`).
+
 ## Poznámky z RUN 05
 * Slack/Telegram produkčně jen po živé akceptaci a rozhodnutí vlastníka (`docs/run05/PRODUCTION_ROLLOUT.md` §0–1); plánovač se zapíná ops skriptem, ne migrací.
 * In-app notifikace beze změny (parita 1400 = 1500 ověřena v harness i na replice produkčního DDL).

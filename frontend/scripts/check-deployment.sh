@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1 the RUN 06 pilot checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -88,6 +88,27 @@ if [ "${EXPECT_CALENDAR_OFF:-0}" = 1 ]; then
   code=$(status POST /api/google/oauth/start -H 'Content-Type: application/json' -d '{"service":"calendar"}'); [ "$code" = 401 ] && ok "anonymous POST /api/google/oauth/start (calendar) -> 401" || bad "anonymous oauth/start calendar -> $code"
   P=$(get /privacy); echo "$P" | grep -q 'privacy-calendar-off' && ! echo "$P" | grep -q 'data-testid="privacy-calendar"' && ok "/privacy: Calendar stated as NOT enabled" || bad "/privacy does not state that Calendar is off"
   A=$(get /about); echo "$A" | grep -q 'about-calendar' && bad "/about presents Calendar although it is off" || ok "/about: no Calendar section"
+fi
+
+# RUN 06 (EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1, switch = pilot): the switch no longer answers first, so every route needs a
+# signed-in caller (anonymous -> 401, never a Google call); /privacy shows the section WITH the pilot note; /about does not advertise
+# Calendar. Who is in the pilot is checked as a signed-in non-pilot user in e2e/supabase-hosted.spec.ts (E2E_EXPECT_GMAIL/CALENDAR=pilot).
+pilot_routes() {  # $1 service, then "METHOD path" pairs
+  local svc=$1; shift
+  for mp in "$@"; do
+    m=${mp%% *}; p=${mp#* }
+    code=$(status "$p" -X "$m" -H 'Content-Type: application/json' -d '{}')
+    [ "$code" = 401 ] && ok "pilot: anonymous $m ${p%%\?*} -> 401" || bad "pilot: anonymous $m ${p%%\?*} -> $code (expected 401)"
+  done
+  P=$(get /privacy)
+  echo "$P" | grep -q "data-testid=\"privacy-$svc\"" && echo "$P" | grep -q "privacy-$svc-pilot" && ! echo "$P" | grep -q "privacy-$svc-off" \
+    && ok "/privacy: $svc section with the pilot note" || bad "/privacy does not describe the $svc pilot"
+}
+id=11111111-1111-4111-8111-111111111111
+[ "${EXPECT_GMAIL_PILOT:-0}" = 1 ] && pilot_routes gmail "GET /api/gmail/search?kind=thread" "POST /api/gmail/links" "GET /api/gmail/links/$id/preview" "POST /api/gmail/links/$id/refresh"
+if [ "${EXPECT_CALENDAR_PILOT:-0}" = 1 ]; then
+  pilot_routes calendar "GET /api/calendar/events?from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z" "POST /api/calendar/links" "POST /api/calendar/links/$id/refresh" "GET /api/calendar/links/$id/open"
+  A=$(get /about); echo "$A" | grep -q 'about-calendar' && bad "/about advertises Calendar during the pilot" || ok "/about: no Calendar section during the pilot"
 fi
 
 # RUN 05 (EXPECT_SLACK_OFF=1 and EXPECT_TELEGRAM_OFF=1, a build with the notify code and both switches off): every /api/notify route is

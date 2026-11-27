@@ -197,11 +197,12 @@ case "${1:-}" in
       cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:20249 --url "http://127.0.0.1:$GATE_PORT" > "$DIR/hub-tunnel.log" 2>&1 & P3=$!
     fi
     cleanup() {
+      # first (fast, local): no scheduler call to an app that is going away -- a stop signal may not leave time for the rest
+      "$HERE/scripts/hub-stack.sh" scheduler-off >/dev/null 2>&1 || true; "$HERE/scripts/notify-stack.sh" scheduler-off >/dev/null 2>&1 || true
       [ -n "$TOKF" ] && rm -f "$TOKF"
       [ "$HUB_TELEGRAM_ENABLED" = 1 ] && tg_call telegram_hub_bot_token deleteWebhook >/dev/null 2>&1 || true
       kc_has telegram_pi_bot_token && tg_call telegram_pi_bot_token deleteWebhook >/dev/null 2>&1 || true
       kill $P1 $P2 $P3 2>/dev/null || true; rm -f "$DIR/hub-live-url"
-      "$HERE/scripts/hub-stack.sh" scheduler-off >/dev/null 2>&1 || true; "$HERE/scripts/notify-stack.sh" scheduler-off >/dev/null 2>&1 || true
     }
     trap cleanup EXIT
     URL=${HUB_PUBLIC_URL:-}

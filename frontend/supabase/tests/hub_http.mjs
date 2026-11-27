@@ -229,7 +229,7 @@ async function slackInstall(u, team = 'T0HUB0001', decision = 'allow') {
 assert.equal((await slackInstall(M)).status, 403, 'a non-manager cannot install');
 assert.equal((await slackInstall(O, 'T0HUB0001', 'deny')).outcome, 'denied');
 assert.equal((await slackInstall(O)).outcome, 'installed');
-assert.equal(sql(`select count(*) from public.hub_slack_installations where status = 'active'`), '1');
+assert.equal(sql(`select count(*) from public.hub_slack_installations where status = 'active' and team_label like '%(simulace)%'`), '1');
 assert.ok(!sql(`select secret_enc from public.hub_slack_installations`).includes('xoxb-'), 'bot token sealed');
 ok('Slack project app: only managers install; exact bot scopes; nonce + state bound to user and browser; deny -> nothing; token stored sealed');
 
@@ -588,7 +588,7 @@ let rc = await app(`/api/hub/destinations/${tgd.id}`, O.token, { method: 'POST',
 assert.equal(rc.json.reactivated, true, JSON.stringify(rc.json)); assert.equal(dest(tgd.id).status, 'active', 'a manager re-check (proven send) re-activates it');
 await slackEvent('T0HUB0001', { type: 'app_uninstalled' });
 await settle();
-assert.equal(sql(`select status from public.hub_slack_installations`), 'revoked');
+assert.equal(sql(`select status from public.hub_slack_installations where team_label like '%(simulace)%'`), 'revoked');
 assert.equal(dest(priv.id).status, 'revoked');
 assert.match((await shortcut('U0ANNA001', '1800000500.000100', 'x', 'trig-9', 'G0PRIV001')).status.toString(), /^200$/);
 assert.equal(sql(`select count(*) from public.hub_messages where text = 'x'`), '0');

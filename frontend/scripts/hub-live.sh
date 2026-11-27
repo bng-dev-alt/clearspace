@@ -179,7 +179,9 @@ case "${1:-}" in
     load_env
     CERT=$DIR/https-localhost.pem; KEY=$DIR/https-localhost-key.pem
     if [ ! -f "$CERT" ]; then umask 077; openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost' -keyout "$KEY" -out "$CERT" >/dev/null 2>&1; fi
-    node "$HERE/scripts/https-loopback-proxy.mjs" "$CERT" "$KEY" "$HTTPS_PORT" 3471 & P1=$!
+    SB_PORT=$(cd "$DIR" && supabase status -o env 2>/dev/null | sed -n 's/^API_URL="*http:\/\/127\.0\.0\.1:\([0-9]*\)"*$/\1/p')
+    [ -n "$SB_PORT" ] || { echo "local Supabase API port not found"; exit 1; }
+    node "$HERE/scripts/https-loopback-proxy.mjs" "$CERT" "$KEY" "$HTTPS_PORT" 3471 "$SB_PORT" & P1=$!
     node "$HERE/scripts/hub-webhook-gate.mjs" "$GATE_PORT" 3471 > "$DIR/hub-gate.log" 2>&1 & P2=$!
     # tunnel: a NAMED tunnel of the owner (stable https hostname routed to http://127.0.0.1:$GATE_PORT; token in the Keychain) when
     # HUB_PUBLIC_URL is set, else a temporary quick tunnel (random hostname; Cloudflare may rate-limit account-less tunnels)
@@ -214,8 +216,9 @@ case "${1:-}" in
     fi
     sed -e "s#https://<BASE>/api/hub/slack/install/callback#https://localhost:$HTTPS_PORT/api/hub/slack/install/callback#" -e "s#https://<BASE>#$URL#g" "$HERE/../docs/run07b/slack-hub-manifest.yaml" > "$DIR/hub-live-slack-manifest.yaml"
     echo ">>> Slack manifest with this tunnel: $DIR/hub-live-slack-manifest.yaml (App Manifest -> paste -> Save; the tunnel URL changes per run)"
-    echo ">>> LIVE (real providers, synthetic data): open https://localhost:$HTTPS_PORT/?login=auto  (accept the local certificate once)"
-    APP_BASE_URL_OVERRIDE="https://localhost:$HTTPS_PORT" "$HERE/scripts/hub-stack.sh" app;;
+    # ONE address for the whole live session: https://localhost:3472 (app + Supabase, same origin); server-side fetches trust the local cert
+    echo ">>> THE ONLY ADDRESS TO USE: https://localhost:$HTTPS_PORT/?login=auto  (signed in automatically; accept the local certificate once)"
+    NODE_EXTRA_CA_CERTS="$CERT" SUPABASE_PUBLIC_URL_OVERRIDE="https://localhost:$HTTPS_PORT" APP_BASE_URL_OVERRIDE="https://localhost:$HTTPS_PORT" "$HERE/scripts/hub-stack.sh" app;;
   manifest)   # print the project Slack app manifest for a stable public URL (named tunnel): HUB_PUBLIC_URL=https://<host> hub-live.sh manifest
     [ -n "${HUB_PUBLIC_URL:-}" ] || { echo "set HUB_PUBLIC_URL=https://<your tunnel hostname>"; exit 2; }
     sed -e "s#https://<BASE>/api/hub/slack/install/callback#https://localhost:$HTTPS_PORT/api/hub/slack/install/callback#" -e "s#https://<BASE>#$HUB_PUBLIC_URL#g" "$HERE/../docs/run07b/slack-hub-manifest.yaml";;

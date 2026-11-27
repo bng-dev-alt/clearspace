@@ -10,11 +10,16 @@ import http from 'node:http';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 
-const [cert, key, httpsPort = '3472', appPort = '3471'] = process.argv.slice(2);
+const [cert, key, httpsPort = '3472', appPort = '3471', supabasePort = ''] = process.argv.slice(2);
+// RUN 08: optional 5th argument = local Supabase (Kong) port. Then /auth/v1, /rest/v1, /realtime/v1, /storage/v1 go to the LOCAL stack on the
+// SAME https origin: one address for everything, no http call from an https page (Safari blocks such "mixed content" -> login looked broken).
+const SB = /^\/(auth|rest|realtime|storage|functions|graphql)\/v1(\/|$|\?)/;
+const target = (url) => (supabasePort && SB.test(url ?? '') ? { port: Number(supabasePort), host: `127.0.0.1:${supabasePort}`, sb: true } : { port: Number(appPort), host: `localhost:${httpsPort}`, sb: false });
 if (!cert || !key) { console.error('usage: https-loopback-proxy.mjs <cert.pem> <key.pem> [https-port] [app-port]'); process.exit(2); }
 const server = https.createServer({ cert: readFileSync(cert), key: readFileSync(key) }, (req, res) => {
-  const up = http.request({ host: '127.0.0.1', port: Number(appPort), method: req.method, path: req.url,
-    headers: { ...req.headers, 'x-forwarded-proto': 'https', host: `localhost:${httpsPort}` } }, (r) => {
+  const t = target(req.url);
+  const up = http.request({ host: '127.0.0.1', port: t.port, method: req.method, path: req.url,
+    headers: { ...req.headers, 'x-forwarded-proto': 'https', host: t.host } }, (r) => {
     res.writeHead(r.statusCode ?? 502, r.headers);
     r.pipe(res);
   });
@@ -23,9 +28,10 @@ const server = https.createServer({ cert: readFileSync(cert), key: readFileSync(
 });
 // WebSocket upgrades (RUN 08): Next 16 dev (Turbopack) needs its HMR socket /_next/webpack-hmr -- without it the page never finishes loading
 server.on('upgrade', (req, client, head) => {
-  const up = net.connect(Number(appPort), '127.0.0.1', () => {
+  const t = target(req.url);
+  const up = net.connect(t.port, '127.0.0.1', () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
-    for (const [k, v] of Object.entries({ ...req.headers, host: `localhost:${httpsPort}`, 'x-forwarded-proto': 'https' })) {
+    for (const [k, v] of Object.entries({ ...req.headers, host: t.host, 'x-forwarded-proto': 'https' })) {
       for (const one of Array.isArray(v) ? v : [v]) lines.push(`${k}: ${one}`);
     }
     up.write(lines.join('\r\n') + '\r\n\r\n');
@@ -35,4 +41,4 @@ server.on('upgrade', (req, client, head) => {
   const close = () => { up.destroy(); client.destroy(); };
   up.on('error', close); client.on('error', close);
 });
-server.listen(Number(httpsPort), '127.0.0.1', () => console.log(`https-loopback-proxy: https://localhost:${httpsPort} -> http://127.0.0.1:${appPort} (local only)`));
+server.listen(Number(httpsPort), '127.0.0.1', () => console.log(`https-loopback-proxy: https://localhost:${httpsPort} -> http://127.0.0.1:${appPort}${supabasePort ? ` (+ Supabase paths -> 127.0.0.1:${supabasePort})` : ''} (local only)`));

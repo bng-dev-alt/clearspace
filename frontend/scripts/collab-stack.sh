@@ -66,7 +66,8 @@ case "${1:-}" in
     acc() { sed -n "s/^$1=//p" "$DIR/collab-accounts.env" | head -1; }
     COLLAB_PASSWORD=$(acc COLLAB_PASSWORD); EMAIL_SERVER_SECRET=$(acc EMAIL_SERVER_SECRET)
     AS=${DEV_LOGIN_AS:-alice}; case "$AS" in alice|bob|vera) ;; *) echo "DEV_LOGIN_AS must be alice, bob or vera"; exit 2;; esac
-    export NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
+    # RUN 08: an HTTPS live session serves Supabase on the app's own https origin (same-origin; see https-loopback-proxy.mjs)
+    export NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_PUBLIC_URL_OVERRIDE:-$API_URL} NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY
     export CLEARSPACE_DEV_LOGIN=1 NEXT_PUBLIC_DEV_LOGIN=1 DEV_LOGIN_EMAIL=$AS@collab.test DEV_LOGIN_PASSWORD=$COLLAB_PASSWORD
     if [ "${DEV_AUTO_LOGIN:-1}" = 1 ]; then export CLEARSPACE_DEV_AUTO_LOGIN=1 NEXT_PUBLIC_DEV_AUTO_LOGIN=1; else unset CLEARSPACE_DEV_AUTO_LOGIN NEXT_PUBLIC_DEV_AUTO_LOGIN; fi
     unset NEXT_PUBLIC_FORCE_DEMO VERCEL VERCEL_ENV
@@ -74,7 +75,7 @@ case "${1:-}" in
     export EMAIL_TRANSPORT=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=$SMTP_PORT SMTP_SECURITY=none EMAIL_FROM='ClearSpace <pozvanky@clearspace.test>' \
       APP_BASE_URL="${APP_BASE_URL_OVERRIDE:-http://127.0.0.1:$PORT}" EMAIL_ALLOW_RESERVED_DOMAINS=1 EMAIL_SERVER_SECRET="$EMAIL_SERVER_SECRET"
     cd "$HERE" && node scripts/local-auth-preflight.mjs   # refuses non-loopback Auth, demo mode, dead stack or a broken identity
-    echo ">>> ONE-CLICK LOGIN: open http://127.0.0.1:$PORT/?login=auto  (signed in automatically as $DEV_LOGIN_EMAIL; real Auth session)"
+    echo ">>> ONE-CLICK LOGIN: open ${APP_BASE_URL_OVERRIDE:-http://127.0.0.1:$PORT}/?login=auto  (signed in automatically as $DEV_LOGIN_EMAIL; real Auth session)"
     exec npx next dev -p "$PORT" -H 127.0.0.1;;
   mail)
     curl -s "http://127.0.0.1:$MAIL_UI/api/v1/messages?limit=${2:-10}";;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller, HttpError } from '../../../../lib/collab/invitationServer';
+import { HttpError } from '../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
-import { MSG, requireNotify } from '../../../../lib/notify/server';
+import { MSG, requireNotify, notifyCaller } from '../../../../lib/notify/server';
 
 const TYPES = ['assignment', 'due_soon', 'mention', 'comment', 'task_completed', 'task_due_changed', 'project_membership'];
 
@@ -9,7 +9,7 @@ const TYPES = ['assignment', 'due_soon', 'mention', 'comment', 'task_completed',
 export async function PUT(req: NextRequest) {
   try {
     const cfg = requireNotify();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+    const { db } = await notifyCaller(req.headers.get('authorization'));
     const b = await readJson<{ eventTypes?: unknown; projectIds?: unknown; hideTitles?: unknown }>(req);
     const types = Array.isArray(b.eventTypes) && b.eventTypes.every((t) => typeof t === 'string' && TYPES.includes(t)) ? b.eventTypes as string[] : null;
     const projects = b.projectIds === null ? null

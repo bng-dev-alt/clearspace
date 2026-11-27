@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { HttpError } from '../collab/invitationServer';
+import { authenticateCaller, HttpError } from '../collab/invitationServer';
 import { open } from '../google/crypto';
-import { anyNotifyEnabled, channelAad, notifyConfig, providerEnabled, type NotifyConfig, type NotifyProvider, type SlackConfig, type TelegramConfig } from './config';
+import { anyNotifyEnabled, channelAad, notifyPilotAllows, notifyConfig, providerEnabled, type NotifyConfig, type NotifyProvider, type SlackConfig, type TelegramConfig } from './config';
 import { renderMessage, type DeliveryItem } from './message';
 import { slackSend, telegramSend, type Outcome } from './providers';
 
@@ -15,7 +15,15 @@ export const MSG = {
   unavailable: 'Služba je dočasně nedostupná. Zkuste to prosím později.',
   not_connected: 'Kanál není připojený.',
   invalid: 'Neplatný požadavek.',
+  pilot: 'Oznámení do Slacku a Telegramu jsou zatím v pilotním provozu jen pro vybrané účty.',
 } as const;
+
+/** The signed-in caller of a user-facing notify route; outside the pilot allowlist (NOTIFY_PILOT_USER_IDS) -> 403. */
+export async function notifyCaller(authorization: string | null) {
+  const c = await authenticateCaller(authorization, 'Oznámení vyžadují připojenou databázi.');
+  if (!notifyPilotAllows(c.userId)) throw new HttpError(403, MSG.pilot, 'forbidden');
+  return c;
+}
 
 /** Structured log: whitelisted fields only (phases, codes, counts). Never tokens, chat/user/team ids, message texts or provider bodies. */
 type LogValue = string | number | boolean | null | undefined;

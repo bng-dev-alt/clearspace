@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../../lib/collab/invitationServer';
 import { seal, sha256hex } from '../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE } from '../../../../../lib/google/server';
 import { channelAad, teamHmac } from '../../../../../lib/notify/config';
 import { clean } from '../../../../../lib/notify/message';
 import { slackExchange, slackRevoke } from '../../../../../lib/notify/providers';
-import { notifyLog, openSecret, requireSlack, rpcRow } from '../../../../../lib/notify/server';
+import { notifyLog, openSecret, requireSlack, rpcRow, notifyCaller } from '../../../../../lib/notify/server';
 import { SLACK_COOKIE_PATH, SLACK_NONCE_COOKIE, SLACK_RESULT_COOKIE } from '../../../../../lib/notify/config';
 
 /**
@@ -21,7 +20,7 @@ export async function POST(req: NextRequest) {
   };
   try {
     const { cfg, slack } = requireSlack();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+    const { db } = await notifyCaller(req.headers.get('authorization'));
     let parked: { state?: string; code?: string; error?: string } = {};
     try { parked = JSON.parse(req.cookies.get(SLACK_RESULT_COOKIE)?.value ?? '{}'); } catch { /* empty */ }
     const nonce = req.cookies.get(SLACK_NONCE_COOKIE)?.value ?? '';

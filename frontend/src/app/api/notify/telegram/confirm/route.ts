@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller, HttpError } from '../../../../../lib/collab/invitationServer';
+import { HttpError } from '../../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../../lib/google/server';
-import { MSG, requireTelegram, rpcRow, sendWith } from '../../../../../lib/notify/server';
+import { MSG, requireTelegram, rpcRow, sendWith, notifyCaller } from '../../../../../lib/notify/server';
 
 /**
  * POST /api/notify/telegram/confirm { accept } -- the owner confirms that the found chat is theirs (only then anything is delivered),
@@ -10,7 +10,7 @@ import { MSG, requireTelegram, rpcRow, sendWith } from '../../../../../lib/notif
 export async function POST(req: NextRequest) {
   try {
     const { cfg } = requireTelegram();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+    const { db } = await notifyCaller(req.headers.get('authorization'));
     const b = await readJson<{ accept?: unknown }>(req);
     if (typeof b.accept !== 'boolean') throw new HttpError(400, MSG.invalid, 'invalid');
     const { data, error } = await db.rpc('notify_telegram_confirm', { p_server_secret: cfg.serverSecret, p_accept: b.accept });

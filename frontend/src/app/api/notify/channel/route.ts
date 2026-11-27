@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller, HttpError } from '../../../../lib/collab/invitationServer';
+import { HttpError } from '../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
 import { notifyConfig } from '../../../../lib/notify/config';
 import { TELEGRAM_BYE_MESSAGE } from '../../../../lib/notify/message';
 import { slackRevoke } from '../../../../lib/notify/providers';
-import { MSG, notifyLog, openSecret, parseProvider, requireNotify, rpcRow, sendWith } from '../../../../lib/notify/server';
+import { MSG, notifyLog, openSecret, parseProvider, requireNotify, rpcRow, sendWith, notifyCaller } from '../../../../lib/notify/server';
 
-const who = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+const who = (req: NextRequest) => notifyCaller(req.headers.get('authorization'));
 
 /** POST /api/notify/channel { provider, enabled } -- pause / resume the caller's own channel (pausing drops what is queued). */
 export async function POST(req: NextRequest) {

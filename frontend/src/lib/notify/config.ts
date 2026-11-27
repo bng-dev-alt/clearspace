@@ -12,6 +12,7 @@ import { keyFromBase64, type KeyRing } from '../google/crypto';
  *   SLACK_CLIENT_ID, SLACK_CLIENT_SECRET               -- the Slack app (OAuth v2, bot scope chat:write only)
  *   TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME          -- the Telegram bot (BotFather)
  *   APP_BASE_URL                    -- links in messages and the Slack redirect URI are built only from it
+ *   NOTIFY_PILOT_USER_IDS           -- optional pilot allowlist of ClearSpace user ids (RUN 09); unset = everyone
  *   SLACK_API_MOCK_BASE, TELEGRAM_API_MOCK_BASE        -- local tests only: honoured only outside production AND on loopback
  */
 export type NotifyProvider = 'slack' | 'telegram';
@@ -25,6 +26,11 @@ export const SLACK_COOKIE_PATH = '/api/notify/slack';
 export const slackFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.SLACK_INTEGRATION_ENABLED?.trim() === '1';
 export const telegramFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.TELEGRAM_INTEGRATION_ENABLED?.trim() === '1';
 export const providerEnabled = (p: NotifyProvider, env: NodeJS.ProcessEnv = process.env) => (p === 'slack' ? slackFeatureEnabled(env) : telegramFeatureEnabled(env));
+/** RUN 09 pilot: NOTIFY_PILOT_USER_IDS (comma-separated ClearSpace user ids) set -> only those accounts may connect / use channels. */
+export const notifyPilotAllows = (userId: string, env: NodeJS.ProcessEnv = process.env) => {
+  const ids = (env.NOTIFY_PILOT_USER_IDS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return ids.length === 0 || ids.includes(userId.toLowerCase());
+};
 export const anyNotifyEnabled = (env: NodeJS.ProcessEnv = process.env) => slackFeatureEnabled(env) || telegramFeatureEnabled(env);
 
 export interface SlackConfig { clientId: string; clientSecret: string; api: string; authorize: string; redirectUri: string; mock: boolean }

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../../lib/collab/invitationServer';
 import { seal, sha256hex } from '../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE } from '../../../../../lib/google/server';
 import { channelAad } from '../../../../../lib/notify/config';
 import { clean, TELEGRAM_CONFIRM_MESSAGE, TELEGRAM_HELP_MESSAGE } from '../../../../../lib/notify/message';
 import { telegramSend, telegramStarts } from '../../../../../lib/notify/providers';
-import { MSG, notifyLog, requireTelegram, rpcRow } from '../../../../../lib/notify/server';
+import { MSG, notifyLog, requireTelegram, rpcRow, notifyCaller } from '../../../../../lib/notify/server';
 import { HttpError } from '../../../../../lib/collab/invitationServer';
 
 /**
@@ -16,7 +15,7 @@ import { HttpError } from '../../../../../lib/collab/invitationServer';
 export async function POST(req: NextRequest) {
   try {
     const { cfg, telegram } = requireTelegram();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+    const { db } = await notifyCaller(req.headers.get('authorization'));
     const r = await telegramStarts(telegram);
     if (!r.ok) throw new HttpError(503, MSG.unavailable, 'unavailable');
     let attached = 0;

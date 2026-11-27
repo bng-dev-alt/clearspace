@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
 import { TEST_MESSAGE } from '../../../../lib/notify/message';
-import { notifyLog, parseProvider, requireNotify, requireSlack, requireTelegram, rpcRow, sendWith } from '../../../../lib/notify/server';
+import { notifyLog, parseProvider, requireNotify, requireSlack, requireTelegram, rpcRow, sendWith, notifyCaller } from '../../../../lib/notify/server';
 
 const OUTCOME_TEXT: Record<string, string> = {
   sent: 'Zkušební zpráva odeslána.',
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest) {
     const b = await readJson<{ provider?: unknown }>(req);
     const provider = parseProvider(b.provider);
     const { cfg } = provider === 'slack' ? requireSlack() : requireTelegram();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Oznámení vyžadují připojenou databázi.');
+    const { db } = await notifyCaller(req.headers.get('authorization'));
     const ch = await rpcRow<{ channel_id: string; secret_enc: string }>(db, 'notify_test_begin', { p_server_secret: cfg.serverSecret, p_provider: provider, p_allow_confirm: false })
       .catch((e) => { throw dbError(e); });
     if (!ch) throw dbError({ code: '22023', message: 'Kanál není připojený.' });

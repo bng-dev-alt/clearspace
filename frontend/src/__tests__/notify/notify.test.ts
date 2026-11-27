@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { channelAad, notifyConfig, slackFeatureEnabled, telegramFeatureEnabled, teamHmac, type NotifyConfig } from '../../lib/notify/config';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { channelAad, notifyConfig, notifyPilotAllows, slackFeatureEnabled, telegramFeatureEnabled, teamHmac, type NotifyConfig } from '../../lib/notify/config';
 import { clean, czechDate, pragueDate, renderMessage, slackEscape, type DeliveryItem } from '../../lib/notify/message';
 import { classifySlack, classifyTelegram, slackAuthorizeUrl, slackExchange, telegramStarts } from '../../lib/notify/providers';
 import { parseItem, schedulerAuthorized, sendBatch } from '../../lib/notify/server';
@@ -216,5 +217,22 @@ describe('no notify secret, token or provider host can reach the client bundle',
       const s = readFileSync(f, 'utf8');
       expect(s).not.toMatch(/lib\/notify\/(server|providers|config)|lib\/google\/crypto|api\.telegram\.org|slack\.com\/api|NOTIFY_SERVER|NOTIFY_TOKEN|SLACK_CLIENT|TELEGRAM_BOT/);
     }
+  });
+});
+
+describe('RUN 09 pilot allowlist (NOTIFY_PILOT_USER_IDS)', () => {
+  it('unset -> everyone; set -> only listed accounts (case-insensitive, spaces ignored)', () => {
+    const env = { NOTIFY_PILOT_USER_IDS: ' AAAA-1 , bbbb-2 ' } as unknown as NodeJS.ProcessEnv;
+    expect(notifyPilotAllows('x', {} as NodeJS.ProcessEnv)).toBe(true);
+    expect(notifyPilotAllows('aaaa-1', env)).toBe(true);
+    expect(notifyPilotAllows('BBBB-2', env)).toBe(true);
+    expect(notifyPilotAllows('cccc-3', env)).toBe(false);
+  });
+  it('every signed-in notify route authenticates through the pilot gate', () => {
+    const root = join(__dirname, '../../app/api/notify');
+    const routes = (readdirSync(root, { recursive: true }) as string[]).filter((f) => f.endsWith('route.ts')).map((f) => readFileSync(join(root, f), 'utf8'));
+    const signedIn = routes.filter((src) => src.includes("headers.get('authorization')"));
+    expect(signedIn.length).toBe(9);
+    for (const src of signedIn) { expect(src).toContain('notifyCaller('); expect(src).not.toContain('authenticateCaller('); }
   });
 });

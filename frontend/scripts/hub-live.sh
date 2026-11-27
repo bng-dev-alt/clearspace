@@ -174,6 +174,8 @@ case "${1:-}" in
       kc_has "$a" && echo "present: hub/$a" || echo "MISSING: hub/$a"; done
     for a in slack_client_id slack_client_secret telegram_bot_token telegram_bot_username; do kc_has "$a" "$NSVC" && echo "present: personal/$a" || echo "MISSING: personal/$a"; done;;
   app)
+    # RUN 08B isolation: the local stack never runs on PRODUCTION credentials (promoted apps / bots live in a production Keychain service)
+    case "$SVC$NSVC" in *[Pp]roduct*) echo "REFUSING: production Keychain service -- the local live session uses dev credentials only"; exit 2;; esac
     command -v cloudflared >/dev/null || { echo "cloudflared missing (brew install cloudflared)"; exit 2; }
     "$HERE/scripts/hub-stack.sh" up >/dev/null
     load_env

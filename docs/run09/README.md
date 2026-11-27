@@ -49,7 +49,13 @@ Etapa 1 **AKTIVNÍ** (pilot). Etapa 2 **BLOCKED / NOT VERIFIED** – připraveno
 
 ## 6. Regrese
 Vitest **1429/1429** (96 souborů) · produkční build z čistého exportu + bundle guard **140/140** · tsc 0 chyb · nazkoušení migrací (DB kontrakty 92–97 na produkčním DDL) PASS ·
-check-deployment: hub OFF 126 + 146, pilot 142 (×3) · průvodce Keychainem E2E PASS · mock HTTP/E2E: viz níže.
+check-deployment: hub OFF 126 + 146, pilot 142 (×3) · průvodce Keychainem E2E PASS.
+
+Mock (izolovaný stack `cs-notify-sb`, jen loopback, simulovaní poskytovatelé): `hub_http.mjs` **22/22 PI vypnuto** a **22/22 PI zapnuto** (A22/A23/A25 vč. injection jako data) ·
+`notify_http.mjs` **23/23** · `drive_http` **28/28** · `gmail_http` **23/23** · `calendar_http` **18/18** · E2E hub + notify **2/2** v Classic/Monograph × světlý/tmavý (4 běhy;
+notify spec má vždy světlý desktop + tmavý telefon) · `google_pilot_http` **přeskočen** (potřebuje stack `cs-gdemo-sb`; pilot Google ověřen živě v produkci, sekce 9).
+Ochrana proti incidentu RUN 08: harness maže jen `(simulace)` instalace a `@example.test` identity; živé řádky na stacku (1 instalace, 2 identity, 3 cíle) **bajtově
+shodné** před/po. Playwright: použit lokálně přítomný headless shell 1234 (`PW_CHROMIUM_PATH`, `docs/NEW_SUPABASE_PROJECT.md`), nic nestaženo.
 
 ## 7. Bezpečnost a soukromí
 * Dev přístup zrušen: dev instalace Slack odvolána (`auth.revoke`), všechna 3 tajemství Slacku regenerována (ověřeno ≠ dev), 3 bot tokeny revokovány (staré getMe=401).
@@ -75,7 +81,8 @@ OAuth O05/O06 + O11–O13, Domains D31, Security R11 → DONE + R29–R31. Jen o
 `V1/frontend/.env.local`, `test_intro.mp4`, 28 souborů `DEMO/` – bajtově beze změny; hlavní checkout beze změny.
 
 ## 12. Úklid
-Viz závěrečná zpráva RUN 09 (seznam zastavených procesů, ponechané zdroje). Tunel `clearspace-hub-live` + DNS `cs-hub-live.luffast.com` ponechány
+Zastaveno: mocky (google/notify/hub), aplikace, loopback proxy, stack `cs-notify-sb` (`supabase stop` bez `--no-backup`, 3 volumy ponechány), dočasné kontejnery
+nácviku a ověření obnovy (odstraněny), dočasný build export (smazán). Cizí kontejnery (cs-atelier-sb, cs-collab-sb, cs-intel-sb) a tunely vlastníka nedotčeny. Tunel `clearspace-hub-live` + DNS `cs-hub-live.luffast.com` ponechány
 neaktivní pro budoucí řízenou akceptaci (rozhodnutí). Testovací projekty „RUN09 Pilot“ a „RUN09 Izolace“ v prezentačním účtu ponechány (pilot ukázka) – smazání na rozhodnutí vlastníka.
 
 ## 13. Zbývá / dluh

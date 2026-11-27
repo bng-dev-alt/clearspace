@@ -13,7 +13,7 @@ RULES = {
     "tg_token": re.compile(r"[0-9]{6,12}:[A-Za-z0-9_-]{30,64}"),
     "tg_user": re.compile(r"[A-Za-z][A-Za-z0-9_]{3,30}[Bb][Oo][Tt]"),
     "slack_id": re.compile(r"[0-9]{3,20}\.[0-9]{3,20}"),
-    "slack_secret": re.compile(r"[A-Za-z0-9]{20,64}"),
+    "slack_secret": re.compile(r"[0-9a-f]{32}"),  # RUN 09: Slack client / signing secrets are exactly 32 hex (a 64-char paste = two values)
 }
 
 def sanitize(v):
@@ -82,8 +82,8 @@ def validate(kind, v):
                 d["ends_with_bot"] = v.lower().endswith("bot")
             elif kind == "slack_secret":
                 d["only_letters_and_digits"] = v.isalnum() and v.isascii()
-                if len(v) > 64:
-                    hints.append("too long: two values may have been pasted together")
+                if len(v) > 32:
+                    hints.append("too long: two values may have been pasted together (copy only the one secret)")
     else:
         print(f"    unknown kind {kind}", file=sys.stderr); return False
     if not ok:

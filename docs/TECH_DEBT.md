@@ -119,3 +119,13 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
   přeskakovat migrace se zapsaným markerem (rozhodnutí pro všechny RUN skripty).
 * **Cloudflare quick tunel** může vrátit 429 (bez účtu) → pro živé testy pojmenovaný tunel vlastníka.
 * TD-2 (`task-resources.spec.ts:140`) padá dál beze změny (i na `origin/main`).
+
+## RUN 09 (produkční rollout hubu, etapa 1) – omezení a zjištění
+* **Hosted Slack app settings UI** (nová `app.slack.com/app-settings`) ve vestavěném prohlížeči neukazuje tajemství („none“) – ověření tajemství
+  jen nepřímo (podpis, getMe). Validátor teď odmítne zdvojené vložení (Slack secret = přesně 32 hex).
+* **Osobní oznámení z vlastních akcí** se neposílají (záměr); živě ověřena jen připomínka termínu + zkušební zprávy. Přiřazení/komentář od
+  jiného člověka v produkci neověřeno (pilot má jediný účet) – RUN 08 ověřil lokálně se skutečnými poskytovateli.
+* **Odvolání tokenu Slacku** odebere bota z kanálů; po nové instalaci je nutný `/invite` (UX backlog #8).
+* **Turbopack odmítá symlinkované `node_modules`** (build i dev) – worktree potřebuje APFS klon (`cp -cR`).
+* **Hosted logy Vercelu**: `vercel logs` CLI 66.x v tomto prostředí nevrátil řádky; zdraví se ověřuje přes `cron.job_run_details` a `net._http_response`.
+* **Etapa 2** neověřena živě s AI (čeká na schválení placeného testu, `docs/run09/STAGE2_GEMINI_PROPOSAL.md`).

@@ -27,7 +27,7 @@ type Ctx = { cfg: HubConfig; db: SupabaseClient };
 const HELP_GROUP = (bot: string) => [
   'ClearSpace – příkazy ve skupině:',
   `• /link@${bot} KÓD – propojí skupinu s projektem (jen zakladatel/správce skupiny; kód vytvoří správce projektu v ClearSpace → Projekt → Integrace)`,
-  `• /task@${bot} [název] – jako odpověď na zprávu vytvoří úkol (účet musíte mít propojený)`,
+  `• /task@${bot} název – vytvoří úkol; jako odpověď na zprávu připojí i ji, pokud ji Telegram botovi předá (účet musíte mít propojený)`,
   '• Odpovědi na potvrzení úkolu od bota se propisují jako komentáře k úkolu.',
   '• Propojení účtu: v ClearSpace → Nastavení → Slack a Telegram pro projekty → Propojit Telegram.',
   'Bot vidí jen příkazy pro sebe a odpovědi na své zprávy (režim soukromí Telegramu je zapnutý).',
@@ -216,8 +216,11 @@ async function handleTelegram({ cfg, db }: Ctx, tg: HubTelegram, u: Msg): Promis
       return replies;
     }
     if (cmd.cmd === 'task') {
-      const src: Msg | undefined = m.reply_to_message;
-      if (!src || !Number.isSafeInteger(src.message_id)) { say(`Pošlete /task@${tg.botUsername} jako odpověď na zprávu, ze které má vzniknout úkol.`, m.message_id); return replies; }
+      // RUN 08B (live): with privacy mode ON and no admin rights Telegram often delivers the command WITHOUT reply_to_message (the bot never
+      // saw the original message). Then the command itself is the source: `/task@bot Název` -> task titled from the command text.
+      const replied: Msg | undefined = Number.isSafeInteger(m.reply_to_message?.message_id) ? m.reply_to_message : undefined;
+      const src: Msg | undefined = replied ?? (clean(cmd.args, 200) ? { ...m, text: cmd.args, caption: undefined } : undefined);
+      if (!src) { hubLog('telegram_task', { ok: false, reason: 'no_title_no_reply', fromReply: false }); say(`Napište název úkolu za příkaz, např.: /task@${tg.botUsername} Objednat lešení`, m.message_id); return replies; }
       const d = await resolve(chat);
       if (!d) { say('Tato skupina není propojená s žádným projektem ClearSpace.', m.message_id); return replies; }
       const srcText = String(src.text ?? src.caption ?? '').slice(0, 4000);
@@ -227,7 +230,7 @@ async function handleTelegram({ cfg, db }: Ctx, tg: HubTelegram, u: Msg): Promis
         p_author_label: src.from?.is_bot ? 'Bot' : `Telegram: ${clean(src.from?.first_name, 60) || 'člen skupiny'}`, p_text: srcText,
         p_permalink: telegramMessageLink(chat, src.message_id), p_sent_at: Number.isSafeInteger(src.date) ? new Date(src.date * 1000).toISOString() : null,
       });
-      hubLog('telegram_task', { ok: r.ok, reason: r.reason ?? null, duplicate: r.duplicate ?? false });
+      hubLog('telegram_task', { ok: r.ok, reason: r.reason ?? null, duplicate: r.duplicate ?? false, fromReply: Boolean(replied) });
       if (!r.ok) { say(TASK_REASON[r.reason ?? ''] ?? 'Úkol se nepodařilo vytvořit.', m.message_id); return replies; }
       say(`${r.duplicate ? 'Úkol už existuje' : 'Vytvořen úkol'} v ClearSpace: „${clean(r.title, 150)}" (${clean(r.projectName, 80)})\n${taskHref(cfg.appBaseUrl, r.projectId ?? d.projectId, r.cardId)}${r.duplicate ? '' : '\nOdpovědi na tuto zprávu se propíší jako komentáře k úkolu.'}`,
         src.message_id,

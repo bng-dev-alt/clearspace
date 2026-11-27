@@ -199,6 +199,7 @@ case "${1:-}" in
       [ "$HUB_TELEGRAM_ENABLED" = 1 ] && tg_call telegram_hub_bot_token deleteWebhook >/dev/null 2>&1 || true
       kc_has telegram_pi_bot_token && tg_call telegram_pi_bot_token deleteWebhook >/dev/null 2>&1 || true
       kill $P1 $P2 $P3 2>/dev/null || true; rm -f "$DIR/hub-live-url"
+      "$HERE/scripts/hub-stack.sh" scheduler-off >/dev/null 2>&1 || true; "$HERE/scripts/notify-stack.sh" scheduler-off >/dev/null 2>&1 || true
     }
     trap cleanup EXIT
     URL=${HUB_PUBLIC_URL:-}
@@ -215,6 +216,8 @@ case "${1:-}" in
       fi
     fi
     sed -e "s#https://<BASE>/api/hub/slack/install/callback#https://localhost:$HTTPS_PORT/api/hub/slack/install/callback#" -e "s#https://<BASE>#$URL#g" "$HERE/../docs/run07b/slack-hub-manifest.yaml" > "$DIR/hub-live-slack-manifest.yaml"
+    # RUN 08B: the real scheduler (pg_cron every minute -> this app) for project AND personal notifications; switched off again on exit
+    "$HERE/scripts/hub-stack.sh" scheduler-on >/dev/null && "$HERE/scripts/notify-stack.sh" scheduler-on >/dev/null && echo "scheduler on (hub + personal notifications)" || echo "scheduler FAILED to start"
     echo ">>> Slack manifest with this tunnel: $DIR/hub-live-slack-manifest.yaml (App Manifest -> paste -> Save; the tunnel URL changes per run)"
     # ONE address for the whole live session: https://localhost:3472 (app + Supabase, same origin); server-side fetches trust the local cert
     echo ">>> THE ONLY ADDRESS TO USE: https://localhost:$HTTPS_PORT/?login=auto  (signed in automatically; accept the local certificate once)"

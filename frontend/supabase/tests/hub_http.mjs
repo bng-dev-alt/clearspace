@@ -136,8 +136,10 @@ await ctl('reset', {});
 sql(`delete from public.hub_dispatch_runs`);
 sql(`delete from public.hub_destinations where project_id like 'p-hub-%'`);
 sql(`delete from public.hub_messages where project_id like 'p-hub-%'`);   // earlier runs (same provider ids -> same keys)
-sql(`delete from public.hub_slack_installations`);
-sql(`delete from public.hub_identities`);
+// RUN 08B: only SIMULATED state -- the same local stack also carries the owner's LIVE installation, channels and linked chat accounts
+// (RUN 08 lost them here). Simulated workspaces are labelled "(simulace)" by hub-mock; test users are *@example.test.
+sql(`delete from public.hub_slack_installations where team_label like '%(simulace)%'`);
+sql(`delete from public.hub_identities where user_id in (select id from auth.users where email like '%@example.test')`);
 const O = await user('hub-own'), A = await user('hub-adm'), M = await user('hub-mem'), V = await user('hub-view'), X = await user('hub-out');
 const P = `p-hub-${run}`, P2 = `p-hub2-${run}`;
 async function project(owner, id, name) {
@@ -443,7 +445,7 @@ assert.match((await messages()).telegram.at(-1).text, /propojte svůj účet/, '
 await tgUpdate(tgMsg(TG, VIEW_TG, `/task@${BOT}`, { more: { reply_to_message: { message_id: srcId, date: 1800000000, text: 'Bagr přijede ve čtvrtek', from: { id: PLAIN_TG, is_bot: false, first_name: 'Petr' } } } }));
 assert.match((await messages()).telegram.at(-1).text, /nemáte právo/, 'A14: Telegram viewer refused');
 await tgUpdate(tgMsg(TG, ADMIN_TG, `/task@${BOT}`));
-assert.match((await messages()).telegram.at(-1).text, /jako odpověď na zprávu/);
+assert.match((await messages()).telegram.at(-1).text, /Napište název úkolu za příkaz/, 'no reply and no title -> exact guidance');
 await tgUpdate(tgMsg(TG, ADMIN_TG, `/task@${BOT} Zajistit příjezd bagru`, { more: { reply_to_message: { message_id: srcId, date: 1800000000, text: 'Bagr přijede ve čtvrtek', from: { id: PLAIN_TG, is_bot: false, first_name: 'Petr' } } } }));
 const conf = (await messages()).telegram.at(-1);
 assert.match(conf.text, /Vytvořen úkol v ClearSpace: „Zajistit příjezd bagru"/); assert.equal(conf.replyTo, srcId);
@@ -452,7 +454,16 @@ assert.equal(tgTask.author_user_id, null); assert.equal(tgTask.author_label, 'Te
 assert.equal(sql(`select actor_id from public.activity_logs where card_id = '${tgTask.card_id}' and action_type = 'card_created'`), O.id, 'the creator is the verified commander');
 assert.equal(tgTask.text, 'Bagr přijede ve čtvrtek'); assert.equal(tgTask.permalink, `https://t.me/c/1234567890/${srcId}`);
 assert.equal(sql(`select count(*) from public.hub_messages where text = 'Bagr přijede ve čtvrtek'`), '1', 'the plain group message itself was not stored (no PI)');
-ok('A13: Telegram /task@bot as a reply -> task as the verified mapped user, permalink, confirmation as a reply; unlinked / viewer / missing reply refused; plain group messages not stored without PI');
+// RUN 08B (seen LIVE): privacy mode ON, bot not an admin -> Telegram delivers the command WITHOUT reply_to_message although the user
+// replied to a message. The command text is the source: task created, confirmation replies to the command, replies to it become comments.
+const cmdId = ++tgMsgId;
+await tgUpdate(tgMsg(TG, ADMIN_TG, `/task@${BOT} Objednat lešení na pondělí`, { id: cmdId }));
+const conf2 = (await messages()).telegram.at(-1);
+assert.match(conf2.text, /Vytvořen úkol v ClearSpace: „Objednat lešení na pondělí"/); assert.equal(conf2.replyTo, cmdId);
+const tgTask2 = JSON.parse(sql(`select row_to_json(m)::text from public.hub_messages m where project_id = '${P}' and kind = 'task_source' and provider = 'telegram' and text = 'Objednat lešení na pondělí'`));
+assert.equal(tgTask2.permalink, `https://t.me/c/1234567890/${cmdId}`); assert.equal(tgTask2.author_label, 'Telegram: Tomáš');
+assert.equal(sql(`select title from public.cards where id = '${tgTask2.card_id}'`), 'Objednat lešení na pondělí');
+ok('A13: Telegram /task@bot as a reply -> task as the verified mapped user, permalink, confirmation as a reply; unlinked / viewer refused; WITHOUT reply_to_message (privacy mode, live) the command title creates the task, no title -> guidance; plain group messages not stored without PI');
 
 // ---------------------------------------------------------------- A15 / A16: comment sync both ways, loop prevention
 const thread = '1800000100.000200';

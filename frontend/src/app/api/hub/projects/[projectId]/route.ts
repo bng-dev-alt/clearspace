@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../../lib/google/server';
 import { hubIntelligenceEnabled, hubSlackEnabled, hubTelegramEnabled } from '../../../../../lib/hub/config';
-import { humanCode, hubLog, parseHubProvider, requireHub, requireHubSlack, requireHubTelegram } from '../../../../../lib/hub/server';
+import { hubCaller, hubLog, humanCode, parseHubProvider, requireHub, requireHubSlack, requireHubTelegram } from '../../../../../lib/hub/server';
 
 const PROJECT_RE = /^[A-Za-z0-9_-]{1,120}$/;
-const auth = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
+const auth = (req: NextRequest) => hubCaller(req.headers.get('authorization'));
 
 /** GET /api/hub/projects/:projectId -- destinations, capabilities and (managers) audit of one project, plus which providers this server offers. */
 export async function GET(req: NextRequest, ctx: RouteContext<'/api/hub/projects/[projectId]'>) {

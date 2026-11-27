@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, test, vi } from 'vitest';
-import { hubConfig, hubKey } from '../../lib/hub/config';
+import { hubConfig, hubKey, hubPilotAllows } from '../../lib/hub/config';
 import { changes, DIGEST_MAX_LINES, line, parseHubItem, render, sendHubBatch, type HubItem } from '../../lib/hub/dispatch';
 import { classifySlackHub, classifyTelegramHub, parseCommand, safeResponseUrl, telegramMessageLink } from '../../lib/hub/providers';
 import { normCode, verifySlack, verifyTelegram } from '../../lib/hub/server';
@@ -45,6 +45,17 @@ describe('hub config (D5 / D6 separation, mocks)', () => {
   test('routing keys are opaque and stable', () => {
     expect(hubKey('k', 'slack', 'channel', 'T1', 'C1')).toMatch(/^[0-9a-f]{64}$/);
     expect(hubKey('k', 'slack', 'channel', 'T1', 'C1')).not.toEqual(hubKey('k', 'slack', 'channel', 'T2', 'C1'));
+  });
+});
+
+describe('pilot allowlist (RUN 08)', () => {
+  test('HUB_PILOT_USER_IDS unset -> everyone; set -> only the listed accounts (case-insensitive, spaces ignored)', () => {
+    const env = { HUB_PILOT_USER_IDS: ' AAAA-1 , bbbb-2 ' } as unknown as NodeJS.ProcessEnv;
+    expect(hubPilotAllows('x', {} as NodeJS.ProcessEnv)).toBe(true);
+    expect(hubPilotAllows('aaaa-1', env)).toBe(true);
+    expect(hubPilotAllows('BBBB-2', env)).toBe(true);
+    expect(hubPilotAllows('cccc-3', env)).toBe(false);
+    expect(hubPilotAllows('x', { HUB_PILOT_USER_IDS: ' , ' } as unknown as NodeJS.ProcessEnv)).toBe(true);
   });
 });
 

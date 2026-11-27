@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1 the RUN 06 pilot checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks; EXPECT_HUB_OFF=1 the RUN 07 communication-hub containment checks) (staged URL or the production domain). Read-only: only GETs and
+# Black-box checks of a DEPLOYED ClearSpace V1 build (EXPECT_DRIVE=1 adds the RUN 02C Google Drive checks; EXPECT_GMAIL_OFF=1 the RUN 03C Gmail containment checks; EXPECT_CALENDAR_OFF=1 the RUN 04 Calendar containment checks; EXPECT_GMAIL_PILOT=1 / EXPECT_CALENDAR_PILOT=1 the RUN 06 pilot checks; EXPECT_SLACK_OFF=1 / EXPECT_TELEGRAM_OFF=1 the RUN 05 notification containment checks; EXPECT_HUB_OFF=1 the RUN 07 communication-hub containment checks; EXPECT_HUB_SLACK_PILOT=1 the RUN 08 Slack-only pilot checks) (staged URL or the production domain). Read-only: only GETs and
 # two POSTs that must be refused. Exit 1 on any FAIL.
 #
 #   scripts/check-deployment.sh https://clearspace-ai.vercel.app                       # public production domain (direct curl)
@@ -145,6 +145,21 @@ if [ "${EXPECT_HUB_OFF:-0}" = 1 ]; then
   echo "$H" | tr 'A-Z' 'a-z' | grep -q 'location: /settings?hub=disabled' && ! echo "$H" | grep -qi 'set-cookie: cs_hub' && ok "hub Slack install callback (off) -> /settings?hub=disabled, no cookie" || bad "hub install callback while off parks a cookie or redirects elsewhere"
   P=$(get /privacy); echo "$P" | grep -q 'privacy-hub-off' && ! echo "$P" | grep -q 'data-testid="privacy-hub"' && ok "/privacy: project communication hub stated as NOT enabled" || bad "/privacy does not state that the hub is off"
   A=$(get /about); echo "$A" | grep -q 'about-hub' && bad "/about presents the hub although it is off" || ok "/about: no hub section"
+fi
+
+# RUN 08 pilot (EXPECT_HUB_SLACK_PILOT=1: HUB_SLACK_ENABLED=1, Telegram and Project Intelligence off): Slack routes are open but refuse
+# anything unsigned / unauthenticated; Telegram webhooks stay closed (503); the scheduler refuses a wrong secret; /privacy says no AI.
+if [ "${EXPECT_HUB_SLACK_PILOT:-0}" = 1 ]; then
+  for mp in "POST /api/hub/slack/events" "POST /api/hub/slack/commands" "POST /api/hub/slack/interactivity" "GET /api/hub/identity" "GET /api/hub/projects/x" "POST /api/hub/dispatch"; do
+    m=${mp%% *}; p=${mp#* }
+    c=$(get "$p" -X "$m" -H 'Content-Type: application/json' -H 'x-hub-secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' -d '{}' -o /dev/null -w '%{http_code}')
+    case "$c" in 401|403) ok "$m $p -> $c (open, refuses unsigned / unauthenticated)";; *) bad "$m $p -> $c (expected 401/403)";; esac
+  done
+  for p in /api/hub/telegram/webhook /api/hub/telegram/pi-webhook; do
+    b=$(get "$p" -X POST -H 'Content-Type: application/json' -d '{}' -w ' HTTP%{http_code}')
+    case "$b" in *'disabled"'*' HTTP503') ok "POST $p -> 503 (Telegram off in the pilot)";; *) bad "POST $p -> ${b: -7} (expected 503)";; esac
+  done
+  P=$(get /privacy); echo "$P" | grep -q 'data-testid="privacy-hub"' && echo "$P" | grep -q 'žádnému poskytovateli AI neposíláme' && ok "/privacy: hub stated, no chat text goes to AI" || bad "/privacy does not state the pilot (hub on, AI off)"
 fi
 
 echo "== client bundle"

@@ -17,6 +17,7 @@ Konfigurace aplikace odmítne shodné Client ID / token bota s RUN 05. Všechny 
 | `TELEGRAM_HUB_BOT_TOKEN`, `TELEGRAM_HUB_BOT_USERNAME`, `TELEGRAM_HUB_WEBHOOK_SECRET` | token od @BotFather, jméno bota, náhodné tajemství 32–256 znaků `[A-Za-z0-9_-]` |
 | `TELEGRAM_HUB_PI_BOT_TOKEN`, `TELEGRAM_HUB_PI_BOT_USERNAME`, `TELEGRAM_HUB_PI_WEBHOOK_SECRET` | **volitelný** PI bot (privacy OFF, jen čte, třetí samostatný bot, vlastní tajemství); webhook `/api/hub/telegram/pi-webhook`, `allowed_updates=["message","edited_message"]` |
 | `APP_BASE_URL` | veřejná HTTPS adresa aplikace |
+| `HUB_PILOT_USER_IDS` | volitelné (RUN 08): čárkou oddělená id účtů ClearSpace, které smějí hub používat; nenastaveno = všichni |
 
 ## 2. Databáze (jednou na prostředí)
 1. Migrace `20261130001600_communication_hub.sql` + `20261201001700_hub_hardening.sql` (produkce jen `scripts/apply-hub-hosted.sh` – obě v jedné transakci – v rámci schválení vlastníka; předtím `scripts/rehearse-hub-prod.sh`).

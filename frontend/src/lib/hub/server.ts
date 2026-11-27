@@ -1,8 +1,8 @@
 import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { HttpError } from '../collab/invitationServer';
+import { authenticateCaller, HttpError } from '../collab/invitationServer';
 import { open, seal } from '../google/crypto';
-import { hubAad, hubAnyEnabled, hubConfig, hubKey, hubProviderEnabled, type HubConfig, type HubProvider, type HubSlack, type HubTelegram } from './config';
+import { hubAad, hubAnyEnabled, hubConfig, hubKey, hubPilotAllows, hubProviderEnabled, type HubConfig, type HubProvider, type HubSlack, type HubTelegram } from './config';
 
 /** Shared server plumbing for /api/hub/* (RUN 07). Route handlers only. */
 export const HUB_MSG = {
@@ -12,7 +12,15 @@ export const HUB_MSG = {
   not_configured: 'Propojení projektů s komunikačními nástroji není na serveru nastavené.',
   invalid: 'Neplatný požadavek.',
   unavailable: 'Služba je dočasně nedostupná. Zkuste to prosím později.',
+  pilot: 'Propojení se Slackem a Telegramem je zatím v pilotním provozu jen pro vybrané účty.',
 } as const;
+
+/** The signed-in caller of a user-facing hub route; outside the pilot allowlist (HUB_PILOT_USER_IDS) -> 403. */
+export async function hubCaller(authorization: string | null) {
+  const c = await authenticateCaller(authorization, 'Integrace vyžadují připojenou databázi.');
+  if (!hubPilotAllows(c.userId)) throw new HttpError(403, HUB_MSG.pilot, 'forbidden');
+  return c;
+}
 
 /** Whitelisted structured log: phases, codes, counts. Never tokens, ids, message texts, names or payloads. */
 type LogValue = string | number | boolean | null | undefined;

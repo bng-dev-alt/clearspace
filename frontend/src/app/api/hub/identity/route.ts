@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../lib/google/server';
-import { humanCode, hubLog, parseHubProvider, requireHub } from '../../../../lib/hub/server';
+import { hubCaller, hubLog, humanCode, parseHubProvider, requireHub } from '../../../../lib/hub/server';
 
 /**
  * Chat identities: which Slack / Telegram accounts act as ME when creating tasks or replying in linked threads. RUN 07B: the link starts
@@ -12,7 +11,7 @@ import { humanCode, hubLog, parseHubProvider, requireHub } from '../../../../lib
  *   POST { provider }           -- a code (10 min) + where to send it (Telegram: deep link to the bot)
  *   DELETE { provider, key }    -- unlink
  */
-const auth = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
+const auth = (req: NextRequest) => hubCaller(req.headers.get('authorization'));
 
 export async function GET(req: NextRequest) {
   try {

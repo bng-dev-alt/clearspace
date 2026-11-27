@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../../lib/collab/invitationServer';
 import { dbError, errorResponse, NO_STORE, readJson } from '../../../../../lib/google/server';
-import { HUB_EVENT_TYPES, hubProviderEnabled, type HubProvider } from '../../../../../lib/hub/config';
+import { HUB_EVENT_TYPES, hubIntelligenceEnabled, hubProviderEnabled, type HubProvider } from '../../../../../lib/hub/config';
 import { sendTo, TEST_TEXT } from '../../../../../lib/hub/dispatch';
 import { telegramLeave } from '../../../../../lib/hub/providers';
-import { HUB_MSG, hubLog, openRef, requireHub, UUID_RE, type TelegramChatRef } from '../../../../../lib/hub/server';
+import { HUB_MSG, hubCaller, hubLog, openRef, requireHub, type TelegramChatRef, UUID_RE } from '../../../../../lib/hub/server';
 
-const auth = (req: NextRequest) => authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
+const auth = (req: NextRequest) => hubCaller(req.headers.get('authorization'));
 async function destId(ctx: RouteContext<'/api/hub/destinations/[id]'>) {
   const { id } = await ctx.params;
   if (!UUID_RE.test(id)) throw dbError({ code: '22023', message: HUB_MSG.invalid });
@@ -32,6 +31,9 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<'/api/hub/destin
     }
     const events = Array.isArray(b.eventTypes) ? b.eventTypes : null;
     if (!events || !events.every((e) => (HUB_EVENT_TYPES as readonly unknown[]).includes(e))) throw dbError({ code: '22023', message: 'Neplatné typy událostí.' });
+    // RUN 08: with Project Intelligence off on this server it cannot be switched on for a channel either (no stored consent that would
+    // silently take effect when the server switch is turned on later)
+    if ((b.intelligence === true || b.fullIngest === true) && !hubIntelligenceEnabled()) throw dbError({ code: '22023', message: 'Project Intelligence není na tomto serveru zapnutá.' });
     const { error } = await db.rpc('hub_destination_configure', {
       p_server_secret: cfg.serverSecret, p_destination: id, p_notify: b.notify === true, p_interactive: b.interactive === true,
       p_intelligence: b.intelligence === true, p_intelligence_ack: b.intelligenceAck === true, p_event_types: events, p_full_ingest: b.fullIngest === true,

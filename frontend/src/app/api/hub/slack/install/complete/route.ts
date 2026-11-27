@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateCaller } from '../../../../../../lib/collab/invitationServer';
 import { sha256hex } from '../../../../../../lib/google/crypto';
 import { dbError, errorResponse, NO_STORE } from '../../../../../../lib/google/server';
 import { HUB_INSTALL_COOKIE, HUB_INSTALL_COOKIE_PATH, HUB_INSTALL_RESULT_COOKIE } from '../../../../../../lib/hub/config';
 import { clean } from '../../../../../../lib/notify/message';
 import { slackHubExchange } from '../../../../../../lib/hub/providers';
-import { hubLog, keys, requireHubSlack, sealRef } from '../../../../../../lib/hub/server';
+import { hubCaller, hubLog, keys, requireHubSlack, sealRef } from '../../../../../../lib/hub/server';
 
 /**
  * POST /api/hub/slack/install/complete -- finishes the workspace install under the user's session: parked answer + this browser's nonce must
@@ -20,7 +19,7 @@ export async function POST(req: NextRequest) {
   };
   try {
     const { cfg, slack } = requireHubSlack();
-    const { db } = await authenticateCaller(req.headers.get('authorization'), 'Integrace vyžadují připojenou databázi.');
+    const { db } = await hubCaller(req.headers.get('authorization'));
     let parked: { state?: string; code?: string; error?: string } = {};
     try { parked = JSON.parse(req.cookies.get(HUB_INSTALL_RESULT_COOKIE)?.value ?? '{}'); } catch { /* empty */ }
     const nonce = req.cookies.get(HUB_INSTALL_COOKIE)?.value ?? '';

@@ -7,6 +7,7 @@ import { keyFromBase64, type KeyRing } from '../google/crypto';
  *
  *   HUB_SLACK_ENABLED, HUB_TELEGRAM_ENABLED      -- feature switches ('1' = on; default off; every hub route checks its switch first)
  *   HUB_INTELLIGENCE_ENABLED                      -- '1' = Project Intelligence may ingest/read hub communication (kill switch; default off)
+ *   HUB_PILOT_USER_IDS                            -- optional pilot allowlist of ClearSpace user ids (RUN 08); unset = everyone
  *   HUB_SERVER_SECRET                             -- >= 32 chars; SHA-256 in server_trust('hub'); also authenticates the scheduler's calls
  *   HUB_ROUTING_KEY                               -- >= 32 chars, NEVER rotated: HMAC key of the routing keys (kept apart so a secret rotation cannot break routing)
  *   HUB_TOKEN_ENCRYPTION_KEY (+ _PREVIOUS)        -- base64 32 B; Slack workspace tokens, channel / chat references
@@ -29,6 +30,11 @@ export const hubSlackEnabled = (env: NodeJS.ProcessEnv = process.env) => on(env.
 export const hubTelegramEnabled = (env: NodeJS.ProcessEnv = process.env) => on(env.HUB_TELEGRAM_ENABLED);
 export const hubIntelligenceEnabled = (env: NodeJS.ProcessEnv = process.env) => on(env.HUB_INTELLIGENCE_ENABLED);
 export const hubAnyEnabled = (env: NodeJS.ProcessEnv = process.env) => hubSlackEnabled(env) || hubTelegramEnabled(env);
+/** RUN 08 pilot: HUB_PILOT_USER_IDS (comma-separated ClearSpace user ids) set -> only those accounts may use the hub; unset -> everyone. */
+export const hubPilotAllows = (userId: string, env: NodeJS.ProcessEnv = process.env) => {
+  const ids = (env.HUB_PILOT_USER_IDS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return ids.length === 0 || ids.includes(userId.toLowerCase());
+};
 export const hubProviderEnabled = (p: HubProvider, env: NodeJS.ProcessEnv = process.env) => (p === 'slack' ? hubSlackEnabled(env) : hubTelegramEnabled(env));
 
 export interface HubSlack { clientId: string; clientSecret: string; signingSecret: string; api: string; authorize: string; redirectUri: string; mock: boolean }

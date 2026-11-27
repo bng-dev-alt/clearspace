@@ -131,7 +131,8 @@ SQL
                      cortex) t=$(kc "$HS" telegram_pi_bot_token) s=$(kc "$HS" telegram_pi_webhook_secret) p=/api/hub/telegram/pi-webhook au='["message","edited_message"]';;
                      *) echo "usage: telegram-webhook relay|cortex [off]"; exit 2;; esac
     if [ "${3:-}" = off ]; then tg "$t" deleteWebhook --data-urlencode drop_pending_updates=true | python3 -c 'import json,sys;print("deleteWebhook ok =",json.load(sys.stdin).get("ok"))'
-    else printf 'secret_token=%s' "$s" | tg "$t" setWebhook --data-urlencode "url=$BASE$p" --data-urlencode "allowed_updates=$au" --data-urlencode drop_pending_updates=true --data @- \
+    # token AND webhook secret only through curl's stdin config (never argv); RUN 09 fix: a second '@-' data source got nothing -> no secret_token
+    else printf 'url = "https://api.telegram.org/bot%s/setWebhook"\ndata-urlencode = "secret_token=%s"\n' "$t" "$s" | curl -sS -m 20 -K - --data-urlencode "url=$BASE$p" --data-urlencode "allowed_updates=$au" --data-urlencode drop_pending_updates=true \
            | python3 -c 'import json,sys;print("setWebhook ok =",json.load(sys.stdin).get("ok"))'; fi
     tg "$t" getWebhookInfo | python3 -c 'import json,sys;r=json.load(sys.stdin)["result"];print("webhook url:",r.get("url") or "(none)","| pending:",r.get("pending_update_count"),"| last error:",r.get("last_error_message") or "-","| updates:",r.get("allowed_updates"))';;
   scheduler)

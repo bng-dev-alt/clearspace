@@ -106,7 +106,7 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
     await expect(card.getByTestId('notify-message')).toContainText('Telegram je připojený');
     await expect(card.getByTestId('telegram-service-state')).toContainText('Aktivní');
     const msgs = (await (await ctl(request, 'messages')).json()).telegram.filter((m: { chatId: number }) => m.chatId === 9101);
-    expect(msgs.map((m: { text: string }) => m.text.split('\n')[1])).toEqual(['Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.', 'Hotovo – oznámení z ClearSpace budou chodit sem.']);
+    expect(msgs.map((m: { text: string }) => m.text)).toEqual(['Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.', 'Hotovo – oznámení z ClearSpace budou chodit sem.']);
   });
 
   await test.step('Slack (phone, dark): OAuth with the simulated Slack consent, back to Settings', async () => {

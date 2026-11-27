@@ -322,7 +322,7 @@ assert.equal(r.json.outcome, 'sent');
 assert.equal((await app(`/api/hub/destinations/${pub.id}`, O.token, { method: 'POST', body: {} })).status, 429, '1 test / 30 s');
 assert.equal((await app(`/api/hub/destinations/${tgd.id}`, O.token, { method: 'POST', body: {} })).json.outcome, 'sent');
 let sm = (await messages()).slack;
-assert.equal(sm.at(-1).channel, 'C0PUB0001'); assert.equal(sm.at(-1).mrkdwn, false); assert.equal(sm.at(-1).unfurl_links, false); assert.match(sm.at(-1).text, /Zkušební zpráva/);
+assert.equal(sm.at(-1).channel, 'C0PUB0001'); assert.equal(sm.at(-1).mrkdwn, false); assert.equal(sm.at(-1).unfurl_links, false); assert.match(sm.at(-1).text, /^[^\n]+: zkušební zpráva/); assert.doesNotMatch(sm.at(-1).text, /^ClearSpace/);
 ok('test message: managers only, 1 / 30 s, Slack without markup / unfurling, Telegram plain text');
 
 // ---------------------------------------------------------------- A10 / A9: notifications only to configured destinations
@@ -474,7 +474,7 @@ const cm = await db('/rest/v1/task_comments', { method: 'POST', token: O.token, 
 assert.ok(cm.status < 300, JSON.stringify(cm.json));
 await tick();
 const out = (await messages()).slack.at(-1);
-assert.equal(out.thread_ts, thread); assert.match(out.text, /Komentář v ClearSpace – .*:\nSchváleno, objednejte &lt;!here&gt;\./);
+assert.equal(out.thread_ts, thread); assert.match(out.text, /^.+ \(komentář v ClearSpace\):\nSchváleno, objednejte &lt;!here&gt;\./);
 await tick();
 assert.equal((await messages()).slack.filter((m) => m.text.includes('Schváleno')).length, 1, 'sent once');
 // Telegram: reply to the bot's confirmation -> comment; ClearSpace comment -> reply to the confirmation
@@ -680,11 +680,14 @@ ok('A24: disconnect removes binding + conversations at once (history kept unless
     await cfgDest(dst.id, { interactive: true, intelligence: false });
     assert.equal(sql(`select count(*) from public.hub_messages where text like 'Celá skupina%'`), '0', 'switching PI off deletes the imports at once');
   } else {
-    await cfgDest(dst.id, { interactive: true, intelligence: true, intelligenceAck: true, fullIngest: true });
-    assert.equal(dest(dst.id).full_ingest, true);
+    // RUN 08: server PI off -> the opt-in itself is refused ...
+    assert.equal((await cfgDest(dst.id, { interactive: true, intelligence: true, intelligenceAck: true, fullIngest: true })).status, 400);
+    assert.equal(dest(dst.id).full_ingest, false);
+    // ... and a group opted in earlier (server switch turned off later) still stores nothing: the runtime kill switch
+    sql(`update public.hub_destinations set intelligence = true, intelligence_confirmed_at = now(), full_ingest = true where id = '${dst.id}'`);
     await tgUpdate(piMsg('Kill switch'), PI_SECRET, { pi: true });
     assert.equal(sql(`select count(*) from public.hub_messages where text = 'Kill switch'`), '0', 'server kill switch: the PI bot stores nothing');
-    await cfgDest(dst.id, { interactive: true, intelligence: false });
+    sql(`update public.hub_destinations set intelligence = false, full_ingest = false where id = '${dst.id}'`);
   }
   ok('RUN 07B: an interrupted event is finished by the dispatcher (payload dropped), a provider retry is processed and answered once, concurrent duplicate /task -> one task; the PI bot reads only opted-in confirmed groups (never private chats, never replies meant for the project bot), switching PI off deletes its imports');
 }

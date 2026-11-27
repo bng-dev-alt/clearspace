@@ -19,5 +19,5 @@ U úkolu propojeného s vláknem/zprávou: zdrojová zpráva (citace, autor, odk
 Seznam propojených účtů Slack/Telegram (štítek), „Odpojit“. Stránka `/integrations/link?code=…` pro potvrzení propojení.
 
 ## Texty (zkrácené)
-Slack: `/clearspace help` · `/clearspace link KÓD` · `/clearspace propojit`; zkratka „Vytvořit úkol v ClearSpace“; odpověď „Úkol „…“ vytvořen v projektu … – <odkaz>“.
+Slack: `/clearspace help` · `/clearspace link KÓD` · `/clearspace propojit`; zkratka „Vytvořit úkol“; odpověď „Úkol „…“ vytvořen v projektu … – <odkaz>“.
 Telegram: `/help@bot`, `/link@bot KÓD`, `/task@bot` (jako odpověď), soukromě `/start` → odkaz pro propojení.

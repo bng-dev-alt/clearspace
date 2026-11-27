@@ -17,7 +17,7 @@ interface Meta { ch: string; ts: string; th: string; tx: string }
 
 /**
  * POST /api/hub/slack/interactivity -- signed Slack interactions of the PROJECT app:
- *   message_action "Vytvořit úkol v ClearSpace" -> a modal with a PREVIEW (title + text, editable) for a channel bound to a project
+ *   message_action "Vytvořit úkol" -> a modal with a PREVIEW (title + text, editable) for a channel bound to a project
  *   view_submission -> the task is created AS the verified ClearSpace user mapped to this Slack user (edit rights checked now), the
  *                      message is recorded with its permalink, ClearSpace confirms in the thread and links the thread to the task
  * Nothing is created for unbound channels, unverified users or channels without "Interaktivní".

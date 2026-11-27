@@ -138,7 +138,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                       </div>
                     )}
                     <label className="notify-check"><input type="checkbox" checked={d.interactive} onChange={(e) => save(d, { interactive: e.target.checked })} data-testid="hub-cap-interactive" />
-                      <span><strong>Interaktivní</strong> – úkol ze zprávy ({d.provider === 'slack' ? 'akce u zprávy „Vytvořit úkol v ClearSpace“' : 'odpověď na zprávu příkazem /task'}), odpovědi ve vlákně úkolu ↔ komentáře. Jen pro lidi s propojeným účtem a právem upravovat.</span></label>
+                      <span><strong>Interaktivní</strong> – úkol ze zprávy ({d.provider === 'slack' ? 'akce u zprávy „Vytvořit úkol“' : 'odpověď na zprávu příkazem /task'}), odpovědi ve vlákně úkolu ↔ komentáře. Jen pro lidi s propojeným účtem a právem upravovat.</span></label>
                     <label className="notify-check"><input type="checkbox" checked={d.intelligence} disabled={!status.intelligenceAvailable && !d.intelligence}
                       onChange={(e) => (e.target.checked ? setPiAsk({ d, full: false }) : save(d, { intelligence: false, fullIngest: false }))} data-testid="hub-cap-intelligence" />
                       <span><strong>Project Intelligence</strong> – AI smí číst komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'}. Výchozí stav vypnuto.{!status.intelligenceAvailable && ' (Na serveru vypnuto.)'}

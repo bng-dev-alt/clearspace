@@ -11,7 +11,7 @@ const HELP = [
   '• /clearspace propojit KÓD – propojí tento kanál s projektem (kód vytvoří správce v ClearSpace → Projekt → Integrace; aplikaci nejdřív pozvěte do kanálu)',
   '• /clearspace ucet KÓD – propojí váš Slack účet s ClearSpace (kód si vytvoříte v ClearSpace → Nastavení → Slack a Telegram pro projekty)',
   '• /clearspace stav – stav propojení tohoto kanálu',
-  'Úkol ze zprávy: u zprávy … → Další akce → Vytvořit úkol v ClearSpace.',
+  'Úkol ze zprávy: u zprávy … → Další akce → Vytvořit úkol.',
 ].join('\n');
 
 const reply = (text: string) => NextResponse.json({ response_type: 'ephemeral', text }, { headers: { 'Cache-Control': 'no-store' } });

@@ -36,56 +36,8 @@ acc() { sed -n "s/^$1=//p" "$ACC" | head -1; }
 # back for verification. A rejected value is asked for AGAIN (never skipped). Diagnostics print only shapes / yes-no facts, never values.
 HUB_TUNNEL_ID=${HUB_TUNNEL_ID:-de4b0d15-7d47-4566-927c-bf1906f44358}     # clearspace-hub-live (RUN 08); not a secret
 HUB_INPUT=${HUB_INPUT:-/dev/tty}
-yn() { if "$@"; then echo yes; else echo no; fi; }
-validate() {  # $1 kind, $2 value -> 0 ok | 1 + diagnostics on stderr
-  local k=$1 v=$2
-  case "$k" in
-    cf_tunnel)
-      # Cloudflare connector token = base64(JSON {"a": account, "t": tunnel id, "s": secret}); base64 uses + / and = padding
-      printf '%s' "$v" | TID="$HUB_TUNNEL_ID" python3 -I -c '
-import sys, os, json, base64, re
-v = sys.stdin.read(); exp = os.environ["TID"]; d = {}
-d["length"] = len(v)
-d["only_base64_chars"] = bool(re.fullmatch(r"[A-Za-z0-9+/_=-]+", v))
-d["looks_like_a_command_was_pasted"] = bool(re.search(r"cloudflared|service|install|sudo", v))
-raw = None
-for f in (base64.b64decode, base64.urlsafe_b64decode):
-    try: raw = f(v + "=" * (-len(v) % 4)); break
-    except Exception: pass
-d["base64_decodes"] = raw is not None
-j = None
-if raw is not None:
-    try: j = json.loads(raw)
-    except Exception: pass
-d["decodes_to_json"] = isinstance(j, dict)
-d["has_account_tunnel_secret_keys"] = isinstance(j, dict) and all(k in j for k in ("a", "t", "s"))
-d["tunnel_is_clearspace_hub_live"] = isinstance(j, dict) and j.get("t") == exp
-ok = d["only_base64_chars"] and d["has_account_tunnel_secret_keys"] and d["tunnel_is_clearspace_hub_live"]
-if not ok:
-    for key, val in d.items(): print(f"    {key}: {val}", file=sys.stderr)
-    if d["has_account_tunnel_secret_keys"] and not d["tunnel_is_clearspace_hub_live"]:
-        print("    -> this is a valid token of ANOTHER tunnel; open clearspace-hub-live", file=sys.stderr)
-sys.exit(0 if ok else 1)';;
-    tg_token)
-      [[ "$v" =~ ^[0-9]{6,12}:[A-Za-z0-9_-]{30,64}$ ]] && return 0
-      { echo "    length: ${#v}"; echo "    contains ':': $(yn [[ "$v" == *:* ]])"
-        echo "    digits before ':': $(printf '%s' "${v%%:*}" | tr -cd '0-9' | wc -c | tr -d ' ') (expected 6-12, digits only: $(yn [[ "${v%%:*}" =~ ^[0-9]+$ ]]))"
-        local rest=${v#*:}; echo "    characters after ':': ${#rest} (expected 30-64 of A-Z a-z 0-9 _ -: $(yn [[ "$rest" =~ ^[A-Za-z0-9_-]+$ ]]))"
-        echo "    starts with 'bot' (paste only the token, without the 'bot' URL prefix): $(yn [[ "$v" == bot* ]])"; } >&2; return 1;;
-    tg_user)
-      v=${v#@}
-      [[ "$v" =~ ^[A-Za-z][A-Za-z0-9_]{3,31}$ ]] && [[ "$(printf '%s' "$v" | tr 'A-Z' 'a-z')" == *bot ]] && return 0
-      { echo "    length: ${#v} (expected 5-32)"; echo "    only letters, digits, _: $(yn [[ "$v" =~ ^[A-Za-z0-9_]+$ ]])"
-        echo "    ends with 'bot' (Telegram requires it): $(yn [[ "$(printf '%s' "$v" | tr 'A-Z' 'a-z')" == *bot ]])"; } >&2; return 1;;
-    slack_id)
-      [[ "$v" =~ ^[0-9]{3,20}\.[0-9]{3,20}$ ]] && return 0
-      { echo "    length: ${#v}"; echo "    form digits.digits: $(yn [[ "$v" =~ ^[0-9]+\.[0-9]+$ ]])"; } >&2; return 1;;
-    slack_secret)
-      [[ "$v" =~ ^[A-Za-z0-9]{20,64}$ ]] && return 0
-      { echo "    length: ${#v} (Slack: usually 32)"; echo "    only letters and digits: $(yn [[ "$v" =~ ^[A-Za-z0-9]+$ ]])"; } >&2; return 1;;
-    *) echo "    unknown kind $k" >&2; return 1;;
-  esac
-}
+# shell-independent validation + safe diagnostics (macOS /usr/bin/env bash is 3.2): scripts/hub-credential-check.py
+validate() { printf '%s' "$2" | TID="$HUB_TUNNEL_ID" python3 -I "$HERE/scripts/hub-credential-check.py" validate "$1"; }
 # prompt_store SERVICE ACCOUNT LABEL KIND HIDDEN(1/0) OPTIONAL(1/0) -> 0 stored | 2 skipped (optional, empty input)
 prompt_store() {
   local svc=$1 acct=$2 label=$3 kind=$4 hidden=$5 opt=$6 v n=0
@@ -94,9 +46,14 @@ prompt_store() {
     n=$((n + 1))
     local hint=""; [ "$opt" = 1 ] && hint=", Enter = skip"
     [ "$n" -gt 8 ] && { echo "  too many attempts -- stopping here (re-run the setup; stored items are kept)" >&2; return 3; }
-    if [ "$hidden" = 1 ]; then read -rsp "$label (hidden$hint): " v <&9 || { echo >&2; echo "  input closed -- stopping" >&2; return 3; }; echo >&2
+    if [ "$hidden" = 1 ]; then
+      # echo OFF before the prompt is shown (bash 3.2 `read -s` switches it off only after printing the prompt -> a very fast paste could echo)
+      stty -echo <&9 2>/dev/null; trap 'stty echo <&9 2>/dev/null' INT TERM EXIT
+      printf '%s' "$label (hidden$hint): " >&2
+      if ! read -r v <&9; then stty echo <&9 2>/dev/null; echo >&2; echo "  input closed -- stopping" >&2; return 3; fi
+      stty echo <&9 2>/dev/null; echo >&2
     else read -rp "$label${hint:+ (${hint#, })}: " v <&9 || { echo "  input closed -- stopping" >&2; return 3; }; fi
-    v=$(printf '%s' "$v" | tr -d '[:space:]')
+    v=$(printf '%s' "$v" | python3 -I "$HERE/scripts/hub-credential-check.py" sanitize)
     [ "$kind" = tg_user ] && v=${v#@}
     if [ -z "$v" ]; then
       [ "$opt" = 1 ] && { echo "  skipped" >&2; return 2; }
@@ -139,27 +96,35 @@ load_env() {
   unset SLACK_HUB_API_MOCK_BASE TELEGRAM_HUB_API_MOCK_BASE SLACK_API_MOCK_BASE TELEGRAM_API_MOCK_BASE
 }
 case "${1:-}" in
-  setup)   # RUN 08: everything in ONE session, only what is still missing (hidden prompts, Keychain); safe to re-run
-    have() { kc_has "$1" "${2:-$SVC}"; }
+  setup)   # RUN 08: ONE session, asks ONLY items that are still missing (per item: a stopped run resumes exactly where it stopped)
+    item() {  # svc acct label kind hidden optional
+      if kc_has "$2" "$1"; then echo "  $3: already in the Keychain"; return 0; fi
+      prompt_store "$@"
+    }
     echo "== ClearSpace live setup -- each value goes straight into the macOS Keychain; nothing is shown or stored elsewhere"
-    if ! have cloudflare_tunnel_token; then echo "-- 1/5 Cloudflare tunnel token (Zero Trust -> Networks -> Tunnels -> clearspace-hub-live -> Configure -> the long token after 'service install')"
-      prompt_store "$SVC" cloudflare_tunnel_token 'Tunnel token' cf_tunnel 1 0; else echo "-- 1/5 tunnel token: already present"; fi
-    if ! { have telegram_bot_token "$NSVC" && have telegram_bot_username "$NSVC"; }; then echo "-- 2/5 PERSONAL notification bot (RUN 05)"
-      prompt_store "$NSVC" telegram_bot_token 'Personal bot token' tg_token 1 0
-      prompt_store "$NSVC" telegram_bot_username 'Personal bot username' tg_user 0 0; else echo "-- 2/5 personal bot: already present"; fi
-    if ! { have telegram_hub_bot_token && have telegram_hub_bot_username; }; then echo "-- 3/5 PROJECT bot (privacy mode stays ON)"
-      prompt_store "$SVC" telegram_hub_bot_token 'Project bot token' tg_token 1 0
-      prompt_store "$SVC" telegram_hub_bot_username 'Project bot username' tg_user 0 0; else echo "-- 3/5 project bot: already present"; fi
-    if ! { have telegram_pi_bot_token && have telegram_pi_bot_username; }; then echo "-- 4/5 OPTIONAL read-only PI bot (privacy OFF)"
-      if prompt_store "$SVC" telegram_pi_bot_token 'PI bot token' tg_token 1 1; then prompt_store "$SVC" telegram_pi_bot_username 'PI bot username' tg_user 0 0; fi
-    else echo "-- 4/5 PI bot: already present"; fi
-    if ! { have slack_client_id "$NSVC" && have slack_client_secret "$NSVC"; }; then echo "-- 5a/5 Slack PERSONAL app (Basic Information -> App Credentials)"
-      prompt_store "$NSVC" slack_client_id 'Client ID' slack_id 0 0
-      prompt_store "$NSVC" slack_client_secret 'Client Secret' slack_secret 1 0; else echo "-- 5a/5 Slack personal app: already present"; fi
-    if ! { have slack_hub_client_id && have slack_hub_client_secret && have slack_hub_signing_secret; }; then echo "-- 5b/5 Slack PROJECT app (Basic Information -> App Credentials)"
-      prompt_store "$SVC" slack_hub_client_id 'Client ID' slack_id 0 0
-      prompt_store "$SVC" slack_hub_client_secret 'Client Secret' slack_secret 1 0
-      prompt_store "$SVC" slack_hub_signing_secret 'Signing Secret' slack_secret 1 0; else echo "-- 5b/5 Slack project app: already present"; fi
+    echo "-- 1/5 Cloudflare tunnel token (Zero Trust -> Networks -> Tunnels -> clearspace-hub-live -> Configure -> the long token after 'service install')"
+    item "$SVC" cloudflare_tunnel_token 'Tunnel token' cf_tunnel 1 0 || exit 1
+    echo "-- 2/5 PERSONAL notification bot (RUN 05)"
+    item "$NSVC" telegram_bot_token 'Personal bot token' tg_token 1 0 || exit 1
+    item "$NSVC" telegram_bot_username 'Personal bot username' tg_user 0 0 || exit 1
+    echo "-- 3/5 PROJECT bot (privacy mode stays ON)"
+    item "$SVC" telegram_hub_bot_token 'Project bot token' tg_token 1 0 || exit 1
+    item "$SVC" telegram_hub_bot_username 'Project bot username' tg_user 0 0 || exit 1
+    echo "-- 4/5 OPTIONAL read-only PI bot (privacy OFF)"
+    if kc_has telegram_pi_bot_skipped && ! kc_has telegram_pi_bot_token; then echo "  PI bot: skipped earlier (add it later: hub-live.sh set-pi)"
+    else
+      rc=0; item "$SVC" telegram_pi_bot_token 'PI bot token' tg_token 1 1 || rc=$?      # set -e: capture, do not abort
+      if [ $rc = 0 ]; then item "$SVC" telegram_pi_bot_username 'PI bot username' tg_user 0 0 || exit 1
+      elif [ $rc = 2 ]; then printf 'add-generic-password -U -s "%s" -a telegram_pi_bot_skipped -w yes\n' "$SVC" | security -i >/dev/null 2>&1   # remember the choice (not a secret)
+      else exit 1; fi
+    fi
+    echo "-- 5a/5 Slack PERSONAL app (Basic Information -> App Credentials)"
+    item "$NSVC" slack_client_id 'Personal app Client ID' slack_id 0 0 || exit 1
+    item "$NSVC" slack_client_secret 'Personal app Client Secret' slack_secret 1 0 || exit 1
+    echo "-- 5b/5 Slack PROJECT app (Basic Information -> App Credentials)"
+    item "$SVC" slack_hub_client_id 'Project app Client ID' slack_id 0 0 || exit 1
+    item "$SVC" slack_hub_client_secret 'Project app Client Secret' slack_secret 1 0 || exit 1
+    item "$SVC" slack_hub_signing_secret 'Project app Signing Secret' slack_secret 1 0 || exit 1
     echo "== done ($("$0" status | grep -c '^present') items present; the optional PI bot may be missing)";;
   selftest)   # validators + the re-prompt loop + Keychain store/verify against SYNTHETIC values in a throwaway Keychain service
     set +e; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; fails=0
@@ -256,7 +221,7 @@ case "${1:-}" in
     sed -e "s#https://<BASE>/api/hub/slack/install/callback#https://localhost:$HTTPS_PORT/api/hub/slack/install/callback#" -e "s#https://<BASE>#$HUB_PUBLIC_URL#g" "$HERE/../docs/run07b/slack-hub-manifest.yaml";;
   gate) load_env; eval "$("$HERE/scripts/hub-stack.sh" env 2>/dev/null)"; HUB_LIVE_URL=$(cat "$DIR/hub-live-url" 2>/dev/null || true) exec node "$HERE/supabase/tests/hub_live_gate.mjs";;
   forget)
-    for a in slack_hub_client_id slack_hub_client_secret slack_hub_signing_secret telegram_hub_bot_token telegram_hub_bot_username telegram_pi_bot_token telegram_pi_bot_username cloudflare_tunnel_token; do
+    for a in slack_hub_client_id slack_hub_client_secret slack_hub_signing_secret telegram_hub_bot_token telegram_hub_bot_username telegram_pi_bot_token telegram_pi_bot_username cloudflare_tunnel_token telegram_pi_bot_skipped; do
       security delete-generic-password -s "$SVC" -a "$a" >/dev/null 2>&1 || true; done; echo "forgotten";;
   *) echo "usage: $0 setup|selftest|set-slack|set-telegram|set-pi|set-tunnel|status|app|manifest|gate|forget"; exit 2;;
 esac

@@ -42,7 +42,7 @@ features:
       usage_hint: propojit KÓD | ucet | stav
       should_escape: false
   shortcuts:
-    - name: Vytvořit úkol v ClearSpace
+    - name: Vytvořit úkol
       type: message
       callback_id: clearspace_create_task
       description: Vytvoří úkol z této zprávy

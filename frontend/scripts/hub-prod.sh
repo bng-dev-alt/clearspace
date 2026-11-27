@@ -35,10 +35,12 @@ NOTIFY_SERVER="notify_server_secret notify_token_encryption_key"
 HUB_PROVIDER="slack_hub_client_id slack_hub_client_secret slack_hub_signing_secret telegram_hub_bot_token telegram_hub_bot_username telegram_pi_bot_token telegram_pi_bot_username"
 NOTIFY_PROVIDER="slack_client_id slack_client_secret telegram_bot_token telegram_bot_username"
 
+VDIR=""; vlink() { [ -n "$VDIR" ] && return; VDIR=$(mktemp -d); trap 'rm -rf "$VDIR"' EXIT; (cd "$VDIR" && "$V" link --yes --project "$PROJECT" --scope "$SCOPE" >/dev/null 2>&1) || { echo "vercel link failed"; exit 1; }; }
+venv() { vlink; (cd "$VDIR" && "$V" env add "$@" production --force --scope "$SCOPE" >/dev/null 2>&1); }
 push() {  # NAME VALUE -> Vercel Production, Sensitive (value only through stdin)
-  printf '%s' "$2" | "$V" env add "$1" production --sensitive --force --scope "$SCOPE" >/dev/null 2>&1 && ok "Vercel Production: $1" || bad "Vercel: $1 not stored"
+  printf '%s' "$2" | venv "$1" --sensitive && ok "Vercel Production: $1" || bad "Vercel: $1 not stored"
 }
-plain() { printf '%s' "$2" | "$V" env add "$1" production --no-sensitive --force --scope "$SCOPE" >/dev/null 2>&1 && ok "Vercel Production: $1=$2" || bad "Vercel: $1 not stored"; }
+plain() { printf '%s' "$2" | venv "$1" --no-sensitive && ok "Vercel Production: $1=$2" || bad "Vercel: $1 not stored"; }
 
 case "${1:-}" in
   gen-server)
@@ -108,7 +110,7 @@ SQL
       "$(printf '%s' "$(kc "$NS" notify_server_secret)" | shasum -a 256 | cut -d' ' -f1)" | pg -f - >/dev/null && ok "server_trust('notify') registered"
     echo "select 'principal='||(select count(*) from public.hub_service_principal)||' trust='||(select string_agg(purpose,',' order by purpose) from public.server_trust)||' owns_projects='||(select count(*) from public.projects where user_id='$uid');" | pg -f -;;
   push-env)
-    stage=${2:?stage1|stage2}
+    stage=${2:?stage1|stage2}; vlink
     for a in "HUB_SERVER_SECRET:hub_server_secret" "HUB_ROUTING_KEY:hub_routing_key" "HUB_TOKEN_ENCRYPTION_KEY:hub_token_encryption_key" "HUB_SERVICE_EMAIL:hub_service_email" \
              "HUB_SERVICE_PASSWORD:hub_service_password" "SLACK_HUB_CLIENT_ID:slack_hub_client_id" "SLACK_HUB_CLIENT_SECRET:slack_hub_client_secret" \
              "SLACK_HUB_SIGNING_SECRET:slack_hub_signing_secret" "TELEGRAM_HUB_BOT_TOKEN:telegram_hub_bot_token" "TELEGRAM_HUB_BOT_USERNAME:telegram_hub_bot_username" \

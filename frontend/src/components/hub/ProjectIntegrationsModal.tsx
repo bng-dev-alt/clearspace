@@ -4,10 +4,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MessageSquare, Send, Plug } from 'lucide-react';
 import { ModalShell, Badge } from '../ui';
+import PairingBox from './PairingBox';
 import { DriveError } from '../../services/driveService';
 import { hasSupabaseConfig } from '../../lib/supabase';
 import {
-  EVENT_LABEL, hubService, PROVIDER_NAME, STATUS_LABEL, type HubDestination, type HubEventType, type HubProjectStatus, type HubProvider,
+  EVENT_LABEL, hubService, STATUS_LABEL, type HubDestination, type HubEventType, type HubProjectStatus, type HubProvider,
 } from '../../services/hubService';
 
 export const ProviderIcon = ({ provider, size = 14 }: { provider: HubProvider; size?: number }) =>
@@ -31,7 +32,10 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   const [status, setStatus] = useState<HubProjectStatus | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
-  const [code, setCode] = useState<{ provider: HubProvider; code: string; instruction: string; until: number } | null>(null);
+  const [code, setCode] = useState<{ provider: HubProvider; code: string; command: string; openUrl: string; openLabel: string; steps: string[]; until: number; known: string[] } | null>(null);
+  const [cooldown, setCooldown] = useState<Record<string, number>>({});        // test message: 1 per 30 s per destination (server rule, now visible)
+  const [, setClock] = useState(0);
+  useEffect(() => { const t = setInterval(() => setClock((c) => c + 1), 1000); return () => clearInterval(t); }, []);
   const [piAsk, setPiAsk] = useState<{ d: HubDestination; full: boolean } | null>(null);
 
   const load = useCallback(async () => {
@@ -49,10 +53,22 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   };
   const issue = (provider: HubProvider) => run(async () => {
     const r = await hubService.linkCode(projectId, provider);
-    setCode({ provider, code: r.code, instruction: r.instruction, until: Date.now() + r.expiresInSeconds * 1000 });
+    setCode({ provider, code: r.code, command: r.command, openUrl: r.openUrl, openLabel: r.openLabel, steps: r.steps, until: Date.now() + r.expiresInSeconds * 1000,
+      known: (status?.destinations ?? []).map((d) => d.id) });
     setMessage(null);
     await load();
   }, 'Kód se nepodařilo vytvořit.');
+  // RUN 08 UX: while a code is open the status refreshes itself; a newly linked channel / group is announced and highlighted for confirmation
+  const watch = useCallback(async () => {
+    const s = await hubService.project(projectId).catch(() => null);
+    if (!s || !code) return;
+    setStatus(s);
+    const fresh = s.destinations.find((d) => !code.known.includes(d.id) && d.provider === code.provider);
+    if (fresh) {
+      setCode(null);
+      setMessage({ kind: 'info', text: `${fresh.label}: ${fresh.provider === 'slack' ? 'kanál' : 'skupina'} zadal${fresh.provider === 'slack' ? '' : 'a'} kód. Zkontrolujte, kdo ho zadal, a potvrďte propojení níže.` });
+    }
+  }, [projectId, code]);
   const decide = (d: HubDestination, decision: 'confirm' | 'reject') => run(async () => {
     await hubService.decide(d.id, decision);
     setMessage({ kind: 'info', text: decision === 'confirm' ? `${d.label} je propojený s projektem.` : `${d.label}: propojení odmítnuto.` });
@@ -66,8 +82,10 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
     await load();
   }, 'Nastavení se nepodařilo uložit.');
   const test = (d: HubDestination) => run(async () => {
+    setCooldown((c) => ({ ...c, [d.id]: Date.now() + 30_000 }));
     const r = await hubService.test(d.id);
-    setMessage({ kind: r.outcome === 'sent' ? 'info' : 'error', text: r.message });   // a successful re-check re-activates the destination
+    setMessage({ kind: r.outcome === 'sent' ? 'info' : 'error', text: r.outcome === 'sent'
+      ? `${r.message} (${new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} – ${d.label})` : r.message });   // a successful re-check re-activates the destination
     await load();
   }, 'Zkušební zprávu se nepodařilo odeslat.');
   const remove = (d: HubDestination) => {
@@ -101,11 +119,9 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
           <p className="hub-muted" data-testid="hub-slack-install-hint">Slack: nejdřív nainstalujte aplikaci <strong>ClearSpace Projekty</strong> do svého workspace v <Link href="/settings#hub">Nastavení → Slack a Telegram pro projekty</Link>.</p>
         )}
         {code && (
-          <div className="hub-code" data-testid="hub-code-box">
-            <p><strong>{PROVIDER_NAME[code.provider]}:</strong> {code.instruction}</p>
-            <p className="hub-code-value" data-testid="hub-code">{code.code}</p>
-            <p className="hub-muted">Kód platí 10 minut a jde použít jen jednou. Pak se tady objeví ke schválení – <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => void load()} disabled={busy} data-testid="hub-refresh">obnovit</button></p>
-          </div>
+          <PairingBox testId="hub-code-box" onTick={watch} onRenew={() => void issue(code.provider)} onClose={() => setCode(null)}
+            info={{ title: code.provider === 'slack' ? 'Propojení Slack kanálu' : 'Propojení Telegram skupiny', steps: code.steps, command: code.command,
+              openUrl: code.openUrl, openLabel: code.openLabel, until: code.until, waitingText: `Čekám na kód z ${code.provider === 'slack' ? 'kanálu' : 'skupiny'}` }} />
         )}
 
         {status && (
@@ -153,7 +169,11 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                 {d.lastErrorCode && d.status !== 'active' && <p className="drive-message is-error">Poslední chyba: {d.lastErrorCode}. {d.status === 'removed_bot' ? `Přidejte ${d.provider === 'slack' ? 'aplikaci do kanálu' : 'bota do skupiny'} a klikněte na „Ověřit znovu“.` : d.status === 'revoked' ? 'Nainstalujte Slack aplikaci znovu (Nastavení) a klikněte na „Ověřit znovu“.' : ''}</p>}
                 {status.canManage && (
                   <div className="hub-actions">
-                    {d.status === 'active' && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-test">Zkušební zpráva</button>}
+                    {d.status === 'active' && (() => {
+                      const wait = Math.max(0, Math.ceil(((cooldown[d.id] ?? 0) - Date.now()) / 1000));
+                      return <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy || wait > 0} onClick={() => test(d)} data-testid="hub-test">
+                        {wait > 0 ? `Odesláno · znovu za ${wait} s` : 'Zkušební zpráva'}</button>;
+                    })()}
                     {['removed_bot', 'archived', 'error', 'revoked'].includes(d.status) && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-recheck">Ověřit znovu</button>}
                     {d.status !== 'pending' && <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" disabled={busy} onClick={() => remove(d)} data-testid="hub-remove">Odpojit</button>}
                   </div>

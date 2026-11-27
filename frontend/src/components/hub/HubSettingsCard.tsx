@@ -6,6 +6,7 @@ import { Plug } from 'lucide-react';
 import { DriveError } from '../../services/driveService';
 import { hubService, PROVIDER_NAME, type HubIdentity, type HubProvider } from '../../services/hubService';
 import { ProviderIcon } from './ProjectIntegrationsModal';
+import PairingBox from './PairingBox';
 
 const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
   installed: { kind: 'info', text: 'Aplikace ClearSpace Projekty je ve Slacku nainstalovaná. Kanál propojíte v projektu → Integrace.' },
@@ -25,7 +26,7 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
   const [ids, setIds] = useState<HubIdentity[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
-  const [pending, setPending] = useState<{ code: string; instruction: string; url?: string } | null>(null);
+  const [pending, setPending] = useState<{ provider: HubProvider; code: string; command: string; url?: string; openLabel: string; steps: string[]; until: number; known: number } | null>(null);
   const load = useCallback(async () => {
     try { setIds(await hubService.identities()); } catch (e) { setIds(null); setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Stav se nepodařilo načíst.' }); }
   }, []);
@@ -45,7 +46,24 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
     try { await fn(); } catch (e) { setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : fallback }); } finally { setBusy(false); }
   };
 
-  const start = (provider: HubProvider) => run(async () => { setPending(await hubService.startIdentity(provider)); setMessage(null); }, 'Kód se nepodařilo vytvořit.');
+  const start = (provider: HubProvider) => run(async () => {
+    const r = await hubService.startIdentity(provider);
+    setPending({ provider, code: r.code, command: r.command, url: r.url, openLabel: r.openLabel, steps: r.steps, until: Date.now() + r.expiresInSeconds * 1000,
+      known: (ids ?? []).filter((i) => i.provider === provider).length });
+    setMessage(null);
+  }, 'Kód se nepodařilo vytvořit.');
+  // RUN 08 UX: the list refreshes itself while a code is open; the new link is confirmed automatically
+  const watch = useCallback(async () => {
+    if (!pending) return;
+    const list = await hubService.identities().catch(() => null);
+    if (!list) return;
+    setIds(list);
+    const mine = list.filter((i) => i.provider === pending.provider);
+    if (mine.length > pending.known) {
+      setPending(null);
+      setMessage({ kind: 'info', text: `Propojeno: ${mine[mine.length - 1].label}. Úkoly a odpovědi z tohoto účtu se teď ukládají pod vaším jménem.` });
+    }
+  }, [pending]);
 
   if (ids === undefined || ids === null) return message ? <section className="settings-card" id="hub" data-testid="hub-settings"><p role="alert" className="drive-message is-error">{message.text}</p></section> : null;
   return (
@@ -70,12 +88,9 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
         <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} data-testid="hub-identity-telegram" onClick={() => start('telegram')}>Propojit Telegram účet</button>
       </div>
       {pending && (
-        <div className="hub-code" data-testid="hub-identity-code-box">
-          <p>{pending.instruction}</p>
-          {pending.url ? <p><a href={pending.url} target="_blank" rel="noopener noreferrer" data-testid="hub-identity-link">Otevřít Telegram</a> (kód {pending.code})</p>
-            : <p className="hub-code-value" data-testid="hub-identity-code">{pending.code}</p>}
-          <p className="hub-muted">Kód platí 10 minut a jde použít jen jednou. Pak <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => { setPending(null); void load(); }} data-testid="hub-identity-refresh">obnovte seznam</button>.</p>
-        </div>
+        <PairingBox testId="hub-identity-code-box" onTick={watch} onRenew={() => void start(pending.provider)} onClose={() => setPending(null)}
+          info={{ title: pending.provider === 'slack' ? 'Propojení Slack účtu' : 'Propojení Telegram účtu', steps: pending.steps, command: pending.command,
+            openUrl: pending.url, openLabel: pending.openLabel, until: pending.until, waitingText: 'Čekám na potvrzení z chatu' }} />
       )}
       <ul className="settings-services" data-testid="hub-identities">
         {ids.length === 0 && <li className="hub-muted">Žádný propojený účet.</li>}

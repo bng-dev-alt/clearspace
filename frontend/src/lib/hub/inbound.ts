@@ -192,7 +192,8 @@ async function handleTelegram({ cfg, db }: Ctx, tg: HubTelegram, u: Msg): Promis
   if (type !== 'group' && type !== 'supergroup') return replies;
 
   if (cmd) {
-    if (cmd.cmd === 'link') {
+    // `/start KÓD` = Telegram's startgroup deep link (bot added to a group + code sent in one step) -> same as /link
+    if (cmd.cmd === 'link' || (cmd.cmd === 'start' && /^[A-Z0-9]{10}$/.test(normCode(cmd.args)))) {
       const code = normCode(cmd.args);
       if (!/^[A-Z0-9]{10}$/.test(code)) { say(`Zadejte kód z ClearSpace: /link@${tg.botUsername} KÓD`, m.message_id); return replies; }
       const admin = await telegramIsGroupAdmin(tg, chat, from.id);

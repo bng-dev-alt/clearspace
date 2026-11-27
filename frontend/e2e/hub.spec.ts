@@ -112,14 +112,15 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     await a.page.getByTestId('project-integrations-btn').click();
     await expect(modal()).toBeVisible();
     await modal().getByTestId('hub-connect-slack').click();
-    const code = (await modal().getByTestId('hub-code').textContent())!.trim();
+    const code = (await modal().getByTestId('hub-code-box-command').textContent())!.trim().split(' ').at(-1)!;
     expect(code).toMatch(/^[A-Z2-9]{10}$/);
     await expect(modal().getByTestId('hub-code-box')).toContainText('/clearspace propojit');
     const r = await (await slackCommand(request, `propojit ${code}`)).json();
     expect(r.text).toContain('čeká na potvrzení');
-    await modal().getByTestId('hub-refresh').click();
+    // RUN 08: no "refresh" button -- the modal notices the new channel by itself and closes the code box
     const dest = modal().getByTestId('hub-destination-slack');
-    await expect(dest).toContainText('#stehovani');
+    await expect(dest).toContainText('#stehovani', { timeout: 15_000 });
+    await expect(modal().getByTestId('hub-code-box')).toHaveCount(0);
     await expect(dest).toContainText('čeká na potvrzení');
     await shot(a.page, 'hub-pending');
     await dest.getByTestId('hub-confirm').click();
@@ -136,10 +137,10 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
   await test.step('Telegram group via code (group admin), interactive on, PI stays off (needs an informed confirmation)', async () => {
     await ctl(request, 'telegram-chat', { chatId: GROUP, type: 'supergroup', admins: [8801] });
     await modal().getByTestId('hub-connect-telegram').click();
-    const code = (await modal().getByTestId('hub-code').textContent())!.trim();
+    const code = (await modal().getByTestId('hub-code-box-command').textContent())!.trim().split(' ').at(-1)!;
     await tg(request, tgMsg(GROUP, 8801, `/link@${BOT} ${code}`));
-    await modal().getByTestId('hub-refresh').click();
     const dest = modal().getByTestId('hub-destination-telegram');
+    await expect(dest).toBeVisible({ timeout: 15_000 });
     await dest.getByTestId('hub-confirm').click();
     await expect(dest).toContainText('aktivní');
     await dest.getByTestId('hub-cap-interactive').click();      // controlled: checked once the server saved it
@@ -175,13 +176,12 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     await ctl(request, 'telegram-chat', { chatId: 8801, type: 'private' });
     await a.page.goto('/settings');
     await a.page.getByTestId('hub-identity-telegram').click();
-    const href = await a.page.getByTestId('hub-identity-link').getAttribute('href');
+    const href = await a.page.getByTestId('hub-identity-code-box-open').getAttribute('href');
     expect(href).toMatch(new RegExp(`^https://t\\.me/${BOT}\\?start=[A-Z2-9]{10}$`));
     await tg(request, tgMsg(8801, 8801, `/start ${new URL(href!).searchParams.get('start')}`, {}, 'private'));
     expect((await messages(request)).telegram.at(-1).text).toContain('Alena Vlastníková');
     await shot(a.page, `hub-identity-${OWNER_SCHEME}`);
-    await a.page.getByTestId('hub-identity-refresh').click();
-    await expect(a.page.getByTestId('hub-identities')).toContainText('Telegram: Jana');
+    await expect(a.page.getByTestId('hub-identities')).toContainText('Telegram: Jana', { timeout: 15_000 });   // detected by itself
   });
 
   await test.step('task from a Telegram message -> on the board, communication tab, conversation in the task', async () => {

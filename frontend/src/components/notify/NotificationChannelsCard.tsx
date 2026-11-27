@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BellRing, MessageSquare, Send } from 'lucide-react';
 import { DriveError } from '../../services/driveService';
+import PairingBox from '../hub/PairingBox';
 import { DEFAULT_PREFERENCES, EVENT_TYPES, notifyService, type NotifyChannel, type NotifyPreferences, type NotifyProvider, type NotifyStatus } from '../../services/notifyService';
 
 /** Outcome of the Slack OAuth round trip (?notify=slack -> complete). */
@@ -38,6 +39,7 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [tgLink, setTgLink] = useState<string | null>(null);
+  const [tgUntil, setTgUntil] = useState(0);
   const [prefs, setPrefs] = useState<NotifyPreferences>(DEFAULT_PREFERENCES);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [prefsDirty, setPrefsDirty] = useState(false);
@@ -99,6 +101,7 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
   const linkTelegram = () => run(async () => {
     const r = await notifyService.telegramLink();
     setTgLink(r.url);
+    setTgUntil(Date.now() + r.expiresInSeconds * 1000);
     setMessage(null);
     stopPolling();
     let n = 0;
@@ -197,11 +200,9 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
                   {available ? st.text : 'Na tomto serveru není zapnutý.'}
                 </p>
                 {p === 'telegram' && tgLink && available && (
-                  <p data-testid="telegram-link-box">
-                    1. Otevřete <a href={tgLink} target="_blank" rel="noopener noreferrer" data-testid="telegram-link">odkaz na bota ClearSpace v Telegramu</a> (platí 10 minut) a stiskněte „Start“.{' '}
-                    2. Vraťte se sem – stav se zkontroluje sám, případně{' '}
-                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy} onClick={() => void checkTelegram()} data-testid="telegram-check">Zkontrolovat</button>
-                  </p>
+                  <PairingBox testId="telegram-link-box" onTick={() => checkTelegram(true)} onRenew={() => void linkTelegram()} onClose={() => { stopPolling(); setTgLink(null); }}
+                    info={{ title: 'Připojení Telegramu', steps: ['Klikněte na „Otevřít Telegram“ – otevře se chat s botem ClearSpace.', 'V Telegramu stiskněte „Start“.', 'Tady potvrďte, že je to váš účet (stav se zkontroluje sám).'],
+                      command: tgLink, openUrl: tgLink, openLabel: 'Otevřít Telegram', until: tgUntil, waitingText: 'Čekám na „Start“ v Telegramu' }} />
                 )}
               </div>
               {available && actions(p, c)}

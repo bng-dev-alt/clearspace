@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     if (data === 'active') {
       const ch = await rpcRow<{ channel_id: string; secret_enc: string }>(db, 'notify_test_begin', { p_server_secret: cfg.serverSecret, p_provider: 'telegram', p_allow_confirm: true }).catch(() => null);
       if (ch) {
-        const out = await sendWith(cfg, 'telegram', ch.channel_id, ch.secret_enc, 'ClearSpace\nHotovo – oznámení z ClearSpace budou chodit sem.');
+        const out = await sendWith(cfg, 'telegram', ch.channel_id, ch.secret_enc, 'Hotovo – oznámení z ClearSpace budou chodit sem.');
         await db.rpc('notify_channel_mark', { p_server_secret: cfg.serverSecret, p_provider: 'telegram', p_outcome: out.outcome === 'sent' ? 'sent' : out.outcome === 'reconnect' || out.outcome === 'blocked' ? out.outcome : 'failed', p_error_code: out.outcome === 'sent' ? null : out.code });
       }
     }

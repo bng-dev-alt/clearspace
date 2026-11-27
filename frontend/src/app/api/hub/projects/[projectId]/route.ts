@@ -47,10 +47,16 @@ export async function POST(req: NextRequest, ctx: RouteContext<'/api/hub/project
     const { error } = await db.rpc('hub_link_begin', { p_server_secret: cfg.serverSecret, p_project_id: projectId, p_provider: provider, p_code_hash: sha256hex(code) });
     if (error) throw dbError(error);
     hubLog('link_code', { provider });
-    const instruction = provider === 'slack'
-      ? `V kanálu nejdřív pozvěte aplikaci (/invite @ClearSpace Projekty), pak napište: /clearspace propojit ${code}`
-      : `Přidejte bota @${'error' in cfg.telegram ? '' : cfg.telegram.botUsername} do skupiny a napište ve skupině: /link@${'error' in cfg.telegram ? '' : cfg.telegram.botUsername} ${code}`;
-    return NextResponse.json({ code, expiresInSeconds: 600, instruction }, { headers: NO_STORE });
+    // RUN 08 UX: the exact command to paste + a link that opens the right app (Telegram: adds the bot to a group AND sends the code)
+    const bot = 'error' in cfg.telegram ? '' : cfg.telegram.botUsername;
+    const body = provider === 'slack'
+      ? { command: `/clearspace propojit ${code}`, openUrl: 'slack://open', openLabel: 'Otevřít Slack',
+          steps: ['Ve Slacku otevřete kanál, který chcete propojit.', 'Pozvěte do něj aplikaci: /invite @ClearSpace Projekty (stačí jednou).', 'Vložte do kanálu příkaz níže a odešlete.', 'Kanál se tu objeví sám – pak ho potvrďte.'],
+          instruction: `V kanálu nejdřív pozvěte aplikaci (/invite @ClearSpace Projekty), pak napište: /clearspace propojit ${code}` }
+      : { command: `/link@${bot} ${code}`, openUrl: `https://t.me/${bot}?startgroup=${code}`, openLabel: 'Přidat bota do skupiny',
+          steps: ['Klikněte na „Přidat bota do skupiny“ a v Telegramu vyberte skupinu – bot se přidá a kód pošle sám.', 'Nebo bota přidejte ručně a vložte do skupiny příkaz níže.', 'Kód musí poslat zakladatel nebo správce skupiny.', 'Skupina se tu objeví sama – pak ji potvrďte.'],
+          instruction: `Přidejte bota @${bot} do skupiny a napište ve skupině: /link@${bot} ${code}` };
+    return NextResponse.json({ code, expiresInSeconds: 600, ...body }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'hub-link-code');
   }

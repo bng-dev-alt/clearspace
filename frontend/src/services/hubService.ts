@@ -56,7 +56,7 @@ export const hubService = {
       throw e;
     }
   },
-  linkCode(projectId: string, provider: HubProvider): Promise<{ code: string; expiresInSeconds: number; instruction: string }> {
+  linkCode(projectId: string, provider: HubProvider): Promise<{ code: string; expiresInSeconds: number; instruction: string; command: string; openUrl: string; openLabel: string; steps: string[] }> {
     return api(`/api/hub/projects/${encodeURIComponent(projectId)}`, { method: 'POST', body: { provider } });
   },
   decide(id: string, decision: 'confirm' | 'reject'): Promise<{ status: string }> {
@@ -88,7 +88,7 @@ export const hubService = {
     }
   },
   /** A single-use code (10 min) the user sends FROM the chat account (Telegram: deep link to the bot). */
-  startIdentity(provider: HubProvider): Promise<{ code: string; expiresInSeconds: number; instruction: string; url?: string }> {
+  startIdentity(provider: HubProvider): Promise<{ code: string; expiresInSeconds: number; instruction: string; url?: string; command: string; openLabel: string; steps: string[] }> {
     return api('/api/hub/identity', { method: 'POST', body: { provider } });
   },
   /** Comments of a task that came from / went to a chat thread, with the original message link; plus the linked chats. */

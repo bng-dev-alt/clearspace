@@ -45,7 +45,9 @@ export function line(it: HubItem, now: Date): string {
   }
 }
 
-export const TEST_TEXT = (project: string) => `ClearSpace · ${clean(project, 120)}\nZkušební zpráva – oznámení projektu budou chodit sem.`;
+// RUN 08: no "ClearSpace" header -- the sender IS the ClearSpace app / bot (it showed twice); the project name leads the message
+export const TEST_TEXT = (project: string) => `${clean(project, 120)}: zkušební zpráva – oznámení projektu budou chodit sem.`;
+export const changes = (n: number) => `${n} ${n === 1 ? 'změna' : n >= 2 && n <= 4 ? 'změny' : 'změn'}`;
 
 /** One message per item group: a single notification, a digest, a comment into a thread, or the test message. */
 export function render(items: HubItem[], base: string, now: Date): string {
@@ -53,12 +55,12 @@ export function render(items: HubItem[], base: string, now: Date): string {
   const project = clean(first.projectName, 120);
   if (first.kind === 'test') return TEST_TEXT(project);
   if (first.kind === 'comment_sync') {
-    return `Komentář v ClearSpace – ${clean(first.commentAuthor, 80) || 'člen projektu'}:\n${clean(first.comment, 1500)}\nÚkol: ${taskHref(base, first.projectId ?? '', first.cardId)}`;
+    return `${clean(first.commentAuthor, 80) || 'Člen projektu'} (komentář v ClearSpace):\n${clean(first.comment, 1500)}\nÚkol: ${taskHref(base, first.projectId ?? '', first.cardId)}`;
   }
-  if (items.length === 1) return `ClearSpace · ${project}\n${line(first, now)}\nOtevřít: ${taskHref(base, first.projectId ?? '', first.cardId)}`;
+  if (items.length === 1) return `${project}: ${line(first, now)}\nOtevřít: ${taskHref(base, first.projectId ?? '', first.cardId)}`;
   const shown = items.slice(0, DIGEST_MAX_LINES).map((i) => `• ${line(i, now)}`);
   const more = items.length - shown.length;
-  return [`ClearSpace · ${project} – ${items.length} změn`, ...shown, ...(more > 0 ? [`… a ${more} dalších`] : []), `Projekt: ${taskHref(base, first.projectId ?? '')}`].join('\n');
+  return [`${project} – ${changes(items.length)}`, ...shown, ...(more > 0 ? [`… a ${more} dalších`] : []), `Projekt: ${taskHref(base, first.projectId ?? '')}`].join('\n');
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

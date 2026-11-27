@@ -95,9 +95,9 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
     await expect(card.getByRole('heading', { name: /Oznámení mimo aplikaci/ })).toBeVisible();
     await expect(card.getByTestId('telegram-service-state')).toHaveText('Nepřipojeno.');
     await card.getByTestId('telegram-connect').click();
-    const href = await card.getByTestId('telegram-link').getAttribute('href');
+    const href = await card.getByTestId('telegram-link-box-open').getAttribute('href');
     expect(href).toMatch(/^https:\/\/t\.me\/clearspace_mock_bot\?start=[A-Za-z0-9_-]{43}$/);
-    expect(await card.getByTestId('telegram-link').getAttribute('rel')).toContain('noopener');
+    expect(await card.getByTestId('telegram-link-box-open').getAttribute('rel')).toContain('noopener');
     await ctl(request, 'telegram-start', { token: new URL(href!).searchParams.get('start'), chatId: 9101, firstName: 'Bedřich', username: 'bedrich_e2e' });
     await expect(card.getByTestId('telegram-confirm')).toBeVisible({ timeout: 15_000 });   // the card polls by itself
     await expect(card.getByTestId('telegram-service-state')).toContainText('Bedřich (@bedrich_e2e)');
@@ -143,7 +143,7 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
     const t = await tick();
     expect(t.sent).toBeGreaterThanOrEqual(1);
     const msg = (await (await ctl(request, 'messages')).json()).telegram.filter((m: { chatId: number }) => m.chatId === 9101).at(-1);
-    expect(msg.text).toMatch(/^ClearSpace · Stěhování kanceláře Corvane\n.+ vám přiřadil\(a\) úkol „Objednat stěhovací firmu"\.\nOtevřít: /);
+    expect(msg.text).toMatch(/^Stěhování kanceláře Corvane: .+ vám přiřadil\(a\) úkol „Objednat stěhovací firmu"\.\nOtevřít: /);
     const link = msg.text.split('Otevřít: ')[1];
     expect(link).toBe(`${process.env.PLAYWRIGHT_TEST_BASE_URL}/projects/${P}?task=${CARD}`);
     await b.page.goto(link);

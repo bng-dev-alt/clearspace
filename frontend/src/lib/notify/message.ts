@@ -97,17 +97,15 @@ export function sentence(item: DeliveryItem, now: Date): string {
 
 /** Full plain-text message. */
 export function renderMessage(item: DeliveryItem, appBaseUrl: string, now: Date = new Date()): string {
-  const lines: string[] = [];
+  // RUN 08: no "ClearSpace" header line -- the sender already is the ClearSpace app / bot; the project name leads the sentence
   const project = clean(item.projectName, 120);
-  lines.push(!item.hideTitles && project && item.kind !== 'project_added' && item.kind !== 'project_role_changed' && item.kind !== 'project_removed'
-    ? `ClearSpace · ${project}` : 'ClearSpace');
-  lines.push(sentence(item, now));
+  const membership = item.kind === 'project_added' || item.kind === 'project_role_changed' || item.kind === 'project_removed';
+  const first = !item.hideTitles && project && !membership ? `${project}: ${sentence(item, now)}` : sentence(item, now);
   const href = itemHref(item);
-  if (href) lines.push(`Otevřít: ${appBaseUrl}${href}`);
-  return lines.join('\n');
+  return href ? `${first}\nOtevřít: ${appBaseUrl}${href}` : first;
 }
 
-export const TEST_MESSAGE = 'ClearSpace\nZkušební zpráva – oznámení z ClearSpace sem budou chodit.';
-export const TELEGRAM_CONFIRM_MESSAGE = 'ClearSpace\nPropojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
-export const TELEGRAM_HELP_MESSAGE = 'ClearSpace\nTento bot jen doručuje oznámení z ClearSpace. Propojení začněte v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
-export const TELEGRAM_BYE_MESSAGE = 'ClearSpace\nOznámení z ClearSpace jsou odpojená. Sem už nic chodit nebude.';
+export const TEST_MESSAGE = 'Zkušební zpráva – oznámení z ClearSpace sem budou chodit.';
+export const TELEGRAM_CONFIRM_MESSAGE = 'Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
+export const TELEGRAM_HELP_MESSAGE = 'Tento bot jen doručuje oznámení z ClearSpace. Propojení začněte v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
+export const TELEGRAM_BYE_MESSAGE = 'Oznámení z ClearSpace jsou odpojená. Sem už nic chodit nebude.';

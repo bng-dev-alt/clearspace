@@ -58,14 +58,14 @@ describe('config: switches default OFF, fail closed, mocks only on loopback outs
 describe('message: content minimisation, Czech texts, links, injection', () => {
   const now = new Date('2026-12-09T08:00:00Z');
   it('assignment: in-app wording + project + deep link, nothing else', () => {
-    expect(renderMessage(item(), 'https://app.example', now)).toBe('ClearSpace · Rekonstrukce kanceláře\nAnna Nováková vám přiřadil(a) úkol „Objednat nábytek".\nOtevřít: https://app.example/projects/p1?task=k1');
+    expect(renderMessage(item(), 'https://app.example', now)).toBe('Rekonstrukce kanceláře: Anna Nováková vám přiřadil(a) úkol „Objednat nábytek".\nOtevřít: https://app.example/projects/p1?task=k1');
   });
   it('hide titles: type + link only', () => {
-    expect(renderMessage(item({ hideTitles: true }), 'https://app.example', now)).toBe('ClearSpace\nByl vám přiřazen úkol.\nOtevřít: https://app.example/projects/p1?task=k1');
+    expect(renderMessage(item({ hideTitles: true }), 'https://app.example', now)).toBe('Byl vám přiřazen úkol.\nOtevřít: https://app.example/projects/p1?task=k1');
   });
   it('project removed: no link; membership texts without a project line', () => {
     const t = renderMessage(item({ kind: 'project_removed', title: 'Rekonstrukce kanceláře', cardId: null }), 'https://app.example', now);
-    expect(t).toBe('ClearSpace\nAnna Nováková vás odebral(a) z projektu „Rekonstrukce kanceláře".');
+    expect(t).toBe('Anna Nováková vás odebral(a) z projektu „Rekonstrukce kanceláře".');
   });
   it('due soon: Zítra / Dnes by the Prague calendar day (also right after midnight and across DST)', () => {
     expect(renderMessage(item({ kind: 'due_soon', dueDate: '2026-12-10' }), 'https://a.b', now)).toContain('Zítra (10. 12. 2026) je termín úkolu „Objednat nábytek".');

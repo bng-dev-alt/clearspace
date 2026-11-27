@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, test, vi } from 'vitest';
 import { hubConfig, hubKey } from '../../lib/hub/config';
-import { DIGEST_MAX_LINES, line, parseHubItem, render, sendHubBatch, type HubItem } from '../../lib/hub/dispatch';
+import { changes, DIGEST_MAX_LINES, line, parseHubItem, render, sendHubBatch, type HubItem } from '../../lib/hub/dispatch';
 import { classifySlackHub, classifyTelegramHub, parseCommand, safeResponseUrl, telegramMessageLink } from '../../lib/hub/providers';
 import { normCode, verifySlack, verifyTelegram } from '../../lib/hub/server';
 import { assembleContext, REF_PATTERN, commRef } from '../../lib/intelligence/context';
@@ -105,7 +105,7 @@ describe('provider outcomes', () => {
 describe('messages', () => {
   test('a single notification: project, sentence, link; no description', () => {
     const t = render([base], 'https://app.example', NOW);
-    expect(t).toBe('ClearSpace · Stavba\nJana vytvořil(a) úkol „Objednat okna".\nOtevřít: https://app.example/projects/p1?task=k1');
+    expect(t).toBe('Stavba: Jana vytvořil(a) úkol „Objednat okna".\nOtevřít: https://app.example/projects/p1?task=k1');
   });
   test('status / completion / due dates', () => {
     expect(line({ ...base, kind: 'status_changed', column: 'V práci' }, NOW)).toBe('Jana přesunul(a) úkol „Objednat okna" do „V práci".');
@@ -119,7 +119,11 @@ describe('messages', () => {
     expect(t).toContain('– 13 změn'); expect(t).toContain('… a 3 dalších');
   });
   test('control characters and newlines in titles are neutralised', () => {
-    expect(render([{ ...base, title: 'A\nOtevřít: https://evil.example‮' }], 'https://app.example', NOW).split('\n')).toHaveLength(3);
+    expect(render([{ ...base, title: 'A\nOtevřít: https://evil.example‮' }], 'https://app.example', NOW).split('\n')).toHaveLength(2);   // "Projekt: …" + "Otevřít: …"
+  });
+  test('RUN 08: no duplicated "ClearSpace" header, Czech plural of the digest count', () => {
+    expect(render([{ ...base, kind: 'test' }], 'https://app.example', NOW)).not.toMatch(/ClearSpace ·|^ClearSpace/);
+    expect([1, 2, 4, 5, 13].map(changes)).toEqual(['1 změna', '2 změny', '4 změny', '5 změn', '13 změn']);
   });
   test('item shape check', () => {
     expect(parseHubItem({ ...base })).not.toBeNull();

@@ -1,0 +1,20 @@
+# RUN 09: PRODUCTION manifest of the SAME personal-notification Slack app (promoted from dev; Client Secret regenerated).
+display_information:
+  name: ClearSpace oznámení
+features:
+  bot_user:
+    display_name: ClearSpace
+    always_online: false
+  app_home:
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: true
+oauth_config:
+  redirect_urls:
+    - https://clearspace.luffast.com/api/notify/slack/callback
+  scopes:
+    bot:
+      - chat:write
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

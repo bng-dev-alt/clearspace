@@ -1,0 +1,35 @@
+# RUN 09 PHASE 1 (no event subscription yet: Slack verifies the events URL on save, the production build answers it only after the deploy). PRODUCTION manifest of the SAME Slack app (promoted from dev, see PILOT_ROLLOUT.md). Paste only within the approved rollout.
+display_information:
+  name: ClearSpace Projekty
+  description: Propojení projektů ClearSpace s vybranými kanály
+features:
+  bot_user:
+    display_name: ClearSpace Projekty
+    always_online: false
+  slash_commands:
+    - command: /clearspace
+      url: https://clearspace.luffast.com/api/hub/slack/commands
+      description: Propojení kanálu a účtu s ClearSpace
+      usage_hint: propojit KÓD | ucet KÓD | stav
+      should_escape: false
+  shortcuts:
+    - name: Vytvořit úkol
+      type: message
+      callback_id: clearspace_create_task
+      description: Vytvoří úkol z této zprávy
+oauth_config:
+  redirect_urls:
+    - https://clearspace.luffast.com/api/hub/slack/install/callback
+  scopes:
+    bot:
+      - chat:write
+      - commands
+      - channels:history
+      - groups:history
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://clearspace.luffast.com/api/hub/slack/interactivity
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

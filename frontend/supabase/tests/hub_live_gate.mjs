@@ -33,6 +33,18 @@ if (URL_ && /^https:\/\/[a-z0-9.-]+$/.test(URL_)) {
   res(pi?.status === 401 || pi?.status === 503, `tunnel: unsigned PI webhook refused (${pi?.status})`);
 } else res(false, 'no running tunnel (start: hub-live.sh app)');
 
+// local UI path (RUN 08 defect: the page hung because the HTTPS proxy dropped WebSocket upgrades -> Next dev HMR socket never opened)
+{
+  const tls = await import('node:tls');
+  const code = await new Promise((resolve) => {
+    const s = tls.connect({ host: '127.0.0.1', port: 3472, servername: 'localhost', rejectUnauthorized: false }, () => {
+      s.write('GET /_next/webpack-hmr HTTP/1.1\r\nHost: localhost:3472\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n');
+    });
+    s.once('data', (d) => { resolve(Number(/HTTP\/1\.1 (\d{3})/.exec(d.toString())?.[1] ?? 0)); s.destroy(); });
+    s.on('error', () => resolve(0)); setTimeout(() => { resolve(0); s.destroy(); }, 5000);
+  });
+  res(code === 101, `local UI: WebSocket upgrade through the HTTPS proxy works (${code}) -- the page can finish loading`);
+}
 if (process.env.TELEGRAM_HUB_BOT_TOKEN) {
   const me = await tg(process.env.TELEGRAM_HUB_BOT_TOKEN, 'getMe');
   res(me.ok === true && me.result?.username === process.env.TELEGRAM_HUB_BOT_USERNAME, 'project bot token valid, username matches');

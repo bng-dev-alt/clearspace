@@ -7,6 +7,7 @@
  */
 import https from 'node:https';
 import http from 'node:http';
+import net from 'node:net';
 import { readFileSync } from 'node:fs';
 
 const [cert, key, httpsPort = '3472', appPort = '3471'] = process.argv.slice(2);
@@ -19,5 +20,19 @@ const server = https.createServer({ cert: readFileSync(cert), key: readFileSync(
   });
   up.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end('app not reachable'); });
   req.pipe(up);
+});
+// WebSocket upgrades (RUN 08): Next 16 dev (Turbopack) needs its HMR socket /_next/webpack-hmr -- without it the page never finishes loading
+server.on('upgrade', (req, client, head) => {
+  const up = net.connect(Number(appPort), '127.0.0.1', () => {
+    const lines = [`${req.method} ${req.url} HTTP/1.1`];
+    for (const [k, v] of Object.entries({ ...req.headers, host: `localhost:${httpsPort}`, 'x-forwarded-proto': 'https' })) {
+      for (const one of Array.isArray(v) ? v : [v]) lines.push(`${k}: ${one}`);
+    }
+    up.write(lines.join('\r\n') + '\r\n\r\n');
+    if (head?.length) up.write(head);
+    up.pipe(client); client.pipe(up);
+  });
+  const close = () => { up.destroy(); client.destroy(); };
+  up.on('error', close); client.on('error', close);
 });
 server.listen(Number(httpsPort), '127.0.0.1', () => console.log(`https-loopback-proxy: https://localhost:${httpsPort} -> http://127.0.0.1:${appPort} (local only)`));

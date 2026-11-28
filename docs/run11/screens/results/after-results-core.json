@@ -1,0 +1,3026 @@
+[
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1024,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 768,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 375,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1024,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 768,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 375,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1024,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 768,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 375,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1024,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 768,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "entry-point not found; ",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 375,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ }
+]

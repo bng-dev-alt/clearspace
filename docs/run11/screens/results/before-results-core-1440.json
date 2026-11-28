@@ -1,0 +1,1470 @@
+[
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div:nth-child(3) > h3"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".drawer-date-input"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 4,
+    "sample": [
+     ".toolbar-select",
+     "select[data-testid=\"drawer-status-select\"]"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 8,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     ".cs-badge"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "div:nth-child(1) > div:nth-child(1) > div > span:nth-child(1)"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "button[data-testid=\"open-ai-voice-copilot-btn\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 3,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "li[data-role=\"owner\"] > div:nth-child(1) > span[aria-hidden=\"true\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     ".cs-badge--accent",
+     ".cs-badge--warning"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     ".cs-badge--accent",
+     ".cs-badge--warning"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 5,
+    "sample": [
+     ".member-row:nth-child(2) > .member-main.member-cell > .member-avatar",
+     ".is-owner"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     ".cs-badge"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".ai-budget-edit-btn"
+    ]
+   },
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "main > div:nth-child(1) > div > span",
+     "tr:nth-child(1) > td:nth-child(5) > div"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-light",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     ".cs-badge--warning"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[data-testid=\"ai-generate-project-cta\"] > div:nth-child(1)"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".drawer-date-input"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 4,
+    "sample": [
+     ".toolbar-select",
+     "select[data-testid=\"drawer-status-select\"]"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 7,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     ".is-outside.calendar-day:nth-child(1) > .calendar-day-number"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "div:nth-child(1) > div:nth-child(1) > div > span:nth-child(1)"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "button[data-testid=\"open-ai-pm-btn\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "li[data-role=\"owner\"] > div:nth-child(1) > span[aria-hidden=\"true\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[title=\"Alice Owner\"]"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2,
+    "sample": [
+     "div[title=\"Alice Owner\"]",
+     "div[data-testid=\"global-search-modal\"] > div > div:nth-child(2) > button[type=\"button\"]:nth-child(1)"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     ".member-row:nth-child(2) > .member-main.member-cell > .member-avatar"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".ai-budget-edit-btn"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "existing-dark",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".drawer-date-input"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 4,
+    "sample": [
+     ".toolbar-select",
+     "select[data-testid=\"drawer-status-select\"]"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 6,
+    "sample": [
+     ".is-outside.calendar-day:nth-child(1) > .calendar-day-number",
+     ".calendar-week:nth-child(1) > .is-outside.calendar-day:nth-child(2) > .calendar-day-number"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".ai-budget-edit-btn"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-light",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "login",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "register",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "projects",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1,
+    "sample": [
+     "div[data-testid=\"ai-generate-project-cta\"] > div:nth-child(1)"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "board",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "card-drawer",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".drawer-date-input"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 4,
+    "sample": [
+     ".toolbar-select",
+     "select[data-testid=\"drawer-status-select\"]"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "new-task",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "calendar",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 6,
+    "sample": [
+     ".is-outside.calendar-day:nth-child(1) > .calendar-day-number",
+     ".calendar-week:nth-child(1) > .is-outside.calendar-day:nth-child(2) > .calendar-day-number"
+    ]
+   },
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "dashboard",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "intelligence",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "project-team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".toolbar-select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "notifications",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "user-menu",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "search",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "select-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     "select"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meetings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meeting-new",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "team",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "settings",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "ai-studio",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1,
+    "sample": [
+     ".ai-budget-edit-btn"
+    ]
+   }
+  ]
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "ai-history",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "about",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ },
+ {
+  "style": "monograph-dark",
+  "width": 1440,
+  "name": "meeting-detail",
+  "ok": true,
+  "overflow": null,
+  "note": "",
+  "axe": []
+ }
+]

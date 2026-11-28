@@ -3,6 +3,7 @@
 #   frontend/scripts/meetings-prod.sh pilot-on [minutes]   presenter-only pilot (MEETING_PILOT_USER_IDS = Hub pilot id from the Keychain),
 #                                                          live + Calendar write (pilot) + PI meetings, demo STT minutes/day (default 30)
 #   frontend/scripts/meetings-prod.sh minutes <n>          set the demo STT minutes/day (0 = no paid transcription)
+#   frontend/scripts/meetings-prod.sh tokens <n>           demo-tier daily AI token budget (standard 40000; one-off raise only with approval)
 #   frontend/scripts/meetings-prod.sh status              variable NAMES of the RUN 10 switches in Production
 # Variables apply to the NEXT deployment only (staged build + check + promote, docs/run10/OPERATIONS.md).
 set -uo pipefail
@@ -18,8 +19,10 @@ case "${1:-}" in
     plain AI_DEMO_STT_DAILY_AUDIO_MIN_PER_USER "${2:-30}"; plain AI_DEMO_STT_DAILY_AUDIO_MIN_GLOBAL "${2:-30}"
     echo "(variables apply to the NEXT deployment only)"; [ $fail = 0 ] || exit 1;;
   minutes) plain AI_DEMO_STT_DAILY_AUDIO_MIN_PER_USER "${2:?n}"; plain AI_DEMO_STT_DAILY_AUDIO_MIN_GLOBAL "$2"; [ $fail = 0 ] || exit 1;;
+  # demo tier (= AI_DEMO_USER_IDS = presenter only, ADR RUN 09-01) daily AI token budget; standard 40000 - a raise is a ONE-OFF with owner approval
+  tokens) case "${2:-}" in ''|*[!0-9]*) echo "usage: $0 tokens <n>"; exit 2;; esac; plain AI_DEMO_DAILY_TOKEN_BUDGET "$2"; [ $fail = 0 ] || exit 1;;
   status) "$V" api "/v10/projects/$PROJECT/env" --raw --scope "$SCOPE" 2>/dev/null | python3 -c '
 import json,sys
-print(" ".join(sorted(e["key"] for e in json.load(sys.stdin)["envs"] if "production" in (e.get("target") or []) and e["key"].startswith(("MEETING_","NEXT_PUBLIC_ENABLE_MEETING","CALENDAR_WRITE","AI_DEMO_STT")))))';;
+print(" ".join(sorted(e["key"] for e in json.load(sys.stdin)["envs"] if "production" in (e.get("target") or []) and e["key"].startswith(("MEETING_","NEXT_PUBLIC_ENABLE_MEETING","CALENDAR_WRITE","AI_DEMO_STT","AI_DEMO_DAILY")))))';;
   *) sed -n '2,8p' "$0"; exit 2;;
 esac

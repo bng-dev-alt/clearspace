@@ -32,7 +32,16 @@ export interface Meeting {
   languageHint: 'cs' | 'en' | null;
   createdAt: string;
   audio: MeetingAudio;
+  /** RUN 10: plánovaný konec a odkaz pro připojení (Google Meet z Kalendáře nebo ručně vložený odkaz Zoom/Teams/jiný). */
+  endsAt: string | null;
+  conferenceUrl: string | null;
+  createdBy: string | null;
+  live: { state: LiveState; ms: number; segments: number };
 }
+
+export type LiveState = 'idle' | 'live' | 'paused' | 'stopped' | 'finalized';
+
+export interface MeetingAttendee { email: string; displayName: string | null }
 
 export type SttState = 'none' | 'submitting' | 'unknown' | 'transcribing' | 'completed' | 'failed';
 
@@ -159,6 +168,10 @@ const mapMeeting = (r: any): Meeting => ({
   speakerNames: (r.speaker_names ?? {}) as Record<string, string>,
   languageHint: r.language_hint,
   createdAt: r.created_at,
+  endsAt: r.ends_at ?? null,
+  conferenceUrl: r.conference_url ?? null,
+  createdBy: r.created_by ?? null,
+  live: { state: (r.live_state ?? 'idle') as LiveState, ms: Number(r.live_ms ?? 0), segments: Number(r.live_segments ?? 0) },
   audio: {
     consentAt: r.consent_at ?? null,
     path: r.audio_path ?? null,
@@ -206,7 +219,29 @@ export interface NewMeetingInput {
   languageHint?: 'cs' | 'en' | null;
 }
 
-const accessCache = new Map<string, Promise<{ aiOwner: boolean; stt: boolean }>>();
+export interface MeetingAccess { aiOwner: boolean; stt: boolean; live: boolean; schedule: boolean }
+const accessCache = new Map<string, Promise<MeetingAccess>>();
+const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+
+/** Rozdělí vložené adresy (čárka, středník, nový řádek) na platné a neplatné; duplicity a velikost písmen sjednotí. */
+export function parseAttendees(raw: string): { valid: string[]; invalid: string[] } {
+  const valid = new Set<string>();
+  const invalid: string[] = [];
+  for (const part of raw.split(/[\s,;]+/).map((x) => x.trim().replace(/^<|>$/g, '').toLowerCase()).filter(Boolean)) {
+    if (EMAIL_RE.test(part) && part.length <= 254) valid.add(part); else invalid.push(part);
+  }
+  return { valid: [...valid].slice(0, 50), invalid };
+}
+
+export interface PlannedMeetingInput {
+  projectId: string;
+  title: string;
+  occurredAt: string;
+  endsAt: string | null;
+  conferenceUrl: string | null;
+  attendees: string[];
+  languageHint?: 'cs' | 'en' | null;
+}
 
 export const meetingService = {
   async list(projectId: string): Promise<Meeting[]> {
@@ -490,7 +525,7 @@ export const meetingService = {
   },
 
   /** Volání STT rout (server drží klíč Soniox; prohlížeč s poskytovatelem nikdy nemluví). */
-  async callStt(endpoint: 'transcribe' | 'sync' | 'purge' | 'sweep', body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async callStt(endpoint: 'transcribe' | 'sync' | 'purge' | 'sweep' | 'live', body: Record<string, unknown>): Promise<Record<string, unknown>> {
     requireSupabase();
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
@@ -512,8 +547,8 @@ export const meetingService = {
    * "Mám přístup k AI a přepisu?" -- jen UX (co zobrazit). Rozhoduje server (seznam vlastníků), tohle nic neoprávňuje. Výsledek se drží
    * podle uživatele; jakákoli chyba = bez přístupu (volby zvuku se nezobrazí, nic se neodešle).
    */
-  async aiAccess(): Promise<{ aiOwner: boolean; stt: boolean }> {
-    const none = { aiOwner: false, stt: false };
+  async aiAccess(): Promise<MeetingAccess> {
+    const none: MeetingAccess = { aiOwner: false, stt: false, live: false, schedule: false };
     if (!hasSupabaseConfig) return none;
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
@@ -525,8 +560,8 @@ export const meetingService = {
         try {
           const res = await fetch('/api/intelligence/access', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' });
           if (!res.ok) return none;
-          const j = (await res.json()) as { aiOwner?: unknown; stt?: unknown };
-          return { aiOwner: j.aiOwner === true, stt: j.stt === true };
+          const j = (await res.json()) as { aiOwner?: unknown; stt?: unknown; live?: unknown; schedule?: unknown };
+          return { aiOwner: j.aiOwner === true, stt: j.stt === true, live: j.live === true, schedule: j.schedule === true };
         } catch {
           return none;
         }
@@ -535,6 +570,114 @@ export const meetingService = {
       void p.then((r) => { if (!r.aiOwner) setTimeout(() => accessCache.delete(uid), 60_000); }); // zamítnutí se po minutě ověří znovu (po změně seznamu)
     }
     return p;
+  },
+
+  /**
+   * RUN 10: porada bez přepisu – naplánovaná nebo ad-hoc (živý přepis, nebo později nahraný záznam). `source_kind='audio'`, takže
+   * platí stejný souhlas, rozpočet a mazání jako u nahraného zvuku. Pozvaní (e-maily) se ukládají k poradě pro členy projektu.
+   */
+  async createPlanned(input: PlannedMeetingInput): Promise<{ meetingId: string }> {
+    requireSupabase();
+    const title = input.title.trim();
+    if (!title) throw new MeetingServiceError('invalid', 'Zadejte název porady.');
+    if (input.conferenceUrl && !/^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/[^\s<>"]*)?$/.test(input.conferenceUrl)) {
+      throw new MeetingServiceError('invalid', 'Odkaz na schůzku musí začínat https://.');
+    }
+    if (input.endsAt && Date.parse(input.endsAt) < Date.parse(input.occurredAt)) throw new MeetingServiceError('invalid', 'Konec porady nemůže být před začátkem.');
+    const { data: m, error } = await supabase
+      .from('meetings')
+      .insert({ project_id: input.projectId, title, occurred_at: input.occurredAt, ends_at: input.endsAt, conference_url: input.conferenceUrl,
+        source_kind: 'audio', language_hint: input.languageHint ?? null })
+      .select('id')
+      .single();
+    if (error || !m) fail(error ?? {});
+    const meetingId = (m as { id: string }).id;
+    if (input.attendees.length) {
+      const { error: aErr } = await supabase.from('meeting_attendees')
+        .insert(input.attendees.map((email) => ({ meeting_id: meetingId, project_id: input.projectId, email })));
+      if (aErr) fail(aErr);
+    }
+    return { meetingId };
+  },
+
+  async listAttendees(meetingId: string): Promise<MeetingAttendee[]> {
+    requireSupabase();
+    const { data, error } = await supabase.from('meeting_attendees').select('email, display_name').eq('meeting_id', meetingId).order('email');
+    if (error) fail(error);
+    return (data ?? []).map((r) => ({ email: (r as { email: string }).email, displayName: (r as { display_name: string | null }).display_name }));
+  },
+
+  async addAttendees(projectId: string, meetingId: string, emails: string[]): Promise<void> {
+    requireSupabase();
+    if (!emails.length) return;
+    const { error } = await supabase.from('meeting_attendees').upsert(emails.map((email) => ({ meeting_id: meetingId, project_id: projectId, email })), { onConflict: 'meeting_id,email', ignoreDuplicates: true });
+    if (error) fail(error);
+  },
+
+  async removeAttendee(meetingId: string, email: string): Promise<void> {
+    requireSupabase();
+    const { error } = await supabase.from('meeting_attendees').delete().eq('meeting_id', meetingId).eq('email', email);
+    if (error) fail(error);
+  },
+
+  async updateSchedule(meetingId: string, p: { title?: string; occurredAt?: string; endsAt?: string | null; conferenceUrl?: string | null }): Promise<void> {
+    requireSupabase();
+    const row: Record<string, unknown> = {};
+    if (p.title !== undefined) row.title = p.title.trim();
+    if (p.occurredAt !== undefined) row.occurred_at = p.occurredAt;
+    if (p.endsAt !== undefined) row.ends_at = p.endsAt;
+    if (p.conferenceUrl !== undefined) row.conference_url = p.conferenceUrl;
+    const { error } = await supabase.from('meetings').update(row).eq('id', meetingId);
+    if (error) fail(error);
+  },
+
+  /** Uložené (ještě nedokončené) části živého přepisu – pro obnovu po zavřené kartě. Seřazené podle segmentu a pořadí. */
+  async livePartial(meetingId: string): Promise<{ segment: number; text: string }[]> {
+    requireSupabase();
+    const { data, error } = await supabase.from('meeting_live_chunks').select('segment, seq, tokens').eq('meeting_id', meetingId).order('segment').order('seq').limit(2000);
+    if (error) fail(error);
+    return (data ?? []).map((r) => ({ segment: (r as { segment: number }).segment, text: ((r as { tokens: { text?: string }[] }).tokens ?? []).map((t) => t.text ?? '').join('') }));
+  },
+
+  /** Je přihlášený organizátorem porady (autor nebo vlastník projektu)? Jen UX – rozhoduje DB / server. */
+  async isOrganizer(meeting: Meeting): Promise<boolean> {
+    if (!hasSupabaseConfig) return false;
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id;
+    if (!uid) return false;
+    if (meeting.createdBy === uid) return true;
+    const { data: owner } = await supabase.rpc('is_project_owner', { p_project_id: meeting.projectId });
+    return owner === true;
+  },
+
+  /** Událost Kalendáře navázaná na poradu (sdílená metadata RUN 04; event id zůstává soukromé). */
+  async calendarLink(meetingId: string): Promise<{ linkId: string; state: string; start: string | null; organizer: string | null } | null> {
+    requireSupabase();
+    const { data, error } = await supabase.from('meeting_resource_links')
+      .select('link_id, external_resource_links!inner(provider, provider_state, event_start, event_organizer)')
+      .eq('meeting_id', meetingId).eq('external_resource_links.provider', 'google_calendar_event').limit(1);
+    if (error) fail(error);
+    const r = data?.[0] as { link_id: string; external_resource_links: { provider_state: string; event_start: string | null; event_organizer: string | null } | { provider_state: string; event_start: string | null; event_organizer: string | null }[] } | undefined;
+    if (!r) return null;
+    const l = Array.isArray(r.external_resource_links) ? r.external_resource_links[0] : r.external_resource_links;
+    return { linkId: r.link_id, state: l?.provider_state ?? 'ok', start: l?.event_start ?? null, organizer: l?.event_organizer ?? null };
+  },
+
+  /** Kalendář organizátora (RUN 10): vytvoření / synchronizace / zrušení události s Google Meet. */
+  async calendar(method: 'POST' | 'PATCH' | 'DELETE', body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    requireSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new MeetingServiceError('unauthenticated', 'Musíte se přihlásit.');
+    let res: Response;
+    try {
+      res = await fetch('/api/meetings/calendar', { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    } catch {
+      throw new MeetingServiceError(AI_NETWORK_ERROR.code, AI_NETWORK_ERROR.message);
+    }
+    const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) throw new MeetingServiceError(String(j.code ?? 'error'), typeof j.error === 'string' ? j.error : 'Operaci s Google Kalendářem se nepodařilo dokončit.');
+    return j;
   },
 
   async startTranscription(projectId: string, meetingId: string): Promise<{ started: boolean; state: SttState }> {

@@ -8,6 +8,7 @@ import { Badge, Button, EmptyState } from '../ui';
 import { meetingService, MeetingServiceError, type Meeting } from '../../services/meetingService';
 import { STATUS_LABEL } from './labels';
 import NewMeetingForm from './NewMeetingForm';
+import { conferenceProvider } from './ScheduleCard';
 import './meetings.css';
 
 export default function MeetingList({ projectId }: { projectId: string }) {
@@ -37,6 +38,11 @@ export default function MeetingList({ projectId }: { projectId: string }) {
     // zvuk, který už je nahraný, se maže i při vypnutém přepisu. Best-effort, jedna selhaná položka nezastaví ostatní.
     void meetingService.sweepAudio(projectId);
   }, [load, projectId]);
+
+  const now = Date.now();
+  const isUpcoming = (m: Meeting) => !m.currentRevision && m.live.state !== 'live' && Date.parse(m.endsAt ?? m.occurredAt) > now;
+  const upcoming = (meetings ?? []).filter(isUpcoming).sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt));
+  const past = (meetings ?? []).filter((m) => !isUpcoming(m));
 
   return (
     <section className="mi-page" aria-labelledby="mi-heading" data-testid="meetings-page">
@@ -69,27 +75,41 @@ export default function MeetingList({ projectId }: { projectId: string }) {
         <EmptyState
           icon={<CalendarClock size={28} />}
           title="Zatím žádné porady"
-          description="Vložte přepis porady a ClearSpace z něj navrhne rozhodnutí, úkoly a rizika. Do projektu se nic nezapíše bez vašeho schválení."
+          description="Naplánujte poradu nebo vložte přepis. ClearSpace z něj navrhne rozhodnutí, úkoly a rizika; do projektu se nic nezapíše bez vašeho schválení."
         />
       ) : (
-        <ul className="mi-list" data-testid="meeting-list">
-          {meetings.map((m) => (
-            <li key={m.id} className="mi-card">
-              <div className="mi-row" style={{ justifyContent: 'space-between' }}>
-                <Link href={`/projects/${projectId}/meetings/${m.id}`} data-testid={`meeting-link-${m.id}`}>
-                  <strong>{m.title}</strong>
-                </Link>
-                <div className="mi-row">
-                  <Badge variant={m.status === 'ready' ? 'accent' : 'default'}>{STATUS_LABEL[m.status]}</Badge>
-                  {pending[m.id] ? <Badge variant="warning">{pending[m.id]} čeká na schválení</Badge> : null}
-                </div>
+        <>
+          {[['Nadcházející', upcoming, 'meeting-list-upcoming'], ['Proběhlé', past, 'meeting-list']].map(([label, list, tid]) =>
+            (list as Meeting[]).length === 0 ? null : (
+              <div key={tid as string} className="mi-field">
+                <h2 style={{ fontSize: '1rem' }}>{label as string}</h2>
+                <ul className="mi-list" data-testid={tid as string}>
+                  {(list as Meeting[]).map((m) => (
+                    <li key={m.id} className="mi-card">
+                      <div className="mi-row" style={{ justifyContent: 'space-between' }}>
+                        <Link href={`/projects/${projectId}/meetings/${m.id}`} data-testid={`meeting-link-${m.id}`}>
+                          <strong>{m.title}</strong>
+                        </Link>
+                        <div className="mi-row">
+                          {m.live.state === 'live' && <Badge variant="danger">● Přepis běží</Badge>}
+                          {(m.live.state === 'paused' || m.live.state === 'stopped') && <Badge variant="warning">Přepis nedokončen</Badge>}
+                          {(m.currentRevision || m.status !== 'draft') && <Badge variant={m.status === 'ready' ? 'accent' : 'default'}>{STATUS_LABEL[m.status]}</Badge>}
+                          {m.status === 'draft' && !m.currentRevision && m.live.state === 'idle' && <Badge>Bez přepisu</Badge>}
+                          {pending[m.id] ? <Badge variant="warning">{pending[m.id]} čeká na schválení</Badge> : null}
+                        </div>
+                      </div>
+                      <span className="mi-muted">
+                        {new Date(m.occurredAt).toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' })}
+                        {m.endsAt ? ` · ${Math.round((Date.parse(m.endsAt) - Date.parse(m.occurredAt)) / 60000)} min` : m.live.ms ? ` · ${Math.round(m.live.ms / 60000)} min přepisu` : ''}
+                        {' · '}{m.sourceKind === 'text' ? 'vložený přepis' : m.live.segments ? 'živý přepis' : m.audio.path ? 'nahraný záznam' : 'zvuk'}
+                        {m.conferenceUrl ? ` · ${conferenceProvider(m.conferenceUrl)}` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <span className="mi-muted">
-                {new Date(m.occurredAt).toLocaleDateString('cs-CZ')} · {m.sourceKind === 'text' ? 'text' : 'audio'}
-              </span>
-            </li>
-          ))}
-        </ul>
+            ))}
+        </>
       )}
     </section>
   );

@@ -18,7 +18,7 @@ import { MeetingServiceError, type Meeting } from '../../services/meetingService
 const svc = () => h.svc as Record<string, ReturnType<typeof vi.fn>>;
 const meeting = (audio: Partial<Meeting['audio']> = {}): Meeting => ({
   id: 'm1', projectId: 'p1', title: 'Audio', occurredAt: '2026-11-18T10:00:00Z', sourceKind: 'audio', status: 'uploaded', currentRevision: null,
-  speakerNames: {}, languageHint: null, createdAt: '',
+  speakerNames: {}, languageHint: null, createdAt: '', endsAt: null, conferenceUrl: null, createdBy: null, live: { state: 'idle', ms: 0, segments: 0 },
   audio: { consentAt: '2026-11-18T09:00:00Z', path: 'p1/m1/f.mp3', bytes: 3_145_728, uploadedAt: '2026-11-18T09:01:00Z', deleteAfter: null, deletedAt: null, sttState: 'none', attempts: 0, errorType: null, audioMs: null, costUsd: null, model: null, cleanupPending: false, ...audio },
 });
 const FAST = { first: 5, max: 10 };

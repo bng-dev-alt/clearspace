@@ -22,6 +22,10 @@ import { KIND_LABEL, KIND_ORDER, STATUS_LABEL, STEPS, stepIndex } from './labels
 import ItemCard from './ItemCard';
 import TranscriptView from './TranscriptView';
 import AudioPanel from './AudioPanel';
+import LivePanel from './LivePanel';
+import ScheduleCard from './ScheduleCard';
+import { LIVE_ENABLED } from './NewMeetingForm';
+import type { MeetingAccess } from '../../services/meetingService';
 import './meetings.css';
 
 export default function MeetingDetail({ projectId, meetingId }: { projectId: string; meetingId: string }) {
@@ -46,6 +50,8 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
   const [editText, setEditText] = useState('');
   const [editNote, setEditNote] = useState('');
   const [savingRev, setSavingRev] = useState(false);
+  const [access, setAccess] = useState<MeetingAccess>({ aiOwner: false, stt: false, live: false, schedule: false });
+  const [organizer, setOrganizer] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +61,9 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
         return;
       }
       setMeeting(m);
+      // jen UX; selhání = bez ovládacích prvků organizátora (rozhoduje server)
+      void Promise.resolve().then(() => meetingService.isOrganizer(m)).then(setOrganizer, () => setOrganizer(false));
+      if (LIVE_ENABLED) void Promise.resolve().then(() => meetingService.aiAccess()).then(setAccess, () => undefined);
       const [r, it, board, mem, revs] = await Promise.all([
         meetingService.latestRun(meetingId),
         meetingService.listItems(meetingId),
@@ -251,7 +260,18 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
         )}
       </div>
 
-      {meeting.sourceKind === 'audio' && <AudioPanel meeting={meeting} projectId={projectId} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />}
+      {meeting.sourceKind === 'audio' && (meeting.endsAt || meeting.conferenceUrl || meeting.live.segments > 0 || !meeting.audio.path) && (
+        <ScheduleCard meeting={meeting} projectId={projectId} isOrganizer={organizer} canSchedule={LIVE_ENABLED && access.schedule} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
+      )}
+      {meeting.sourceKind === 'audio' && LIVE_ENABLED && access.live && !meeting.audio.path && !meeting.currentRevision && (
+        <LivePanel meeting={meeting} projectId={projectId} isOrganizer={organizer} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
+      )}
+      {meeting.sourceKind === 'audio' && meeting.live.state === 'finalized' && (
+        <p className="mi-muted" data-testid="live-finalized">Přepsáno živě ({meeting.audio.model ?? 'Soniox real-time'}) · délka {Math.round(meeting.live.ms / 60000)} min{meeting.audio.costUsd !== null ? ` · odhad nákladů ${meeting.audio.costUsd.toFixed(3)} USD` : ''} · zvuk se neukládal.</p>
+      )}
+      {meeting.sourceKind === 'audio' && (meeting.audio.path || (meeting.live.segments === 0 && !meeting.currentRevision)) && (
+        <AudioPanel meeting={meeting} projectId={projectId} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
+      )}
       {transcript && revisions.find((r) => r.revision === viewRev)?.source === 'soniox' && (
         <p className="mi-muted" role="note" data-testid="machine-transcript-note">
           Strojový přepis (Soniox): může obsahovat chyby v jménech a číslech. Zkontrolujte ho a doplňte jména mluvčích před analýzou.

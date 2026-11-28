@@ -203,7 +203,7 @@ export default function AiControlCenterPage() {
         {/* 4. History Log Section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--dark-navy)', margin: 0 }}>
-            Historie požadavků a ladění (Request Logs)
+            Historie AI požadavků
           </h2>
           <AiRequestHistory history={history} />
         </div>

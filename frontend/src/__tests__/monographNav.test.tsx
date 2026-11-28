@@ -10,7 +10,7 @@ const ITEMS = [
   entry('board', 'Board', '/projects/p1', true),
   entry('projects', 'Projekty', '/'),
   entry('ai-studio', 'AI Studio', '/ai-control-center'),
-  entry('ai-history', 'AI History', '/ai-history'),
+  entry('ai-history', 'Historie AI', '/ai-history'),
   entry('team', 'Tým', '/team'),
 ];
 

@@ -3573,15 +3573,21 @@ body {
   }
 }
 
-/* ---------- Navbar: nové prvky (hledání, výběr AI modelu) ----------
-   Hledání a výběr modelu přibyly do .navbar-right a na tabletu už se
+/* ---------- Navbar: hledání na tabletu ----------
+   Hledání přibylo do .navbar-right a na tabletu už se
    lišta nevešla (přetékala o 29px). Desktop zůstává beze změny. */
 @media (min-width: 768px) and (max-width: 1023px) {
   /* Hledání jen jako ikona -- zkratka ⌘K stejně na tabletu není po ruce. */
   .navbar-search-hint { display: none; }
-  /* Výběr modelu je dostupný i v panelu Project Intelligence,
-     takže se o něj na tabletu nepřijde. */
-  .navbar-model-selector { display: none; }
+}
+
+/* RUN 11 (D5): Classic pod 1280 px – přepínač vzhledu a motivu se přesouvá do menu avataru, lišta nepřetéká (dřív 1136 px při 1024).
+   Monograph má rail a vlastní lištu, ta se nemění. Na mobilu (< 768) žije vše v hamburger menu jako dosud. */
+.navbar-appearance { display: contents; }
+.navbar-dropdown-appearance { display: none; }
+@media (max-width: 1279px) {
+  html:not([data-style="monograph"]) .navbar-appearance { display: none; }
+  html:not([data-style="monograph"]) .navbar-dropdown-appearance { display: flex; flex-direction: column; gap: 0.4rem; }
 }
 
 /* Na mobilu je celý .navbar-right skrytý -- hledání proto žije
@@ -3794,4 +3800,29 @@ body {
 @media (max-width: 640px) {
   .hub-destination, .hub-code { padding: 0.6rem; }
   .hub-tabs { padding: 0 0.75rem 0.5rem; }
+}
+
+/* ---------- RUN 11 (D4): hlavička projektu (bývalý šablonový hero) ----------
+   Dřív inline styly tlačítka sbalení – přesunuto sem beze změny vzhledu. Hlavička projektu je nižší než hero úvodních stránek. */
+.hide-hero-btn {
+  position: absolute; top: 1rem; right: var(--page-pad); z-index: 1;
+  display: flex; align-items: center; justify-content: center; padding: 0.25rem;
+  background: none; border: none; border-radius: 50%; color: var(--text-secondary); cursor: pointer; transition: var(--transition-base);
+}
+.hide-hero-btn:hover { background: var(--surface-2); color: var(--text); }
+.hide-hero-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-hero.project-header:not(.collapsed) { padding-top: 2.25rem; padding-bottom: 1.75rem; }
+.project-facts { margin-top: 0.5rem; overflow-wrap: anywhere; }
+.app-hero.project-header .hero-title { overflow-wrap: anywhere; }
+
+/* ---------- RUN 11 (D9): mobilní board – board výš, hlavní akce nahoře ----------
+   4 metriky v jednom řádku (číslo + popisek, bez ikon), „Nový úkol“ jako první akce toolbaru (dřív jen v menu). */
+@media (max-width: 767px) {
+  .app-stats-row { flex-wrap: nowrap; gap: 0.4rem; }
+  .app-stats-row > .cs-metric { flex: 1 1 0; min-width: 0; padding: 0.5rem 0.5rem; gap: 0; flex-direction: column; align-items: flex-start; }
+  .app-stats-row .cs-metric-icon { display: none; }
+  .app-stats-row .cs-metric-value { font-size: 1.15rem; line-height: 1.1; order: -1; }
+  .app-stats-row .cs-metric-label { font-size: 0.56rem; white-space: normal; }
+  .app-stats-row .cs-metric-action { display: none; }
+  .app-toolbar .toolbar-new-task-btn { display: inline-flex; order: -1; flex: 1 1 100%; justify-content: center; min-height: 44px; }
 }

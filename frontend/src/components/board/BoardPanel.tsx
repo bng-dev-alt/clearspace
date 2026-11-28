@@ -3,21 +3,20 @@ import React from 'react';
 interface BoardPanelProps {
   children: React.ReactNode;
   projectName: string;
+  /** RUN 11: the project name is the page H1 now; the panel repeats it only when the project header is collapsed. */
+  showTitle?: boolean;
 }
 
-export default function BoardPanel({ children, projectName }: BoardPanelProps) {
+export default function BoardPanel({ children, projectName, showTitle = true }: BoardPanelProps) {
   return (
     <div className="board-panel-card">
-      <div className="board-panel-header">
-        <div className="panel-header-left">
-          <span className="panel-subtitle">YOUR WORKSPACE</span>
-          <h2 className="panel-title">{projectName}</h2>
+      {showTitle && (
+        <div className="board-panel-header">
+          <div className="panel-header-left">
+            <h2 className="panel-title">{projectName}</h2>
+          </div>
         </div>
-        <div className="panel-header-right">
-          <span className="live-status-dot" />
-          <span className="live-status-text">Live board</span>
-        </div>
-      </div>
+      )}
 
       <main className="board-container" data-testid="board-container">
         {children}

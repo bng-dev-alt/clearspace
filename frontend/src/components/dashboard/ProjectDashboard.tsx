@@ -187,9 +187,9 @@ export default function ProjectDashboard() {
       <section className="app-hero">
         <div className="hero-content">
           <div className="hero-left">
-            <span className="hero-team-label">VÍTEJTE V PORTÁLU</span>
+            <span className="hero-team-label">Projekty</span>
             <h1 className="hero-title">Vaše projekty.</h1>
-            <p className="hero-desc">Čistý prostor pro koordinaci a plánování vašich týmů.</p>
+            <p className="hero-desc">Všechny projekty, ke kterým máte přístup.</p>
           </div>
           <div className="hero-right">
             {/* CTA buttons removed to focus on distinct premium cards below */}
@@ -229,7 +229,7 @@ export default function ProjectDashboard() {
               <Plus size={24} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dark-navy)', margin: 0 }}>➕ New Project</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--dark-navy)', margin: 0 }}>Nový projekt</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', margin: 0 }}>Vytvořit prázdný projekt a začít od čistého boardu.</p>
             </div>
           </div>
@@ -263,13 +263,13 @@ export default function ProjectDashboard() {
             data-testid="ai-generate-project-cta"
           >
             <div style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', fontSize: '0.55rem', fontWeight: 800, background: 'var(--purple-secondary)', color: '#ffffff', padding: '0.15rem 0.45rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              AI Engine
+              AI
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: 'var(--radius-card)', backgroundColor: 'var(--surface)', color: 'var(--accent)', flexShrink: 0 }}>
               <Sparkles size={22} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--purple-secondary)', margin: 0 }}>✨ Generate Project</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--purple-secondary)', margin: 0 }}>Vygenerovat projekt s AI</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', margin: 0 }}>AI navrhne na míru celou architekturu sloupců i backlog.</p>
             </div>
           </div>

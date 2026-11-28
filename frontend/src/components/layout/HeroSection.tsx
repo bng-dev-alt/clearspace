@@ -1,73 +1,32 @@
 import { X } from 'lucide-react';
 
 interface HeroSectionProps {
-  totalTasks: number;
+  /** H1 of the project page. */
+  projectName: string;
+  /** Short real facts about the project (role, members, overdue…); empty items are skipped. */
+  facts: Array<string | null | false | undefined>;
   onClose: () => void;
   isCollapsed: boolean;
 }
 
-export default function HeroSection({ totalTasks, onClose, isCollapsed }: HeroSectionProps) {
-  const thisWeekCount = totalTasks < 10 ? `0${totalTasks}` : `${totalTasks}`;
-  
-  // Projektově specifický Focus Note
-  const focusNoteTitle = totalTasks === 0 ? "Začněte plánovat nový projekt" : "Keep the work moving.";
-  const focusNoteSub = totalTasks === 0 ? "Přidejte karty do sloupců a začněte dělat pokroky." : "A thoughtful handoff is progress too.";
-
+/**
+ * Project header (RUN 11, D4): the project's own name and a single line of real facts. Replaces the template hero
+ * ("PRODUCT TEAM / Q3", "Make meaningful progress.", "THIS WEEK" that counted ALL tasks) – nothing here is decorative or invented.
+ * The collapse button and the stored preference (hide_hero_section) are unchanged.
+ */
+export default function HeroSection({ projectName, facts, onClose, isCollapsed }: HeroSectionProps) {
+  const line = facts.filter(Boolean) as string[];
   return (
-    <section className={`app-hero ${isCollapsed ? 'collapsed' : ''}`} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        className="hide-hero-btn"
-        onClick={onClose}
-        style={{
-          position: 'absolute',
-          top: '1rem',
-          right: '3rem',
-          background: 'none',
-          border: 'none',
-          color: 'var(--gray-text)',
-          cursor: 'pointer',
-          padding: '0.25rem',
-          borderRadius: '50%',
-          transition: 'all 0.2s',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.05)';
-          e.currentTarget.style.color = 'var(--dark-navy)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-          e.currentTarget.style.color = 'var(--gray-text)';
-        }}
-        title="Skrýt hlavičku"
-        data-testid="hide-hero-btn"
-      >
-        <X size={16} />
+    <section className={`app-hero project-header ${isCollapsed ? 'collapsed' : ''}`} style={{ position: 'relative' }}>
+      <button type="button" className="hide-hero-btn" onClick={onClose} title="Skrýt hlavičku projektu" aria-label="Skrýt hlavičku projektu" data-testid="hide-hero-btn">
+        <X size={16} aria-hidden="true" />
       </button>
-
       <div className="hero-collapse-inner">
         <div className="hero-content">
           <div className="hero-left">
-            <span className="hero-team-label">PRODUCT TEAM / Q3</span>
-            <h1 className="hero-title">Make meaningful progress.</h1>
-            <p className="hero-desc">A calm space for the work that moves your team forward.</p>
-          </div>
-          <div className="hero-right">
-            <div className="hero-double-cards">
-              <div className="hero-info-card highlighted-border">
-                <span className="info-card-label">THIS WEEK</span>
-                <span className="info-card-huge" data-testid="hero-this-week-count">{thisWeekCount}</span>
-                <span className="info-card-sub">things thoughtfully moving forward</span>
-              </div>
-              <div className="hero-info-card">
-                <span className="info-card-label">FOCUS NOTE</span>
-                <span className="info-card-title">{focusNoteTitle}</span>
-                <span className="info-card-sub">{focusNoteSub}</span>
-              </div>
-            </div>
+            <span className="hero-team-label">Projekt</span>
+            <h1 className="hero-title" data-testid="project-title">{projectName}</h1>
+            {line.length > 0 && <p className="hero-desc project-facts" data-testid="project-facts">{line.join(' · ')}</p>}
           </div>
         </div>
       </div>

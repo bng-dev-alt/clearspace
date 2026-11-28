@@ -249,17 +249,6 @@ export default function Toolbar({
         <div className="toolbar-right">
           <button
             type="button"
-            className="toolbar-settings-btn"
-            title="Nastavení (připravujeme)"
-            aria-label="Nastavení (připravujeme)"
-            disabled
-            style={{ opacity: 0.55, cursor: 'not-allowed' }}
-          >
-            <Settings size={18} />
-          </button>
-
-          <button
-            type="button"
             onClick={onToggleHero}
             className="toolbar-settings-btn"
             title={isHeroHidden ? 'Zobrazit info' : 'Skrýt info'}

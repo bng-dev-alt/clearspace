@@ -10,7 +10,6 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { useTheme, ThemeChoice } from '../../contexts/ThemeContext';
 import { deriveInitials } from '../../services/workspaceService';
 import { LogOut, Sun, Moon, Monitor, Menu, X, Sparkles, Plus, LayoutGrid, CalendarDays, LayoutDashboard, Search, Link2 } from 'lucide-react';
-import AiModelSelector from '../ai/AiModelSelector';
 import { MONOGRAPH_ENABLED, type DesignStyle } from '../../lib/designStyle';
 import { MonographRail, MonographBottomNav, MonographSubNav, type NavEntry, type SubNavItem } from './MonographNav';
 
@@ -187,7 +186,7 @@ export default function Navbar({ boardActions }: NavbarProps) {
           },
           {
             key: 'ai-history',
-            label: 'AI History',
+            label: 'Historie AI',
             href: '/ai-history',
             onClick: closeMenu,
             active: pathname === '/ai-history',
@@ -226,7 +225,7 @@ export default function Navbar({ boardActions }: NavbarProps) {
       label: 'AI',
       items: [
         { label: 'AI Studio', href: '/ai-control-center', active: pathname === '/ai-control-center' },
-        { label: 'AI History', href: '/ai-history', active: pathname === '/ai-history' },
+        { label: 'Historie AI', href: '/ai-history', active: pathname === '/ai-history' },
       ],
     };
   }
@@ -290,10 +289,8 @@ export default function Navbar({ boardActions }: NavbarProps) {
             </span>
           </button>
         )}
-        <span className="navbar-model-selector">
-          <AiModelSelector compact />
-        </span>
-        <ThemeToggle />
+        {/* RUN 11: the AI model is a server setting (GEMINI_MODEL); the old picker here only wrote localStorage and changed nothing */}
+        <span className="navbar-appearance"><ThemeToggle /></span>
         <button
           type="button"
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -344,6 +341,12 @@ export default function Navbar({ boardActions }: NavbarProps) {
             </div>
 
             <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '0.25rem 0' }} />
+
+            {/* Classic < 1280 px: appearance moves here from the bar (D5), so the bar never overflows */}
+            <div className="navbar-dropdown-appearance" data-testid="navbar-dropdown-appearance">
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Vzhled a motiv</span>
+              <ThemeToggle />
+            </div>
 
             <Link
               href="/settings"

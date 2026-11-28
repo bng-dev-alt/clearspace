@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sora.variable} ${fraunces.variable}`} suppressHydrationWarning>
+    <html lang="cs" className={`${sora.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <head>
         {/* Nastaví téma před prvním vykreslením -> žádné bliknutí (FOUC). */}
         <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />

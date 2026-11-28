@@ -49,8 +49,9 @@ describe('Kanban Board App Unit Tests', () => {
     render(<KanbanBoard />);
     await screen.findByText('Vývoj MVP');
     
-    // Hlavička z clearspace.
-    expect(screen.getByRole('heading', { name: 'Make meaningful progress.', level: 1 })).toBeInTheDocument();
+    // RUN 11 (D4): the page H1 is the project's own name (no template hero copy)
+    expect(screen.getByRole('heading', { name: 'Vývoj MVP', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText('Make meaningful progress.')).toBeNull();
     
     // Počátečních 5 sloupců v češtině
     expect(screen.getByTestId('column-title-column-1')).toHaveTextContent('Nápady');
@@ -145,7 +146,7 @@ describe('Kanban Board App Unit Tests', () => {
     
     // Ověření otevření editačního panelu (draweru)
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Task Detail')).toBeInTheDocument();
+    expect(screen.getByText('Detail úkolu')).toBeInTheDocument();
     
     // Ověření předvyplněného názvu
     const titleInput = screen.getByTestId('drawer-title-input') as HTMLInputElement;

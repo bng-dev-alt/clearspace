@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { plural } from '../../../lib/plural';
 import { DialogFocus } from '../../../components/ui/useDialogFocus';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
@@ -209,7 +210,15 @@ export default function ProjectBoardPage() {
   }, []);
 
   // Ambientní zdraví projektu pro pulse chip v toolbaru a "chytré" dlaždice (deterministické).
-  const intelHealth = useMemo(() => computeProjectIntelligence(columns).health, [columns]);
+  const intel = useMemo(() => computeProjectIntelligence(columns), [columns]);
+  const intelHealth = intel.health;
+  // RUN 11 (D4): one line of REAL facts under the project name (role, members, overdue from the same deterministic intelligence)
+  const overdueFact = intel.insights.find((i) => i.id === 'overdue')?.fact;
+  const projectFacts = [
+    myRole ? `Vaše role: ${ROLE_LABEL[myRole]}` : null,
+    roster.length > 0 ? `${roster.length} ${plural(roster.length, 'člen', 'členové', 'členů')}` : null,
+    overdueFact ?? null,
+  ];
 
   // Klávesová zkratka ⌘I / Ctrl+I otevře Project Intelligence.
   useEffect(() => {
@@ -570,7 +579,8 @@ export default function ProjectBoardPage() {
         }}
       />
       <HeroSection
-        totalTasks={totalTasks}
+        projectName={project?.name || 'Projekt'}
+        facts={projectFacts}
         onClose={() => {
           setIsHeroHidden(true);
           localStorage.setItem('hide_hero_section', 'true');
@@ -739,6 +749,7 @@ export default function ProjectBoardPage() {
       ) : (
       <BoardPanel
         projectName={project?.name || 'Načítání projektu...'}
+        showTitle={isHeroHidden}
       >
         {processedColumns.map((col, index) => (
           <Column

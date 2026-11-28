@@ -23,7 +23,6 @@ import {
   type InsightSeverity,
 } from '../../lib/projectIntelligence';
 import { aiClient } from '../../services/ai/aiClient';
-import AiModelSelector from '../ai/AiModelSelector';
 import ProjectBriefPanel from '../intelligence/ProjectBriefPanel';
 import KnowledgePanel from '../intelligence/KnowledgePanel';
 
@@ -261,42 +260,35 @@ export default function ProjectIntelligenceDrawer({
             <span className="pi-brand">
               <Sparkles size={16} /> Project Intelligence
             </span>
-            <AiModelSelector compact />
           </div>
 
-          <div className="pi-mode-switch" data-testid="pi-mode-switcher">
+          <div className="pi-mode-switch" data-testid="pi-mode-switcher" role="group" aria-label="Umístění panelu">
             <button
               type="button"
               className={`pi-mode-btn ${mode === 'left' ? 'active' : ''}`}
               onClick={() => handleModeChange('left')}
               data-testid="pi-mode-btn-left"
+              aria-pressed={mode === 'left'}
             >
-              <AlignLeft size={13} /> Left
+              <AlignLeft size={13} /> Vlevo
             </button>
             <button
               type="button"
               className={`pi-mode-btn ${mode === 'focused' ? 'active' : ''}`}
               onClick={() => handleModeChange('focused')}
               data-testid="pi-mode-btn-focused"
+              aria-pressed={mode === 'focused'}
             >
-              <Maximize2 size={13} /> Focused
+              <Maximize2 size={13} /> Soustředěně
             </button>
             <button
               type="button"
               className={`pi-mode-btn ${mode === 'right' ? 'active' : ''}`}
               onClick={() => handleModeChange('right')}
               data-testid="pi-mode-btn-right"
+              aria-pressed={mode === 'right'}
             >
-              <AlignRight size={13} /> Right
-            </button>
-            <button
-              type="button"
-              className="pi-mode-btn"
-              disabled
-              title="Fullscreen (připravuje se)"
-              data-testid="pi-mode-btn-fullscreen"
-            >
-              Fullscreen
+              <AlignRight size={13} /> Vpravo
             </button>
           </div>
 

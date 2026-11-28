@@ -104,7 +104,7 @@ export default function AiHistoryPage() {
           <ShieldAlert size={48} style={{ color: 'var(--purple-secondary)', marginBottom: '1rem' }} />
           <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--dark-navy)' }}>Přístup vyhrazen pro Admina a Ownera</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--gray-text)', marginTop: '0.5rem' }}>
-            Podstránka AI History je dostupná pouze pro administrátory a vlastníka workspace.
+            Historie AI je dostupná pouze pro administrátory a vlastníka workspace.
           </p>
         </div>
       </div>
@@ -120,7 +120,7 @@ export default function AiHistoryPage() {
         <div className="hero-content">
           <div className="hero-left">
             <span className="hero-team-label">SYSTÉMOVÉ LOGY</span>
-            <h1 className="hero-title">AI History</h1>
+            <h1 className="hero-title">Historie AI</h1>
             <p className="hero-desc">Plně vratná historie AI operací — obnovte stav boardu před danou změnou.</p>
           </div>
           <div className="hero-right" />

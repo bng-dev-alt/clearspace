@@ -155,7 +155,7 @@ describe('TaskDetailDrawer Presentation Modes Unit Tests', () => {
     expect(localStorage.getItem('task_detail_mode')).toBe('right');
   });
 
-  test('renders extensibility placeholder button in mode switcher', () => {
+  test('shows only working placement modes (no inactive placeholder)', () => {
     render(
       <TaskDetailDrawer
         isOpen={true}
@@ -177,8 +177,10 @@ describe('TaskDetailDrawer Presentation Modes Unit Tests', () => {
       />
     );
 
-    const btnFullscreen = screen.getByTestId('mode-btn-fullscreen');
-    expect(btnFullscreen).toBeDisabled();
-    expect(btnFullscreen).toHaveTextContent('Fullscreen');
+    // RUN 11 (D7): no inactive "coming soon" control – only the three modes that work, each with its pressed state
+    expect(screen.queryByTestId('mode-btn-fullscreen')).toBeNull();
+    expect(screen.getByTestId('mode-btn-right')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('mode-btn-left')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('mode-switcher')).toHaveTextContent('VlevoSoustředěněVpravo');
   });
 });

@@ -431,13 +431,13 @@ export default function TaskDetailDrawer({
         <div className="drawer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="drawer-header-left">
             <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--blue-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <CheckSquare size={14} /> Task Detail
+              <CheckSquare size={14} /> Detail úkolu
             </span>
           </div>
           
           {/* View Mode Switcher -- layout v CSS (dřív inline), aby na něj dosáhly
               breakpointy; na mobilu je drawer vždy fullscreen, takže se skrývá. */}
-          <div className="drawer-mode-switch" data-testid="mode-switcher">
+          <div className="drawer-mode-switch" data-testid="mode-switcher" role="group" aria-label="Umístění detailu úkolu">
             <button
               type="button"
               onClick={() => handleModeChange('left')}
@@ -458,9 +458,10 @@ export default function TaskDetailDrawer({
                 transition: 'all 0.2s ease',
               }}
               data-testid="mode-btn-left"
+              aria-pressed={mode === 'left'}
             >
               <AlignLeft size={13} />
-              Left
+              Vlevo
             </button>
 
             <button
@@ -483,9 +484,10 @@ export default function TaskDetailDrawer({
                 transition: 'all 0.2s ease',
               }}
               data-testid="mode-btn-focused"
+              aria-pressed={mode === 'focused'}
             >
               <Maximize2 size={13} />
-              Focused
+              Soustředěně
             </button>
 
             <button
@@ -508,34 +510,12 @@ export default function TaskDetailDrawer({
                 transition: 'all 0.2s ease',
               }}
               data-testid="mode-btn-right"
+              aria-pressed={mode === 'right'}
             >
               <AlignRight size={13} />
-              Right
+              Vpravo
             </button>
 
-            {/* Extensibility Architecture Placeholders (Disabled) */}
-            <button
-              type="button"
-              disabled
-              style={{
-                border: 'none',
-                outline: 'none',
-                background: 'none',
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                color: 'var(--border)',
-                padding: '0.35rem 0.65rem',
-                borderRadius: '6px',
-                cursor: 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-              }}
-              title="Architektonické rozšíření: Fullscreen (připravuje se)"
-              data-testid="mode-btn-fullscreen"
-            >
-              Fullscreen
-            </button>
           </div>
 
           <div className="drawer-header-right">

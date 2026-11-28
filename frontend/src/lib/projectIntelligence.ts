@@ -1,4 +1,5 @@
 import type { Card, Column, ColumnRole } from '../types/kanban';
+import { plural } from './plural';
 
 /**
  * Project Intelligence -- deterministický "mozek" projektu.
@@ -284,8 +285,4 @@ export function computeProjectIntelligence(
 }
 
 /** České skloňování 1 / 2-4 / 5+ */
-function plural(n: number, one: string, few: string, many: string): string {
-  if (n === 1) return one;
-  if (n >= 2 && n <= 4) return few;
-  return many;
-}
+

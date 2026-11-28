@@ -25,6 +25,8 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
   account_mismatch: { kind: 'error', text: 'Gmail nebo Google Kalendář je potřeba připojit ze stejného účtu Google, který už máte připojený. Nic se nezměnilo.' },
   // RUN 04
   calendar_connected: { kind: 'info', text: 'Google Kalendář je připojený (jen čtení). Události do projektů připojujete vždy sami; vaše ostatní události vidíte jen vy.' },
+  meetings_connected: { kind: 'info', text: 'Plánování porad je zapnuté: ClearSpace smí na váš pokyn vytvořit, upravit nebo zrušit událost porady ve vašem kalendáři. Pozvánky pošle Google jen tehdy, když to u události výslovně zvolíte.' },
+  meetings_denied: { kind: 'error', text: 'Oprávnění k vytváření událostí nebylo povoleno. Ostatní propojení zůstávají beze změny.' },
   calendar_denied: { kind: 'error', text: 'Přístup ke Google Kalendáři nebyl povolen. Ostatní propojení (Google Disk, Gmail) zůstávají beze změny.' },
 };
 
@@ -101,6 +103,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   const calendarOn = serviceActive(status, 'calendar');
   const driveOn = serviceActive(status, 'drive');
   const gmailOn = serviceActive(status, 'gmail');
+  const meetingsOn = serviceActive(status, 'meetings');
   const active = c?.status === 'active';
   return (
     <section className="settings-card" data-testid="google-connection-card" aria-labelledby="google-card-title">
@@ -172,6 +175,25 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
                 <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => connect('calendar')} disabled={busy} data-testid="calendar-connect-settings">{busy ? 'Přesměrování…' : 'Připojit Google Kalendář'}</button>
               ))}
             </li>
+            {status.meetingsAvailable && (
+              <li className="settings-service" data-testid="meetings-service">
+                <div>
+                  <strong><CalendarDays size={13} aria-hidden="true" /> Plánování porad (zápis do Kalendáře)</strong>
+                  <p data-testid="meetings-service-state">
+                    {meetingsOn ? 'Povoleno.' : 'Nepovoleno.'}{' '}
+                    Jen na váš pokyn u konkrétní porady: vytvoří událost ve vašem kalendáři (volitelně s odkazem Google Meet), upraví ji nebo zruší. Nic jiného v kalendáři nemění; e-mailové pozvánky jen když je výslovně zvolíte. Vyžaduje zapnutý Google Kalendář.
+                  </p>
+                </div>
+                {(!c || active) && (meetingsOn ? (
+                  <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy} data-testid="meetings-disable"
+                    onClick={async () => { setBusy(true); try { await calendarService.disableMeetings(); setStatus(await driveService.status(true)); setMessage({ kind: 'info', text: 'Plánování porad je vypnuté. Už vytvořené události zůstávají ve vašem kalendáři.' }); } catch (e) { setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Nepodařilo se vypnout.' }); } finally { setBusy(false); } }}>
+                    Vypnout plánování porad
+                  </button>
+                ) : (
+                  <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" onClick={() => connect('meetings')} disabled={busy || !calendarOn} data-testid="meetings-connect-settings">{busy ? 'Přesměrování…' : 'Povolit plánování porad'}</button>
+                ))}
+              </li>
+            )}
           </ul>
 
           <ul data-testid="google-privacy">

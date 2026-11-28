@@ -102,6 +102,11 @@ export const calendarService = {
   },
 
   /** Turn Calendar off in ClearSpace (Drive + Gmail untouched); `purge` also removes every event link this user created. */
+  /** RUN 10: stop using the Calendar WRITE permission (meeting scheduling); reading and existing events stay. */
+  disableMeetings(): Promise<{ removed: boolean }> {
+    return api('/api/meetings/calendar/connection', { method: 'DELETE' });
+  },
+
   disable(purge: boolean): Promise<{ calendarRemoved: boolean; purged: { removed: number; skipped: number } | null }> {
     return api(`/api/calendar/connection${purge ? '?purge=1' : ''}`, { method: 'DELETE' });
   },

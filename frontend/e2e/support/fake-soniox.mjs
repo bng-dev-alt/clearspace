@@ -77,12 +77,15 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
     if (url.pathname === '/__control' && req.method === 'POST') {
       // `reset` also restores the default transcript, so a spec that scripted its own turns cannot leak them into the next spec
       if (body?.reset) { state.jobs.clear(); state.files.clear(); state.calls.length = 0; state.audioFetches.length = 0; state.flaky.clear(); state.n = 0; state.turns = DEFAULT_TURNS; }
-      for (const k of ['mode', 'pollsUntilDone', 'durationMs', 'turns', 'fetchAudio']) if (body && k in body) state[k] = body[k];
+      for (const k of ['mode', 'pollsUntilDone', 'durationMs', 'turns', 'fetchAudio', 'rtMode']) if (body && k in body) state[k] = body[k];
+      if (body?.reset) { state.rt.length = 0; state.tempKeys.clear(); state.rtMode = 'ok'; }
       return json(res, 200, { ok: true });
     }
     if (url.pathname === '/__stats') {
       return json(res, 200, {
         calls: state.calls,
+        rt: state.rt,
+        tempKeys: state.tempKeys.size,
         audioFetches: state.audioFetches,
         jobs: [...state.jobs.entries()].map(([id, j]) => ({ id, polls: j.polls, deleted: j.deleted, body: j.body })),
         files: [...state.files.keys()],

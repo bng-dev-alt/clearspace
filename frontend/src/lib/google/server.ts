@@ -27,10 +27,12 @@ export const MSG = {
   calendar_not_configured: 'Propojení s Google Kalendářem není na serveru nastavené.',
   calendar_disabled: 'Propojení s Google Kalendářem není na serveru zapnuté.',
   calendar_not_granted: 'Účet Google nemá povolený přístup ke Google Kalendáři. Připojte prosím Kalendář v Propojených účtech.',
+  meetings_disabled: 'Plánování porad v Google Kalendáři není na serveru zapnuté.',
+  meetings_not_granted: 'Účet Google nemá povolené vytváření událostí. Zapněte prosím „Plánování porad“ v Propojených účtech.',
 } as const;
 /** The refusal when the stored grant lacks the service a route needs (RUN 03/04). */
-const NOT_GRANTED: Record<GoogleService, string> = { drive: MSG.drive_not_granted, gmail: MSG.gmail_not_granted, calendar: MSG.calendar_not_granted };
-export const DISABLED: Record<GoogleService, string> = { drive: MSG.not_configured, gmail: MSG.gmail_disabled, calendar: MSG.calendar_disabled };
+const NOT_GRANTED: Record<GoogleService, string> = { drive: MSG.drive_not_granted, gmail: MSG.gmail_not_granted, calendar: MSG.calendar_not_granted, meetings: MSG.meetings_not_granted };
+export const DISABLED: Record<GoogleService, string> = { drive: MSG.not_configured, gmail: MSG.gmail_disabled, calendar: MSG.calendar_disabled, meetings: MSG.meetings_disabled };
 
 /**
  * Structured server log of the Google integration (RUN 02B). One JSON line per event, WHITELISTED fields only: phases, booleans,
@@ -66,7 +68,7 @@ export async function caller(req: Request) {
 }
 
 /** RUN 06: the caller of a Gmail / Calendar route; in pilot mode a non-pilot user gets exactly the OFF answer before anything else runs. */
-export async function serviceCaller(req: Request, service: 'gmail' | 'calendar') {
+export async function serviceCaller(req: Request, service: 'gmail' | 'calendar' | 'meetings') {
   const c = await caller(req);
   if (!serviceAllowedFor(service, c.userId)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);
   return c;

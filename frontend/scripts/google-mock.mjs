@@ -105,6 +105,8 @@ function seedMail() {
 
 // ---------------- Calendar synthetic data (fictional people on reserved domains; Czech professional content) ----------------
 const CAL = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
+// RUN 10: write scope for meeting scheduling (create event + Meet link + invitations). The mock NEVER sends e-mail; it records.
+const CALW = 'https://www.googleapis.com/auth/calendar.events.owned';
 const PRAGUE = 'Europe/Prague';
 /** UTC instant of a Prague wall-clock time (CET +01:00 / CEST +02:00; EU rule: last Sunday of March / October at 01:00 UTC). */
 function pragueUtc(y, mo, d, h, mi = 0) {
@@ -220,7 +222,7 @@ function reset() {
   accessTokens = new Map();   // at -> { sub, scope, rt, exp }
   grants = new Map();         // sub -> Set(fileId)   (drive.file: picked with this app)
   fails = {};                 // { token_unavailable: n, drive_unavailable: n, drive_rate_limit: n }
-  stats = { codeExchanges: 0, refreshes: 0, revocations: 0, driveCalls: 0, tokensIssued: 0, gmailCalls: 0, narrowRefreshes: 0, calendarCalls: 0 };
+  stats = { codeExchanges: 0, refreshes: 0, revocations: 0, driveCalls: 0, tokensIssued: 0, gmailCalls: 0, narrowRefreshes: 0, calendarCalls: 0, calendarWrites: [] };
   mailboxes = seedMail();
   calendars = seedCalendars();
   scopeGrants = new Map();    // sub -> Set(scope)  (what the account granted to this client so far; include_granted_scopes)
@@ -264,6 +266,7 @@ function consentPage(q) {
 ${scopes.some((s) => s.includes('/auth/drive')) ? '<p><label><input type="checkbox" name="grant_drive" value="1" checked data-testid="mock-grant-drive"> Zobrazit a spravovat soubory Google Disku, které s touto aplikací použijete</label></p>' : ''}
 ${scopes.includes(GMAIL) ? '<p><label><input type="checkbox" name="grant_gmail" value="1" checked data-testid="mock-grant-gmail"> Zobrazit vaše e-mailové zprávy a nastavení (Gmail, jen čtení)</label></p>' : ''}
 ${scopes.includes(CAL) ? '<p><label><input type="checkbox" name="grant_calendar" value="1" checked data-testid="mock-grant-calendar"> Zobrazit události v Google kalendářích, které vlastníte</label></p>' : ''}
+${scopes.includes(CALW) ? '<p><label><input type="checkbox" name="grant_meetings" value="1" checked data-testid="mock-grant-meetings"> Zobrazit, vytvářet, měnit a mazat události v Google kalendářích, které vlastníte</label></p>' : ''}
 <button name="decision" value="allow" data-testid="mock-allow">Povolit</button>
 <button name="decision" value="deny" data-testid="mock-deny">Zrušit</button></form></body></html>`;
 }
@@ -335,6 +338,7 @@ const server = http.createServer(async (req, res) => {
       if (f.get('grant_drive') !== '1') scope = scope.filter((s) => !s.includes('/auth/drive'));   // granular consent
       if (f.get('grant_gmail') !== '1') scope = scope.filter((s) => s !== GMAIL);
       if (f.get('grant_calendar') !== '1') scope = scope.filter((s) => s !== CAL);
+      if (f.get('grant_meetings') !== '1') scope = scope.filter((s) => s !== CALW);
       const sub = f.get('account');
       const union = scopeGrants.get(sub) ?? new Set();
       for (const s of scope) union.add(s);
@@ -449,11 +453,38 @@ const server = http.createServer(async (req, res) => {
     const cm = /^\/calendar\/v3\/calendars\/([^/]+)\/events(?:\/([A-Za-z0-9_]+))?$/.exec(p);
     if (cm) {
       stats.calendarCalls++;
-      if (req.method !== 'GET') return send(res, 405, { error: { code: 405, message: 'read-only mock' } });
       const t = bearer(req);
       if (!t || takeFail('calendar_unauthorized')) return send(res, 401, { error: { code: 401, message: 'Invalid Credentials' } });
-      if (!t.scope.split(' ').includes(CAL)) return send(res, 403, { error: { code: 403, message: 'Request had insufficient authentication scopes.', errors: [{ reason: 'insufficientPermissions' }] } });
+      const granted = t.scope.split(' ');
+      const writing = req.method !== 'GET';
+      if (writing ? !granted.includes(CALW) : !(granted.includes(CAL) || granted.includes(CALW))) return send(res, 403, { error: { code: 403, message: 'Request had insufficient authentication scopes.', errors: [{ reason: 'insufficientPermissions' }] } });
       if (cm[1] !== 'primary') return send(res, 404, { error: { code: 404, message: 'Not Found' } });
+      if (writing) {
+        // RUN 10 writes: insert (client id, conferenceDataVersion=1 + hangoutsMeet createRequest), patch, delete; sendUpdates recorded only.
+        const box = calendars.get(t.sub) ?? new Map(); calendars.set(t.sub, box);
+        const q = url.searchParams;
+        const chunks = []; for await (const c of req) chunks.push(c);
+        const b = (() => { try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return null; } })();
+        if (b === null) return send(res, 400, { error: { code: 400, message: 'Parse Error' } });
+        const record = (kind, e) => stats.calendarWrites.push({ kind, id: e.id, sendUpdates: q.get('sendUpdates') ?? 'false', attendees: (e.attendees ?? []).map((a) => a.email), summary: e.summary });
+        if (takeFail('calendar_write_unavailable')) return send(res, 503, { error: { code: 503 } });
+        if (req.method === 'POST' && !cm[2]) {
+          if (b.id && box.has(b.id)) return send(res, 409, { error: { code: 409, message: 'The requested identifier already exists.', errors: [{ reason: 'duplicate' }] } });
+          const id = b.id ?? `mockev${(stats.calendarWrites.length + 1).toString().padStart(6, '0')}`;
+          const wantsMeet = q.get('conferenceDataVersion') === '1' && b.conferenceData?.createRequest?.conferenceSolutionKey?.type === 'hangoutsMeet';
+          const meet = `https://meet.google.com/${'abc'}-${id.slice(-4).replace(/[^a-z]/g, 'q').padStart(4, 'q')}-xyz`;
+          const e = { id, status: 'confirmed', summary: String(b.summary ?? ''), description: b.description, start: b.start, end: b.end, updated: new Date().toISOString(),
+            organizer: { email: ACCOUNTS.find((a) => a.sub === t.sub)?.email, self: true }, attendees: (b.attendees ?? []).map((a) => ({ email: a.email, responseStatus: 'needsAction' })),
+            ...(wantsMeet && !takeFail('calendar_meet_failure') ? { hangoutLink: meet, conferenceData: { createRequest: { requestId: b.conferenceData.createRequest.requestId, status: { statusCode: 'success' } }, entryPoints: [{ entryPointType: 'video', uri: meet }], conferenceSolution: { key: { type: 'hangoutsMeet' } } } } : {}) };
+          box.set(id, e); record('insert', e);
+          return send(res, 200, renderEvent(e, t.sub));
+        }
+        const e = cm[2] ? box.get(cm[2]) : null;
+        if (!e || e.hardDeleted) return send(res, 404, { error: { code: 404, message: 'Not Found' } });
+        if (req.method === 'PATCH') { Object.assign(e, { ...(b.summary !== undefined ? { summary: b.summary } : {}), ...(b.start ? { start: b.start } : {}), ...(b.end ? { end: b.end } : {}), ...(b.attendees ? { attendees: b.attendees.map((a) => ({ email: a.email, responseStatus: 'needsAction' })) } : {}), updated: new Date().toISOString() }); record('patch', e); return send(res, 200, renderEvent(e, t.sub)); }
+        if (req.method === 'DELETE') { e.status = 'cancelled'; e.hardDeleted = true; record('delete', e); res.writeHead(204); return res.end(); }
+        return send(res, 405, { error: { code: 405 } });
+      }
       if (takeFail('calendar_forbidden')) return send(res, 403, { error: { code: 403, message: 'Calendar usage disabled by admin', errors: [{ reason: 'forbidden' }] } });
       if (takeFail('calendar_unavailable')) return send(res, 503, { error: { code: 503 } });
       if (takeFail('calendar_rate_limit')) return send(res, 403, { error: { code: 403, errors: [{ reason: 'rateLimitExceeded' }] } });

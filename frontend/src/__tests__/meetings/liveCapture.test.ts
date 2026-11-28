@@ -54,7 +54,7 @@ function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: 
       createMediaStreamSource: () => ({ connect: () => undefined }),
       close: async () => { stopped.push('ctx'); },
     }) as unknown as AudioContext,
-    createRecorder: () => ({ state: 'inactive', ondataavailable: null, start() { this.state = 'recording'; }, stop() { this.state = 'inactive'; } }) as unknown as MediaRecorder,
+    createRecorder: () => { const r = { state: 'inactive', ondataavailable: null, start() { r.state = 'recording'; }, stop() { r.state = 'inactive'; } }; return r as unknown as MediaRecorder; },
     isTypeSupported: () => true,
     createSocket: (u, p) => new FakeWs(u, p) as unknown as WebSocket,
     now: () => now,

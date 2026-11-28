@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, serviceAllowedForAccount, serviceMode, type GoogleService } from '../../../../../lib/google/config';
+import { CALENDAR_READONLY_SCOPE, CALENDAR_WRITE_SCOPE, GMAIL_READONLY_SCOPE, OAUTH_COOKIE, OAUTH_COOKIE_PATH, OAUTH_RESULT_COOKIE, secretFormat, SERVICE_SCOPE, serviceAllowedForAccount, serviceMode, type GoogleService } from '../../../../../lib/google/config';
 import { open, seal, sha256hex, tokenAad } from '../../../../../lib/google/crypto';
 import { exchangeCode, GoogleOAuthError, hasDriveScope, hasService, parseIdToken, revokeToken } from '../../../../../lib/google/oauth';
 import { caller, errorResponse, NO_STORE, oauthLog, requireGoogle } from '../../../../../lib/google/server';
 
-type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied'
+type Outcome = 'connected' | 'denied' | 'scope_denied' | 'expired' | 'conflict' | 'error' | 'gmail_connected' | 'gmail_denied' | 'meetings_connected' | 'meetings_denied'
   | 'calendar_connected' | 'calendar_denied' | 'account_mismatch' | 'unavailable' | 'pilot_account';
 
 /**
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     if (typeof result.code !== 'string' || !result.code) return reply('error', row.return_to);
 
     // RUN 03: which service did THIS round trip ask for (stored with the state at start; never from the client)
-    const service: GoogleService = row.scopes?.includes(GMAIL_READONLY_SCOPE) ? 'gmail' : row.scopes?.includes(CALENDAR_READONLY_SCOPE) ? 'calendar' : 'drive';
+    const service: GoogleService = row.scopes?.includes(GMAIL_READONLY_SCOPE) ? 'gmail' : row.scopes?.includes(CALENDAR_READONLY_SCOPE) ? 'calendar' : row.scopes?.includes(CALENDAR_WRITE_SCOPE) ? 'meetings' : 'drive';
     try {
       const t = await exchangeCode(cfg, result.code, open(cfg.keys, row.code_verifier_enc, tokenAad(state, 'pkce')));
       const granted = t.scopes.includes(SERVICE_SCOPE[service]);
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         await db.rpc('google_service_audit', { p_server_secret: cfg.serverSecret, p_event: 'scope_denied', p_service: service });
         if (service === 'drive') await db.rpc('google_oauth_audit_denied', { p_server_secret: cfg.serverSecret, p_state_sha256: stateHash });
         if (!existing) await dropUnused();
-        return reply(service === 'gmail' ? 'gmail_denied' : service === 'calendar' ? 'calendar_denied' : 'scope_denied', row.return_to);
+        return reply(service === 'gmail' ? 'gmail_denied' : service === 'calendar' ? 'calendar_denied' : service === 'meetings' ? 'meetings_denied' : 'scope_denied', row.return_to);
       }
       // Store what ClearSpace uses: identity + the services the user enabled HERE (before, or just now). Google answers with
       // the union of everything ever granted (include_granted_scopes), which may still contain a service the user removed
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
       }
       if (service !== 'drive') {
         await db.rpc('google_service_audit', { p_server_secret: cfg.serverSecret, p_event: 'service_added', p_service: service });
-        return reply(service === 'gmail' ? 'gmail_connected' : 'calendar_connected', row.return_to);
+        return reply(service === 'gmail' ? 'gmail_connected' : service === 'calendar' ? 'calendar_connected' : 'meetings_connected', row.return_to);
       }
       return reply('connected', row.return_to);
     } catch (err) {

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await db.rpc('google_connection_status');
     if (error) throw dbError(error);
     const row = (Array.isArray(data) ? data[0] : data) as { google_email: string; scopes: string[]; status: string; connected_at: string; last_error_code: string | null } | undefined;
-    const available = (s: 'gmail' | 'calendar') => cfg.enabled && (row ? serviceAllowedForAccount(s, userId, row.google_email) : serviceAllowedFor(s, userId));
+    const available = (s: 'gmail' | 'calendar' | 'meetings') => cfg.enabled && (row ? serviceAllowedForAccount(s, userId, row.google_email) : serviceAllowedFor(s, userId));
     return NextResponse.json({
       configured: cfg.enabled,
       message: cfg.enabled ? undefined : MSG.not_configured,
@@ -21,10 +21,11 @@ export async function GET(req: NextRequest) {
       // RUN 06 pilot: available only to a listed user (and, once connected, a listed Google account)
       gmailAvailable: available('gmail'),
       calendarAvailable: available('calendar'),     // RUN 04
+      meetingsAvailable: available('meetings'),     // RUN 10 (Calendar write for meeting scheduling)
       pilot: cfg.enabled && cfg.pilot,              // Google consent screen in Testing: approved test users only
       connection: row ? {
         email: row.google_email, scopes: row.scopes, status: row.status, connectedAt: row.connected_at,
-        services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail'), calendar: hasService(row.scopes, 'calendar') },
+        services: { drive: hasService(row.scopes, 'drive'), gmail: hasService(row.scopes, 'gmail'), calendar: hasService(row.scopes, 'calendar'), meetings: hasService(row.scopes, 'meetings') },
       } : null,
     }, { headers: NO_STORE });
   } catch (err) {

@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const body = await readJson<{ returnTo?: unknown; service?: unknown }>(req);
     const returnTo = typeof body.returnTo === 'string' && RETURN_TO.test(body.returnTo) ? body.returnTo : '/settings';
     const service: GoogleService | null = body.service === undefined || body.service === 'drive' ? 'drive'
-      : body.service === 'gmail' ? 'gmail' : body.service === 'calendar' ? 'calendar' : null;
+      : body.service === 'gmail' ? 'gmail' : body.service === 'calendar' ? 'calendar' : body.service === 'meetings' ? 'meetings' : null;
     if (!service) throw new HttpError(400, 'Neplatná služba.', 'invalid');
     // off, or (RUN 06) pilot and this user is not in it: the same answer as off -- nothing reveals that a pilot exists
     if (!serviceAllowedFor(service, userId)) throw new HttpError(503, DISABLED[service], `${service}_disabled`);

@@ -45,9 +45,16 @@ export const GMAIL_SCOPES = [...IDENTITY_SCOPES, GMAIL_READONLY_SCOPE];
  */
 export const CALENDAR_READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.events.owned.readonly';
 export const CALENDAR_SCOPES = [...IDENTITY_SCOPES, CALENDAR_READONLY_SCOPE];
-export type GoogleService = 'drive' | 'gmail' | 'calendar';
-export const SERVICE_SCOPE: Record<GoogleService, string> = { drive: DRIVE_FILE_SCOPE, gmail: GMAIL_READONLY_SCOPE, calendar: CALENDAR_READONLY_SCOPE };
-export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SCOPES, gmail: GMAIL_SCOPES, calendar: CALENDAR_SCOPES };
+/**
+ * RUN 10 Meeting Intelligence: the narrowest WRITE scope that can create an event with a Google Meet link and invitations in
+ * the user's OWN calendars ("See, create, change, and delete events on Google calendars you own"; sensitive, not restricted).
+ * A SEPARATE service ('meetings'): requested only when the user turns on meeting scheduling, never for reading.
+ */
+export const CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events.owned';
+export const MEETINGS_SCOPES = [...IDENTITY_SCOPES, CALENDAR_WRITE_SCOPE];
+export type GoogleService = 'drive' | 'gmail' | 'calendar' | 'meetings';
+export const SERVICE_SCOPE: Record<GoogleService, string> = { drive: DRIVE_FILE_SCOPE, gmail: GMAIL_READONLY_SCOPE, calendar: CALENDAR_READONLY_SCOPE, meetings: CALENDAR_WRITE_SCOPE };
+export const SERVICE_SCOPES: Record<GoogleService, string[]> = { drive: DRIVE_SCOPES, gmail: GMAIL_SCOPES, calendar: CALENDAR_SCOPES, meetings: MEETINGS_SCOPES };
 /** Gmail feature switch, independent of Drive and of the Google grant (turning it off stops every Gmail call). */
 export const gmailFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => env.GMAIL_INTEGRATION_ENABLED?.trim() === '1';
 /** Calendar feature switch (RUN 04), independent of Drive, Gmail and the Google grant. Default OFF. */
@@ -58,8 +65,9 @@ export const calendarFeatureEnabled = (env: NodeJS.ProcessEnv = process.env) => 
  * connected Google account is listed too, anything else = off. Fail closed: 'pilot' with an empty list is off for everyone.
  */
 export type ServiceMode = 'on' | 'pilot' | 'off';
-export function serviceMode(service: 'gmail' | 'calendar', env: NodeJS.ProcessEnv = process.env): ServiceMode {
-  const v = (service === 'gmail' ? env.GMAIL_INTEGRATION_ENABLED : env.CALENDAR_INTEGRATION_ENABLED)?.trim();
+export function serviceMode(service: 'gmail' | 'calendar' | 'meetings', env: NodeJS.ProcessEnv = process.env): ServiceMode {
+  // RUN 10: meeting scheduling (Calendar write) has its own switch CALENDAR_WRITE_ENABLED (1 | pilot | off), default OFF
+  const v = (service === 'gmail' ? env.GMAIL_INTEGRATION_ENABLED : service === 'calendar' ? env.CALENDAR_INTEGRATION_ENABLED : env.CALENDAR_WRITE_ENABLED)?.trim();
   return v === '1' ? 'on' : v === 'pilot' ? 'pilot' : 'off';
 }
 const csv = (raw: string | undefined) => (raw ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -72,7 +80,7 @@ export function serviceAllowedFor(service: GoogleService, userId: string, env: N
 /** ... and with this Google account (the account check of the pilot). */
 export function serviceAllowedForAccount(service: GoogleService, userId: string, email: string | null | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
   if (!serviceAllowedFor(service, userId, env)) return false;
-  return service === 'drive' || serviceMode(service as 'gmail' | 'calendar', env) === 'on' || (!!email && csv(env.GOOGLE_PILOT_ACCOUNTS).includes(email.trim().toLowerCase()));
+  return service === 'drive' || serviceMode(service as 'gmail' | 'calendar' | 'meetings', env) === 'on' || (!!email && csv(env.GOOGLE_PILOT_ACCOUNTS).includes(email.trim().toLowerCase()));
 }
 
 export interface GoogleEndpoints {

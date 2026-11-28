@@ -260,7 +260,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
         )}
       </div>
 
-      {meeting.sourceKind === 'audio' && (meeting.endsAt || meeting.conferenceUrl || meeting.live.segments > 0 || (!meeting.audio.uploadedAt && !meeting.currentRevision)) && (
+      {meeting.sourceKind === 'audio' && LIVE_ENABLED && (meeting.endsAt || meeting.conferenceUrl || meeting.live.segments > 0 || (!meeting.audio.uploadedAt && !meeting.currentRevision)) && (
         <ScheduleCard meeting={meeting} projectId={projectId} isOrganizer={organizer} canSchedule={LIVE_ENABLED && access.schedule} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
       )}
       {meeting.sourceKind === 'audio' && LIVE_ENABLED && access.live && !meeting.audio.path && !meeting.currentRevision && (

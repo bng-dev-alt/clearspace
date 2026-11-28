@@ -1,7 +1,8 @@
 # RUN 10 handoff – Meeting Intelligence (poslední velká funkce před feature freeze)
 
-**Výchozí stav po RUN 09**: produkce `dpl_BvqQZBpsey4ehYNLJNoMDyZk469d` (kód `87e86f2`, větev `release/run09-hub-production` → `main`),
-DB markery končí 1700, Communication Hub etapa 1 živě v pilotu, Google pilot, demo data CSD-CORVANE. Etapa 2 (Cortex/PI) připravena, vypnutá.
+**Výchozí stav po RUN 09**: produkce `dpl_EfUg58JQCRSUpKdqbQ6GdpDWkrop` (commit `3b12454` = kód RUN 09; `main` navíc jen dokumentace), tag `run09-complete`,
+DB markery končí 1700, Communication Hub etapa 1 živě v pilotu (prezentační účet), Google pilot, demo data CSD-CORVANE (14 Gmail vláken obnoveno).
+Etapa 2 (Cortex/PI) ověřena skutečnou AI (6 požadavků, ≤ 0,05 USD) a vypnutá – trvalá aktivace čeká na vlastníka.
 
 ## Závazné vstupy
 * **Účty** – `docs/run09/ACCOUNTS_ADR.md`: pilot a demo jen na prezentačním účtu (= demo Google „Alex Morgan“); osobní účet vlastníka mimo demo.
@@ -16,6 +17,7 @@ DB markery končí 1700, Communication Hub etapa 1 živě v pilotu, Google pilot
 3. Izolace projektů, mazání (retention), PI zdroj `meeting:` s citací.
 
 ## Otevřené před RUN 10
-* Rozhodnutí o stage 2 (Gemini test, ≤ 12 požadavků / ≤ 0,50 USD).
-* UX backlog (`docs/run09/UX_BACKLOG.md`) až ve finálním polish runu.
-* Smazání BotFather zpráv s tokeny a mrtvých dev Keychain položek (vlastník).
+* Rozhodnutí o trvalé aktivaci etapy 2 (technicky GO).
+* UX backlog (`docs/run09/UX_BACKLOG.md`, 14 položek vč. one-click kopírování) až ve finálním polish runu.
+* Živé multi-user ověření osobních oznámení (vyžaduje druhý pilotní účet – rozhodnutí podle ADR).
+* Pro živé dev testy už nejsou dev boti/aplikace (povýšeny do produkce) – RUN 10 testuje v simulaci, nebo s novými dev identitami.

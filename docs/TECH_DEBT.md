@@ -129,3 +129,10 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * **Turbopack odmítá symlinkované `node_modules`** (build i dev) – worktree potřebuje APFS klon (`cp -cR`).
 * **Hosted logy Vercelu**: `vercel logs` CLI 66.x v tomto prostředí nevrátil řádky; zdraví se ověřuje přes `cron.job_run_details` a `net._http_response`.
 * **Etapa 2** neověřena živě s AI (čeká na schválení placeného testu, `docs/run09/STAGE2_GEMINI_PROPOSAL.md`).
+* **Stage 2 (2026-11-28)**: Gemini test PASS (6 požadavků, ≤ 0,048 USD). Mezistav „PI bot nakonfigurován, `HUB_INTELLIGENCE_ENABLED=0`“: `check-deployment.sh`
+  čeká u `/api/hub/telegram/pi-webhook` 503, route vrací 401 (podpis se ověřuje dřív než přepínač; handler pak nic neuloží) – rozšířit kontrolu o tento stav.
+* **Vercel CLI 66** v neinteraktivním režimu odmítá `env rm` bez potvrzení – `hub-prod.sh` potřebuje příkaz `pull-env stage2` (mazání přes REST API dle id).
+* **Neověřeno živě**: osobní oznámení od jiného člověka (přiřazení, komentář, zmínka, změna termínu, dokončení cizího úkolu) – pilot má 1 účet; živě jen
+  připomínka termínu + zkušební zprávy (RUN 08 ověřil vše lokálně se skutečnými poskytovateli). Další mezery: 90denní retence (jen kód + harness),
+  `google_pilot_http` lokálně (Google pilot ověřen živě), druhý reálný Slack/Telegram účet, odvolání produkčního tokenu (vědomě nedestruktivně).
+* Cortex zůstal členem testovací skupiny bez webhooku → Telegram drží jeho updaty až 24 h (ClearSpace je nečte); před trvalou aktivací etapy 2 jen `setWebhook`.

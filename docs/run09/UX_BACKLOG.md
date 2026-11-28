@@ -13,3 +13,6 @@
 | 9 | Nový cíl má „Interaktivní“ vypnuté a `/task` pak hlásí „vypnuté“ – při potvrzení nabídnout zapnutí | RUN 09 živě | výchozí fail-closed zachovat |
 | 10 | Čeština: „zadal v **skupině**“ → „ve skupině“ | RUN 09 živě | |
 | 11 | Osobní oznámení „Všechny moje projekty“ u účtu se 14 demo projekty – zvážit výchozí „Jen vybrané“ | RUN 09 | |
+| 12 | **One-click „Kopírovat“ u všech párovacích příkazů a zpráv** (kódy `/clearspace propojit|ucet`, `/start`, `/link@bot`, `/task@bot Název`) – zachovat stávající kopírování s potvrzením „Zkopírováno“ a doplnit tam, kde chybí | vlastník (RUN 09) | |
+| 13 | AI chat na žádost vypíše interní ID projektu (karty, sloupce, komentáře) – v odpovědích preferovat názvy | RUN 09 stage 2 (LOW) | ne tajemství |
+| 14 | Po odpojení Telegram skupiny bot skupinu opustí – v UI to říct předem | RUN 09 | |

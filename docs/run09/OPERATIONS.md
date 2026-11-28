@@ -49,3 +49,10 @@ EXPECT_HUB_PILOT=1 EXPECT_HUB_TELEGRAM=1` → `vercel promote`.
 ## Zdraví
 `hub-prod.sh status` (instalace, cíle, identity, outbox, cron, webhooky) · `cron.job_run_details` (succeeded) · `net._http_response` (200 + outcome
 `sent`) · logy Vercelu: jen whitelistované fáze (`evt: hub|notify`), žádné tokeny ani texty.
+
+## Etapa 2 – ověřený postup aktivace / deaktivace (RUN 09 test 2026-11-28)
+Aktivace: `hub-prod.sh push-env stage2` + Vercel `AI_DEMO_USER_IDS` (prezentační účet), `AI_DEMO_DAILY_TOKEN_BUDGET`, `AI_DEMO_RATE_PER_USER_PER_MINUTE`,
+`AI_DEMO_RATE_GLOBAL_PER_MINUTE` → staged deploy + `check-deployment.sh … EXPECT_HUB_PI=1` → promote → `hub-prod.sh telegram-webhook cortex` → u cíle PI
+s potvrzením (Telegram navíc „celá komunikace“). Deaktivace: u cílů PI vypnout (importy se smažou) → `telegram-webhook cortex off` → smazat 8 proměnných
+(`HUB_INTELLIGENCE_ENABLED`, `TELEGRAM_HUB_PI_*` ×3, `AI_DEMO_*` ×4; CLI vyžaduje potvrzení – REST `DELETE /v9/projects/clearspace/env/<id>`) → staged deploy +
+`EXPECT_HUB_PILOT=1 EXPECT_HUB_TELEGRAM=1` → promote → ověřit AI 403 a `/api/hub/telegram/pi-webhook` 503.

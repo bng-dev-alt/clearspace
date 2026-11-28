@@ -1,4 +1,6 @@
-# RUN 09 – stage 2 (Cortex + Project Intelligence z chatů): návrh omezeného Gemini akceptačního testu – KE SCHVÁLENÍ
+# RUN 09 – stage 2 (Cortex + Project Intelligence z chatů): omezený Gemini akceptační test – SCHVÁLENO A PROVEDENO 2026-11-28
+
+Výsledky: `README.md` §5 (6 požadavků, ≤ 0,048 USD, všechny podmínky PASS; etapa 2 po testu znovu vypnutá).
 
 Nic z tohoto není aktivní. Cortex nemá webhook, `HUB_INTELLIGENCE_ENABLED` ani `TELEGRAM_HUB_PI_*` nejsou ve Vercelu, UI ukazuje „Na serveru vypnuto“.
 

@@ -37,7 +37,7 @@ function KanbanCard({
         <Trash2 size={14} />
       </button>
 
-      <div className="card-drag-handle">
+      <div className="card-drag-handle" aria-hidden="true">
         <MoreHorizontal size={14} />
       </div>
 
@@ -133,7 +133,7 @@ function KanbanCard({
             {card.assignee.initials}
           </div>
         ) : (
-          <div className="card-assignee-unassigned" title="Nepřiřazeno">--</div>
+          <div className="card-assignee-unassigned" title="Nepřiřazeno" aria-label="Nepřiřazeno" role="img" />
         )}
       </div>
     </div>

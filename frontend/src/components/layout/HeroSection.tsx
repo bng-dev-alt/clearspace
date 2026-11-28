@@ -26,7 +26,8 @@ export default function HeroSection({ projectName, facts, onClose, isCollapsed }
           <div className="hero-left">
             <span className="hero-team-label">Projekt</span>
             <h1 className="hero-title" data-testid="project-title">{projectName}</h1>
-            {line.length > 0 && <p className="hero-desc project-facts" data-testid="project-facts">{line.join(' · ')}</p>}
+            {/* always rendered (reserved line): facts arrive with the roster, the header must not jump */}
+            <p className="hero-desc project-facts" data-testid="project-facts" aria-live="off">{line.length > 0 ? line.join(' · ') : '\u00a0'}</p>
           </div>
         </div>
       </div>

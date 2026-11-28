@@ -120,7 +120,7 @@ export default function AiRequestHistory({ history }: AiRequestHistoryProps) {
                       )}
                     </td>
                     <td style={{ padding: '0.75rem 1rem', color: 'var(--dark-navy)' }}>
-                      {(log.responseTime / 1000).toFixed(2)} s
+                      {(log.responseTime / 1000).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s
                     </td>
                     <td style={{ padding: '0.75rem 1rem', color: 'var(--gray-text)' }}>
                       {log.success ? `${log.inputTokens} / ${log.outputTokens}` : '-'}
@@ -154,7 +154,7 @@ export default function AiRequestHistory({ history }: AiRequestHistoryProps) {
                             <div>
                               <div style={{ fontSize: '0.7rem', color: 'var(--gray-text)' }}>Latence (Doba odezvy)</div>
                               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--dark-navy)' }}>
-                                {log.responseTime.toLocaleString()} ms ({(log.responseTime / 1000).toFixed(2)} s)
+                                {log.responseTime.toLocaleString('cs-CZ')} ms ({(log.responseTime / 1000).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s)
                               </div>
                             </div>
                             <div>

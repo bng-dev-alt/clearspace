@@ -72,7 +72,7 @@ export default function AiFeatureBreakdown({ breakdown }: AiFeatureBreakdownProp
               <td style={{ padding: '0.75rem 1rem', color: 'var(--gray-text)' }}>{item.outputTokens.toLocaleString()}</td>
               <td style={{ padding: '0.75rem 1rem', color: 'var(--dark-navy)' }}>{item.totalTokens.toLocaleString()}</td>
               <td style={{ padding: '0.75rem 1rem', color: 'var(--gray-text)' }}>
-                {(item.averageResponseTime / 1000).toFixed(2)} s
+                {(item.averageResponseTime / 1000).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s
               </td>
               <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--dark-navy)', textAlign: 'right' }}>
                 {aiCostEstimator.formatCostCzk(item.estimatedCostCzk)}

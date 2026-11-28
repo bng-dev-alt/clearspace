@@ -1336,9 +1336,10 @@ body {
   border: 1px solid var(--surface);
 }
 
+/* RUN 11 (F-72): an empty avatar outline instead of a literal "--" */
 .card-assignee-unassigned {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
 }
 
 /* Card Delete Button (Polished fade-in) */
@@ -3849,6 +3850,10 @@ body {
 .settings-card .settings-lead { color: var(--text); font-size: 0.85rem; }
 .settings-card .settings-hint, .settings-hint { font-size: 0.75rem; color: var(--text-secondary); margin: 0.25rem 0 0; }
 .settings-details > summary, .settings-explainer > summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text); padding: 0.35rem 0; min-height: 32px; display: flex; align-items: center; }
+.settings-details > summary::-webkit-details-marker, .settings-explainer > summary::-webkit-details-marker { display: none; }
+.settings-details > summary::before, .settings-explainer > summary::before { content: '▸'; display: inline-block; margin-right: 0.45rem; color: var(--text-secondary); transition: transform 0.15s ease; }
+.settings-details[open] > summary::before, .settings-explainer[open] > summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .settings-details > summary::before, .settings-explainer > summary::before { transition: none; } }
 .settings-details > summary:focus-visible, .settings-explainer > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-details[open] > ul { margin-top: 0.4rem; }
 .settings-explainer-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.75rem; color: var(--text); }
@@ -3864,3 +3869,5 @@ body {
   .settings-explainer-table tr { padding: 0.4rem 0; border-top: 1px solid var(--border); }
   .settings-explainer-table th, .settings-explainer-table td { border-top: 0; padding: 0.15rem 0; }
 }
+/* RUN 11 (F-71): "Porady" is a link among buttons – same look as the other view tabs */
+a.view-switch-btn { text-decoration: none; }

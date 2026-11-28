@@ -299,3 +299,6 @@ span.cs-status { display: inline-flex; margin: 0 0 0 0.5rem; padding: 0.25rem 0.
 .hub-command { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0.5rem 1.4rem; }
 .hub-command code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); font-size: 0.8rem; overflow-wrap: anywhere; }
 .notify-check.is-unavailable { color: var(--text-secondary); }
+
+/* RUN 11: links styled as buttons never show the browser underline (systemic, every a.cs-btn) */
+a.cs-btn, a.cs-btn:hover, a.cs-btn:visited { text-decoration: none; }

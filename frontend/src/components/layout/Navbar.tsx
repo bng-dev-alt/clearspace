@@ -22,7 +22,7 @@ const THEME_OPTIONS: { value: ThemeChoice; Icon: typeof Sun; label: string }[] =
 ];
 
 const STYLE_OPTIONS: { value: DesignStyle; label: string }[] = [
-  { value: 'existing', label: 'Stávající' },
+  { value: 'existing', label: 'Classic' },
   { value: 'monograph', label: 'Monograph' },
 ];
 

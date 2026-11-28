@@ -1,4 +1,5 @@
 import React from 'react';
+import { plural } from '../../lib/plural';
 import { PieChart } from 'lucide-react';
 import { AiRequestLog, FeatureStats } from '../../services/ai/aiAnalyticsService';
 import { EmptyState } from '../ui';
@@ -241,7 +242,7 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
                       height: '100%',
                       transition: 'width 0.3s ease',
                     }}
-                    title={`${item.featureName}: ${item.requestCount} requestů (${percentage.toFixed(1)}%)`}
+                    title={`${item.featureName}: ${item.requestCount} ${plural(item.requestCount, 'požadavek', 'požadavky', 'požadavků')} (${percentage.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} %)`}
                   />
                 );
               })}
@@ -260,7 +261,7 @@ export default function AiCharts({ logs, featureBreakdown }: AiChartsProps) {
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                       <span>{item.requestCount}x</span>
-                      <span>({percentage.toFixed(0)}%)</span>
+                      <span>({Math.round(percentage)} %)</span>
                     </div>
                   </div>
                 );

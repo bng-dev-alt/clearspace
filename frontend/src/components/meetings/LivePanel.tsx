@@ -44,7 +44,7 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
   const [error, setError] = useState<string | null>(null);
   const [partial, setPartial] = useState<string | null>(null);
   const ctl = useRef<LiveCaptureController | null>(null);
-  const tabOk = useMemo(canTabAudio, []);
+  const tabOk = useMemo(() => canTabAudio(), []);
   const unfinished = !snap && (meeting.live.state === 'live' || meeting.live.state === 'paused' || meeting.live.state === 'stopped');
 
   useEffect(() => {

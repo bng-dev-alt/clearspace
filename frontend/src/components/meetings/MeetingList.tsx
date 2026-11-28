@@ -17,6 +17,7 @@ export default function MeetingList({ projectId }: { projectId: string }) {
   const [pending, setPending] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [now] = useState(() => Date.now()); // render-stable "now" for the upcoming/past split
 
   const load = useCallback(async () => {
     try {
@@ -39,7 +40,6 @@ export default function MeetingList({ projectId }: { projectId: string }) {
     void meetingService.sweepAudio(projectId);
   }, [load, projectId]);
 
-  const now = Date.now();
   const isUpcoming = (m: Meeting) => !m.currentRevision && m.live.state !== 'live' && Date.parse(m.endsAt ?? m.occurredAt) > now;
   const upcoming = (meetings ?? []).filter(isUpcoming).sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt));
   const past = (meetings ?? []).filter((m) => !isUpcoming(m));

@@ -51,6 +51,7 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState(meeting.conferenceUrl ?? '');
+  const [now] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
@@ -80,7 +81,7 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
   }
 
   const provider = conferenceProvider(meeting.conferenceUrl);
-  const upcoming = Date.parse(meeting.endsAt ?? meeting.occurredAt) > Date.now();
+  const upcoming = Date.parse(meeting.endsAt ?? meeting.occurredAt) > now;
   const projectUrl = typeof window !== 'undefined' ? `${window.location.origin}/projects/${projectId}/meetings/${meeting.id}` : '';
   const linked = link && link.state !== 'deleted';
   const { valid, invalid } = parseAttendees(adding);

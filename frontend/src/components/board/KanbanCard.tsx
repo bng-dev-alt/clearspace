@@ -1,4 +1,5 @@
 import React from 'react';
+import { readableOn } from '../../lib/color';
 import { Trash2, Calendar, MoreHorizontal } from 'lucide-react';
 import { Card } from '../../types/kanban';
 import { translatePriority, getPriorityColor } from '../../utils/kanban';
@@ -80,7 +81,7 @@ function KanbanCard({
                   width: '24px',
                   height: '24px',
                   borderRadius: '50%',
-                  color: '#ffffff',
+                  color: readableOn(member.avatarColor),
                   fontSize: '0.65rem',
                   fontWeight: 700,
                   display: 'flex',

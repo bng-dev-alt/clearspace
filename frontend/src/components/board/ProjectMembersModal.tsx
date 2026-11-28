@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { readableOn } from '../../lib/color';
 import { DialogFocus } from '../ui/useDialogFocus';
 import { X, Search, Settings2, Users, UserSearch, Check } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
@@ -172,7 +173,7 @@ export default function ProjectMembersModal({
                           height: '30px',
                           borderRadius: '50%',
                           backgroundColor: member.avatarColor,
-                          color: '#ffffff',
+                          color: readableOn(member.avatarColor),
                           fontWeight: 700,
                           fontSize: '0.8rem',
                           display: 'flex',

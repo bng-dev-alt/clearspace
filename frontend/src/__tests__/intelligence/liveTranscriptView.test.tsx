@@ -10,7 +10,8 @@ describe('RUN 11 #16 live transcript full screen', () => {
   test('uses the Fullscreen API and follows the browser state (Esc exits there)', async () => {
     let fsEl: Element | null = null;
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fsEl });
-    const request = vi.fn(function (this: HTMLElement) { fsEl = this; document.dispatchEvent(new Event('fullscreenchange')); return Promise.resolve(); });
+    const enter = (el: Element) => { fsEl = el; document.dispatchEvent(new Event('fullscreenchange')); return Promise.resolve(); };
+    const request = vi.fn(function (this: HTMLElement) { return enter(this); });
     const exit = vi.fn(() => { fsEl = null; document.dispatchEvent(new Event('fullscreenchange')); return Promise.resolve(); });
     (HTMLElement.prototype as unknown as { requestFullscreen: unknown }).requestFullscreen = request;
     (document as unknown as { exitFullscreen: unknown }).exitFullscreen = exit;

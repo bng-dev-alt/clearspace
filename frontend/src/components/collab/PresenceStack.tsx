@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { readableOn } from '../../lib/color';
 import type { PresenceUser } from '../../hooks/usePresence';
 import type { SyncStatus } from '../../hooks/useRealtimeBoard';
 
@@ -30,7 +31,7 @@ export function PresenceStack({ users }: { users: PresenceUser[] }) {
               height: '24px',
               borderRadius: '50%',
               backgroundColor: u.color,
-              color: '#ffffff',
+              color: readableOn(u.color),
               fontSize: '0.65rem',
               fontWeight: 700,
               display: 'inline-flex',

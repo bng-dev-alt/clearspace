@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { readableOn } from '../../lib/color';
 import { Search, Check, X, UserPlus } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
 
@@ -134,7 +135,7 @@ export default function MultiAssigneeSelect({
                 height: '18px',
                 borderRadius: '50%',
                 backgroundColor: member.avatarColor,
-                color: '#ffffff',
+                color: readableOn(member.avatarColor),
                 fontSize: '0.6rem',
                 fontWeight: 700,
                 display: 'flex',
@@ -316,7 +317,7 @@ export default function MultiAssigneeSelect({
                           height: '20px',
                           borderRadius: '50%',
                           backgroundColor: member.avatarColor,
-                          color: '#ffffff',
+                          color: readableOn(member.avatarColor),
                           fontSize: '0.65rem',
                           fontWeight: 700,
                           display: 'flex',

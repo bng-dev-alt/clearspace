@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Search, Settings, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History, HardDrive, Plug } from 'lucide-react';
+import { readableOn } from '../../lib/color';
+import { Search, ArrowUpDown, Plus, Filter, RotateCcw, Sparkles, Info, History, HardDrive, Plug } from 'lucide-react';
 import { Column, TeamMember } from '../../types/kanban';
 import TagDropdown from './TagDropdown';
 import { PresenceStack, SyncIndicator } from '../collab/PresenceStack';
@@ -156,6 +157,7 @@ export default function Toolbar({
               value={sortBy}
               onChange={(e) => onSortChange(e.target.value)}
               data-testid="sort-by"
+                aria-label="Řazení karet"
             >
               <option value="">Výchozí řazení</option>
               <option value="created">Datum vytvoření</option>
@@ -179,7 +181,7 @@ export default function Toolbar({
                     height: '24px',
                     borderRadius: '50%',
                     backgroundColor: member.avatarColor,
-                    color: '#ffffff',
+                    color: readableOn(member.avatarColor),
                     fontSize: '0.65rem',
                     fontWeight: 700,
                     display: 'flex',
@@ -384,6 +386,7 @@ export default function Toolbar({
             value={selectedPriority}
             onChange={(e) => onSelectPriority(e.target.value)}
             data-testid="priority-filter"
+                aria-label="Filtr: priorita"
           >
             <option value="">Všechny priority</option>
             <option value="Low">Nízká</option>
@@ -396,6 +399,7 @@ export default function Toolbar({
             value={selectedStatus}
             onChange={(e) => onSelectStatus(e.target.value)}
             data-testid="status-filter"
+                aria-label="Filtr: sloupec"
           >
             <option value="">Všechny sloupce</option>
             {columns.map((col) => (
@@ -408,6 +412,7 @@ export default function Toolbar({
             value={selectedAssignee}
             onChange={(e) => onSelectAssignee(e.target.value)}
             data-testid="assignee-filter"
+                aria-label="Filtr: řešitel"
           >
             <option value="">Všichni řešitelé</option>
             <option value="unassigned">Nepřiřazeno</option>
@@ -421,6 +426,7 @@ export default function Toolbar({
             value={selectedDueDateFilter}
             onChange={(e) => onSelectDueDateFilter(e.target.value)}
             data-testid="duedate-filter"
+                aria-label="Filtr: termín"
           >
             <option value="">Libovolný termín</option>
             <option value="today">Dnes</option>
@@ -434,6 +440,7 @@ export default function Toolbar({
             value={selectedHasChecklist}
             onChange={(e) => onSelectHasChecklist(e.target.value)}
             data-testid="checklist-filter"
+                aria-label="Filtr: checklist"
           >
             <option value="">Checklist: Vše</option>
             <option value="yes">S checklistem</option>
@@ -445,6 +452,7 @@ export default function Toolbar({
             value={selectedHasComments}
             onChange={(e) => onSelectHasComments(e.target.value)}
             data-testid="comments-filter"
+                aria-label="Filtr: komentáře"
           >
             <option value="">Komentáře: Vše</option>
             <option value="yes">S komentáři</option>
@@ -456,6 +464,7 @@ export default function Toolbar({
             value={selectedArchivedFilter}
             onChange={(e) => onSelectArchivedFilter(e.target.value)}
             data-testid="archived-filter"
+                aria-label="Filtr: archivované"
           >
             <option value="active">Aktivní úkoly</option>
             <option value="archived">Archivované úkoly</option>

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { readableOn } from '../../lib/color';
 import { Pencil, Trash2, Folder, UserCheck, UserPlus, Eye, KeyRound } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
 
@@ -56,7 +57,7 @@ export default function MembersTable({
           <div className="member-row" key={member.id} data-testid={`member-row-${member.id}`}>
             {/* Člen */}
             <div className="member-cell member-main">
-              <div className="member-avatar" style={{ backgroundColor: member.avatarColor }}>
+              <div className="member-avatar" style={{ backgroundColor: member.avatarColor, color: readableOn(member.avatarColor) }}>
                 {member.initials}
               </div>
               <div className="member-name-block">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { readableOn } from '../../lib/color';
 import { Users } from 'lucide-react';
 import { WorkloadEntry } from '../../lib/dashboardStats';
 import { EmptyState } from '../ui';
@@ -43,7 +44,7 @@ export default function TeamWorkloadWidget({ entries }: TeamWorkloadWidgetProps)
                       height: '20px',
                       borderRadius: '50%',
                       backgroundColor: entry.member.avatarColor,
-                      color: '#ffffff',
+                      color: readableOn(entry.member.avatarColor),
                       fontSize: '0.6rem',
                       fontWeight: 700,
                       display: 'inline-flex',

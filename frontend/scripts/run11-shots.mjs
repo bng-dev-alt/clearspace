@@ -10,6 +10,7 @@ import path from 'node:path';
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3481';
 const OUT = path.resolve(process.env.OUT || '../docs/run11/screens/before');
 const P = `/projects/${process.env.PROJECT || 'project-collab-demo'}`;
+const BOARD_READY = '[data-hydrated="true"] [data-testid="board-container"]';
 const CHROMIUM = process.env.PW_CHROMIUM_PATH || `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 const AXE = fs.readFileSync(new URL('../node_modules/axe-core/axe.min.js', import.meta.url), 'utf8');
 const arg = (n, d) => (process.argv.find((a) => a.startsWith(`--${n}=`)) || '').split('=')[1] || d;
@@ -23,34 +24,34 @@ const click = async (p, sel) => { const l = p.locator(sel).first(); if (await l.
 const firstVisible = async (p, sels) => { for (const s of sels) if (await click(p, s)) return true; return false; };
 
 const core = [
-  { name: 'login', auth: false, path: '/login' },
-  { name: 'register', auth: false, path: '/register' },
-  { name: 'projects', path: '/' },
-  { name: 'board', path: P },
-  { name: 'card-drawer', path: P, overlay: true, run: (p) => click(p, '[data-testid^="card-"]') },
-  { name: 'new-task', path: P, overlay: true, run: (p) => firstVisible(p, ['[data-testid="new-task-btn"]', '[data-testid^="add-card-btn-"]']) },
-  { name: 'calendar', path: P, run: (p) => click(p, '[data-testid="view-switch-calendar"]') },
-  { name: 'dashboard', path: P, run: (p) => click(p, '[data-testid="view-switch-dashboard"]') },
-  { name: 'intelligence', path: P, overlay: true, run: (p) => firstVisible(p, ['[data-testid="project-intelligence-btn"]', '[data-testid="bottom-intelligence"]', '[data-testid="rail-intelligence"]']) },
-  { name: 'project-team', path: P, overlay: true, run: (p) => click(p, '[data-testid="toolbar-manage-team-btn"]') },
-  { name: 'notifications', path: P, overlay: true, run: (p) => click(p, '[data-testid="notifications-bell"]') },
-  { name: 'user-menu', path: P, overlay: true, run: (p) => firstVisible(p, ['[data-testid="navbar-avatar-btn"]', '[data-testid="navbar-burger"]']) },
-  { name: 'search', path: P, overlay: true, run: async (p) => { await p.keyboard.press('Control+k'); await wait(400); return true; } },
-  { name: 'meetings', path: `${P}/meetings` },
-  { name: 'meeting-new', path: `${P}/meetings`, run: (p) => click(p, '[data-testid="meeting-new"]') },
-  { name: 'team', path: '/team' },
-  { name: 'settings', path: '/settings' },
-  { name: 'ai-studio', path: '/ai-control-center' },
-  { name: 'ai-history', path: '/ai-history' },
-  { name: 'about', path: '/about' },
+  { name: 'login', auth: false, path: '/login', ready: 'form' },
+  { name: 'register', auth: false, path: '/register', ready: 'form' },
+  { name: 'projects', path: '/', ready: '[data-testid="classic-new-project-cta"], [data-testid^="project-card"], .app-hero' },
+  { name: 'board', path: P, ready: BOARD_READY },
+  { name: 'card-drawer', path: P, ready: BOARD_READY, overlay: true, run: (p) => click(p, '[data-testid^="card-"]') },
+  { name: 'new-task', path: P, ready: BOARD_READY, overlay: true, run: (p) => firstVisible(p, ['[data-testid="new-task-btn"]', '[data-testid^="add-card-btn-"]']) },
+  { name: 'calendar', path: P, ready: BOARD_READY, run: (p) => click(p, '[data-testid="view-switch-calendar"]') },
+  { name: 'dashboard', path: P, ready: BOARD_READY, run: (p) => click(p, '[data-testid="view-switch-dashboard"]') },
+  { name: 'intelligence', path: P, ready: BOARD_READY, overlay: true, run: (p) => firstVisible(p, ['[data-testid="project-intelligence-btn"]', '[data-testid="bottom-intelligence"]', '[data-testid="rail-intelligence"]']) },
+  { name: 'project-team', path: P, ready: BOARD_READY, overlay: true, run: (p) => click(p, '[data-testid="toolbar-manage-team-btn"]') },
+  { name: 'notifications', path: P, ready: BOARD_READY, overlay: true, run: (p) => click(p, '[data-testid="notifications-bell"]') },
+  { name: 'user-menu', path: P, ready: BOARD_READY, overlay: true, run: (p) => firstVisible(p, ['[data-testid="navbar-avatar-btn"]', '[data-testid="navbar-burger"]']) },
+  { name: 'search', path: P, ready: BOARD_READY, overlay: true, run: async (p) => { await p.keyboard.press('Control+k'); await wait(400); return true; } },
+  { name: 'meetings', path: `${P}/meetings`, ready: '[data-testid="meetings-page"] :is(.mi-list, .cs-empty, [data-testid="meetings-error"])' },
+  { name: 'meeting-new', path: `${P}/meetings`, ready: '[data-testid="meetings-page"]', run: (p) => click(p, '[data-testid="meeting-new"]') },
+  { name: 'team', path: '/team', ready: '.app-hero' },
+  { name: 'settings', path: '/settings', ready: '[data-testid="settings-overview"], [data-testid="google-connection-card"]' },
+  { name: 'ai-studio', path: '/ai-control-center', ready: '[data-testid="ai-limits"]' },
+  { name: 'ai-history', path: '/ai-history', ready: '.app-hero' },
+  { name: 'about', path: '/about', ready: 'main, .app-hero' },
 ];
 const hub = [
-  { name: 'hub-settings', path: '/settings' },
-  { name: 'hub-integrations', path: P, overlay: true, run: (p) => firstVisible(p, ['button:has-text("Komunikace")', '[aria-label*="Slack"]', 'button:has-text("Integrace")']) },
-  { name: 'hub-communication', path: P, run: (p) => click(p, '[data-testid="activity-tab-communication"]') },
+  { name: 'hub-settings', path: '/settings', ready: '[data-testid="settings-overview"]' },
+  { name: 'hub-integrations', path: P, ready: BOARD_READY, overlay: true, run: (p) => firstVisible(p, ['button:has-text("Komunikace")', '[aria-label*="Slack"]', 'button:has-text("Integrace")']) },
+  { name: 'hub-communication', path: P, ready: BOARD_READY, run: (p) => click(p, '[data-testid="activity-tab-communication"]') },
 ];
 const cases = SET === 'hub' ? hub : core;
-if (process.env.MEETING_ID) cases.push({ name: 'meeting-detail', path: `${P}/meetings/${process.env.MEETING_ID}` });
+if (process.env.MEETING_ID) cases.push({ name: 'meeting-detail', path: `${P}/meetings/${process.env.MEETING_ID}`, ready: '[data-testid="meeting-detail"]' });
 
 const browser = await chromium.launch({ executablePath: CHROMIUM });
 const results = [];
@@ -59,9 +60,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const authCtx = await browser.newContext();
 const ap = await authCtx.newPage();
 await ap.goto(`${BASE}/?login=auto`);
-await ap.waitForFunction(() => !location.search.includes('login=auto') && !location.pathname.startsWith('/login'), null, { timeout: 60000 }).catch(() => {});
-await ap.waitForLoadState('networkidle').catch(() => {});
-await wait(1500);
+// signed in = a Supabase session is stored (deterministic; no network idling)
+await ap.waitForFunction(() => Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k)) && !location.pathname.startsWith('/login'), null, { timeout: 60000 });
 const state = await authCtx.storageState();
 await authCtx.close();
 
@@ -80,8 +80,11 @@ for (const styleKey of STYLES) {
       let ok = true, note = '', axe = null, overflow = null;
       try {
         await page.goto(`${BASE}${c.path}`, { waitUntil: 'domcontentloaded' });
-        await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
-        await wait(600);
+        // RUN 11: deterministic UI readiness (owner rule) – no networkidle (realtime never idles): fonts loaded, the case's own
+        // ready element present, and no loading text left on the page
+        await page.waitForFunction(() => document.fonts.status === 'loaded', null, { timeout: 15000 });
+        if (c.ready) await page.locator(c.ready).first().waitFor({ timeout: 20000 });
+        await page.waitForFunction(() => !/Načít(ání|ám)|Zjišťuji stav/.test(document.body.innerText), null, { timeout: 20000 }).catch(() => { note += 'loading text still visible; '; });
         if (c.run && !(await c.run(page))) note += 'entry-point not found; ';
         await wait(400);
         const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, style: document.documentElement.dataset.style || 'existing' }));

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readableOn } from '../../lib/color';
 import { useConfirm } from '../ui/useConfirm';
 import { isTopDialog, useDialogFocus } from '../ui/useDialogFocus';
 import { X, Users, Mail, Copy, Check, Trash2, UserPlus, Settings2 } from 'lucide-react';
@@ -212,7 +213,7 @@ export default function ProjectTeamModal({
                   data-role={entry.role}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-                    <span aria-hidden style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: m.avatarColor, color: '#fff', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span aria-hidden style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: m.avatarColor, color: readableOn(m.avatarColor), fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {m.initials}
                     </span>
                     <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

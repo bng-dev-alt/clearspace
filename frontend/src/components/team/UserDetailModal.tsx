@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { readableOn } from '../../lib/color';
 import { X, Mail, Calendar, Shield, CheckSquare, Clock } from 'lucide-react';
 import { TeamMember, Card, Column } from '../../types/kanban';
 
@@ -76,7 +77,7 @@ export default function UserDetailModal({ isOpen, onClose, member, columns = [] 
                 height: '42px',
                 borderRadius: '50%',
                 backgroundColor: member.avatarColor || 'var(--purple-secondary)',
-                color: '#fff',
+                color: readableOn(member.avatarColor || 'var(--purple-secondary)'),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

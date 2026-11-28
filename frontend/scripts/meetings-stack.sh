@@ -28,7 +28,8 @@ case "${1:-}" in
     # every chargeable path points at the LOCAL fakes; the switches are on for this process only
     export STT_ENABLED=1 MEETING_LIVE_ENABLED=1 NEXT_PUBLIC_ENABLE_MEETING_LIVE=1 NEXT_PUBLIC_ENABLE_MEETING_AUDIO=1 CALENDAR_WRITE_ENABLED=1 MEETING_PI_ENABLED=1 \
       STT_SERVER_SECRET="$(stt_secret)" SONIOX_API_KEY=fake-soniox-key SONIOX_BASE_URL="http://127.0.0.1:$SONIOX_PORT/v1" \
-      SONIOX_RT_WS_URL_OVERRIDE="ws://127.0.0.1:$SONIOX_PORT/transcribe-websocket" AI_ALLOW_ALL_AUTHENTICATED=1 MEETING_LIVE_SEGMENT_MIN=${MEETING_LIVE_SEGMENT_MIN:-5}
+      SONIOX_RT_WS_URL_OVERRIDE="ws://127.0.0.1:$SONIOX_PORT/transcribe-websocket" AI_ALLOW_ALL_AUTHENTICATED=1 MEETING_LIVE_SEGMENT_MIN=${MEETING_LIVE_SEGMENT_MIN:-5} \
+      GEMINI_MODEL=${GEMINI_MODEL:-fake-gemini}   # RUN 11 (TECH_DEBT RUN 10): ledger model name the meetings specs expect; no key here = no AI call
     exec "$HERE/scripts/drive-stack.sh" app;;
   *) exec "$HERE/scripts/drive-stack.sh" "$@";;
 esac

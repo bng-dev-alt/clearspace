@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
 export interface TranscriptGroup { speaker: string | null; startMs: number; text: string }
@@ -24,12 +24,13 @@ export default function LiveTranscriptView({ groups, partial, status, speakerLab
   const [native, setNative] = useState(false);   // document.fullscreenElement === this view
   const [fallback, setFallback] = useState(false); // fixed full-window layer (no Fullscreen API)
   const presenting = native || fallback;
-  const speakers = useRef(new Map<string, number>());
-  const colourOf = (sp: string | null) => {
-    if (!sp) return undefined;
-    if (!speakers.current.has(sp)) speakers.current.set(sp, speakers.current.size % 6);
-    return speakers.current.get(sp);
-  };
+  // stable colour per speaker = order of first appearance (the transcript only grows, so earlier speakers keep their colour)
+  const colours = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of groups) if (g.speaker && !m.has(g.speaker)) m.set(g.speaker, m.size % 6);
+    return m;
+  }, [groups]);
+  const colourOf = (sp: string | null) => (sp ? colours.get(sp) : undefined);
 
   useEffect(() => {
     const sync = () => setNative(document.fullscreenElement === ref.current);

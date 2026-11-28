@@ -607,13 +607,14 @@ export default function TaskDetailDrawer({
 
           {/* Properties Field Grid (Linear/Notion style) */}
           <div className="drawer-meta-grid">
-            <span className="drawer-meta-label">Status</span>
+            <span className="drawer-meta-label">Stav</span>
             <div className="drawer-meta-value">
               <select 
                 className="drawer-select" 
                 value={columnId} 
                 onChange={handleStatusChange}
                 data-testid="drawer-status-select"
+                aria-label="Stav (sloupec)"
               >
                 {columns.map((col) => (
                   <option key={col.id} value={col.id}>{col.name}</option>
@@ -628,6 +629,7 @@ export default function TaskDetailDrawer({
                 value={priority} 
                 onChange={handlePriorityChange}
                 data-testid="drawer-priority-select"
+                aria-label="Priorita"
               >
                 <option value="">Žádná</option>
                 <option value="Low">Nízká</option>
@@ -663,6 +665,7 @@ export default function TaskDetailDrawer({
               <input
                 type="date"
                 className="drawer-date-input"
+                aria-label="Termín splnění"
                 value={dueDate}
                 onChange={handleDueDateChange}
                 data-testid="drawer-duedate-input"
@@ -695,6 +698,7 @@ export default function TaskDetailDrawer({
                 value={tag} 
                 onChange={handleTagChange}
                 data-testid="drawer-tag-select"
+                aria-label="Štítek"
               >
                 <option value="">Žádný</option>
                 {availableTags.map((t) => (

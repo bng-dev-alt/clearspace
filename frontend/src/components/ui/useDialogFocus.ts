@@ -1,4 +1,4 @@
-import { createElement, useEffect, useRef, useState, type RefObject } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
 
 /** Only the top-most open modal dialog reacts to keys (a confirmation can sit on top of another dialog). */
 export function isTopDialog(el: HTMLElement | null): boolean {
@@ -47,14 +47,13 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, active: boole
  * role="dialog"; it finds that element itself (no ref plumbing) and applies the same focus management.
  */
 export function DialogFocus({ active = true }: { active?: boolean }) {
-  const marker = useRef<HTMLSpanElement>(null);
-  const container = useRef<HTMLElement | null>(null);
-  const [, setReady] = useState(false);
-  useEffect(() => {
-    container.current = marker.current?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? null;
-    if (container.current && !container.current.hasAttribute('tabindex')) container.current.setAttribute('tabindex', '-1');
-    setReady(true);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  const ref = useMemo(() => ({ current: container }), [container]);
+  const attach = useCallback((el: HTMLSpanElement | null) => {
+    const dialog = el?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? null;
+    if (dialog && !dialog.hasAttribute('tabindex')) dialog.setAttribute('tabindex', '-1');
+    setContainer(dialog);
   }, []);
-  useDialogFocus(container, active && container.current !== null);
-  return createElement('span', { ref: marker, hidden: true });
+  useDialogFocus(ref, active && container !== null);
+  return createElement('span', { ref: attach, hidden: true });
 }

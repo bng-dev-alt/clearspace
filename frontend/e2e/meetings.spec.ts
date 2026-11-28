@@ -168,10 +168,17 @@ test('approval: nothing changes until confirmed; create card with a human-chosen
   expect(cards[1]).toMatchObject({ title: 'Migrace databáze', due_date: '2026-11-25', archived: false });
   const assigned = (await rest(request, owner.token, `card_assignees?select=member_id&card_id=eq.${cards[1].id}`)).json;
   expect(assigned).toEqual([{ member_id: `wm-honza-${run}` }]);
-  const log = (await rest(request, owner.token, `activity_logs?select=action_type,details,actor_id&card_id=eq.${cards[1].id}`)).json;
-  expect(log).toHaveLength(1);
-  expect(log[0]).toMatchObject({ action_type: 'card_created', actor_id: owner.id });
-  expect(log[0].details.source.type).toBe('intelligence_item');
+  // TD-3 (RUN 11): creating a card WITH an assignee legitimately writes two domain events since RUN 01 (migration 1000):
+  // card_created (this approval) + card_assigned (trigger collab_assignee_events, the same event that drives assignment
+  // notifications – end to end in notify.spec "assignment: bell in the app AND a Telegram message"). Exactly these two, by type:
+  const log = (await rest(request, owner.token, `activity_logs?select=action_type,details,actor_id&card_id=eq.${cards[1].id}&order=created_at`)).json;
+  expect(log.map((l: { action_type: string }) => l.action_type).sort()).toEqual(['card_assigned', 'card_created']);
+  const byType = Object.fromEntries(log.map((l: { action_type: string }) => [l.action_type, l]));
+  expect(byType.card_created).toMatchObject({ actor_id: owner.id });
+  expect(byType.card_created.details.source.type).toBe('intelligence_item');
+  expect(byType.card_assigned).toMatchObject({ actor_id: owner.id });
+  expect(byType.card_assigned.details).toMatchObject({ member_id: `wm-honza-${run}`, name: 'Honza Novák', title: 'Migrace databáze' });
+  // Honza has no ClearSpace account (workspace member without a profile), so collab_notify skips the bell notification by design.
 
   await page.reload();
   await expect(page.locator('[data-kind="action_item"]', { hasText: 'Připravit migraci databáze' }).getByTestId('applied-info')).toContainText('Migrace databáze');

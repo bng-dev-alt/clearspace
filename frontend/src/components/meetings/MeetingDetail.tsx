@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { plural } from '../../lib/plural';
 import MeetingBreadcrumb from './MeetingBreadcrumb';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, EmptyState } from '../ui';
 import { Sparkles } from 'lucide-react';

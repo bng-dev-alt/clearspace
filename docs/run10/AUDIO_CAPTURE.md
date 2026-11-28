@@ -1,7 +1,34 @@
 # RUN 10 – zachycení zvuku: kompatibilita a omezení
 
 Legenda: **MOCK** = ověřeno automatem / Chromium s falešným zařízením; **DOC** = podle dokumentace prohlížeče, neověřeno na skutečném
-zařízení v tomto runu; **LIVE** = ověřeno skutečným hovorem (zatím nic – viz OWNER_BLOCK).
+zařízení v tomto runu; **LIVE** = ověřeno skutečným hovorem 2026-11-28 (Mac Chrome + iPad v Google Meet, viz ACCEPTANCE.md).
+
+## Tři různé zdroje zvuku (co se opravdu nahrává)
+| Zdroj | Co to je | Jak ho ClearSpace získá | Kdo je slyšet |
+|---|---|---|---|
+| **Mikrofon** | vstupní zařízení počítače (interní, Bluetooth sluchátka, USB, webkamera) | `getUserMedia`, konkrétní zařízení z výběru „Mikrofon“ | vy + vše, co mikrofon slyší v místnosti (i reproduktor) |
+| **Zvuk karty** | zvuk, který přehrává jedna karta prohlížeče (Meet/Zoom/Teams **ve webu**, video) | `getDisplayMedia` + „Sdílet i zvuk karty“ (jen Chrome/Edge na počítači) | ostatní účastníci hovoru, bez ozvěny místnosti |
+| **Systémový zvuk** | vše, co přehrává počítač (i desktopové aplikace Zoom/Teams) | ClearSpace ho **nezachytává**; Chrome ho umí sdílet jen na Windows u celé obrazovky, na macOS vůbec | – |
+
+Režim „Mikrofon + zvuk karty“ oba zdroje smíchá do jedné stopy pro přepis a od RUN 10 hardening ukazuje **dvě samostatné úrovně**
+(Mikrofon / Zvuk karty). Ze záznamu se zpětně nedá určit, ze kterého zdroje věta přišla – proto LIVE akceptace vzdáleného účastníka
+přes kartu je jen PARTIAL (iPad byl ve stejné místnosti). Se sluchátky a vzdáleným účastníkem mimo místnost je důkaz jednoznačný.
+
+## Výběr mikrofonu a bezplatný test (RUN 10 hardening)
+* Seznam = zařízení, která prohlížeč zpřístupní (`enumerateDevices`); názvy až po povolení mikrofonu. Volba se pamatuje v prohlížeči.
+* „Otestovat mikrofon“: 5 s, jen v prohlížeči (getUserMedia + analyzátor), **žádné volání serveru ani Soniox**, výsledek „funguje“ / „ticho“.
+* Vybrané zařízení odpojené: upozornění + použije se výchozí; odpojení během nahrávání: stream se ukončí, text lze uložit nebo spustit znovu.
+* Ticho > 12 s během nahrávání: výrazné upozornění s odkazem na ukazatel úrovně.
+
+## Diarizace (rozlišení mluvčích) – omezení
+Soniox čísluje mluvčí podle hlasu v rámci **jednoho streamu**; po pauze/rollover je číslování nové (`2.1`, `2.2`). Živě: krátká výměna
+Mac (CZ) / iPad (EN) rozlišena správně, ale přiřazení občas kolísá (podobné hlasy, přesahy, hlas z reproduktoru, video). Jména mluvčích
+doplní člověk („Jména mluvčích“) před analýzou; AI z čísla mluvčího nikdy neodvozuje identitu.
+
+## Podporovaná zařízení (stav RUN 10)
+Doporučeno: **Chrome nebo Edge na počítači + sluchátka**. Safari / iPad / iPhone / Firefox: jen mikrofon (zvuk karty neumí). iPad byl
+v živém testu jen účastníkem Meet, ne snímacím zařízením (NOT VERIFIED). Desktopové aplikace Zoom/Teams: jen přes reproduktor do
+mikrofonu (horší kvalita).
 
 | Scénář | Chrome / Edge (macOS, Windows) | Firefox (desktop) | Safari (macOS) | iPad / iPhone (Safari) | Android Chrome |
 |---|---|---|---|---|---|

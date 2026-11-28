@@ -21,3 +21,6 @@
 | 17 | Detail porady: tlačítko „Analyzovat“ skrýt, dokud porada nemá přepis | RUN 10 | dnes se zobrazuje i u plánované porady |
 | 18 | Přímé odeslání pozvánky do propojeného Slack kanálu / Telegram skupiny (dnes one-click kopírování) | RUN 10 | nový typ zprávy hubu |
 | 19 | Classic: přepínače zdroje zvuku vypadají jako holé radio buttony – sjednotit s design systémem | RUN 10 | |
+| 20 | Živý přepis: výběr mikrofonu a test – stylovat `<select>`/`<meter>` podle design systému (dnes nativní prvky) | RUN 10 hardening | funkčně hotovo |
+| 21 | Po zrušení přepisu ukazuje časomíra i dříve spotřebovaný čas (vyúčtovaný) – zvážit popisek „z toho zrušeno“ | RUN 10 hardening | |
+| 22 | Seznam porad: sekce „Proběhlé“ řadí i porady s uplynulým termínem bez přepisu – přejmenovat na „Uplynulý termín“ / filtrovat podle skutečného stavu | RUN 10 hardening | detail porady už termín a průběh odlišuje |

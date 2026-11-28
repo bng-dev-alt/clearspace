@@ -16,14 +16,20 @@ dohledatelný zdroj znalostí pro celý tým (Project Intelligence).
 2. **Termín a připojení**: „Vytvořit událost s Google Meet“ – událost vznikne ve vašem Google Kalendáři, odkaz Meet dodá Google.
    Pozvánky e-mailem pošle Google jen když je výslovně zaškrtnete. „Kopírovat pozvánku“ = text pro Slack/Telegram/e-mail i s upozorněním
    na přepis.
-3. **Živý přepis**: zvolíte zdroj zvuku, potvrdíte, že jste účastníky informovali, a kliknete „Spustit přepis“. Vidíte dva stavy –
-   **nahrávání** (● Nahrává se) a **přepis** (Přepis běží) – délku a průběžný text s mluvčími.
-4. **Pauza / pokračování / ukončit** – pauza opravdu zastaví posílání zvuku i placení; „Ukončit a uložit“ uloží jednu verzi přepisu.
+3. **Živý přepis**: vyberete mikrofon (interní, Bluetooth, USB…) a ověříte ho tlačítkem **„Otestovat mikrofon“** (zdarma, nic se
+   neodesílá), zvolíte zdroj zvuku, potvrdíte, že jste účastníky informovali, a kliknete „Spustit přepis“. Vidíte dva stavy –
+   **nahrávání** (● Nahrává se) a **přepis** (Přepis běží), ukazatel úrovně mikrofonu (a zvlášť zvuku karty), délku a průběžný text.
+4. **Pauza / pokračování / ukončit / zrušit** – pauza opravdu zastaví posílání zvuku i placení; „Ukončit a uložit“ uloží jednu verzi
+   přepisu; **„Zrušit přepis“** (s potvrzením) stream hned ukončí a text zahodí – porada, pozvaní i událost zůstanou, spotřebovaný čas
+   se započítá. Termín porady je jen informace: i po jeho uplynutí se lze připojit a přepis spustit.
 5. **Analyzovat** – AI navrhne shrnutí, rozhodnutí, úkoly, otázky a rizika; každý návrh má citaci (klik = zvýraznění v přepisu).
 6. **Schválit** – upravíte název, řešitele (jen člen projektu), termín a vytvoříte úkol. Bez schválení se v projektu nic nezmění.
 7. **Project Intelligence** – „Co jsme rozhodli o termínu dodávky?“ – odpověď cituje poradu (`meeting:`) nebo schválený závěr (`item:`).
 
 ## 3. Zvuk – co prohlížeč umí (říkejte přesně)
+Tři různé věci: **mikrofon** (co slyší vaše zařízení v místnosti), **zvuk karty** (hovor ve webovém Meet/Zoom/Teams v Chrome/Edge)
+a **systémový zvuk** (desktopové aplikace – ClearSpace ho nezachytává). Podrobně `docs/run10/AUDIO_CAPTURE.md`.
+
 | Situace | Doporučení |
 |---|---|
 | Porada v místnosti | „Jen mikrofon“ |
@@ -48,10 +54,13 @@ informování účastníků a právní základ – ClearSpace **netvrdí automat
 Přepis real-time 0,12 USD/h (hodinová porada ≈ 0,12 USD); async 0,10 USD/h. Gemini analýza porady ≈ jednotky tisíc tokenů (zlomky centu).
 Demo účet má denní limity (AI 40k tokenů/den, přepis dle schválení).
 
-## 7. Skutečně funkční vs. simulace (stav k 28. 11. 2026)
-| Funguje naživo | Ověřeno jen v simulaci (čeká na akceptaci vlastníka) | Neexistuje (LATER) |
+## 7. Skutečně funkční vs. simulace (stav po živé akceptaci 28. 11. 2026)
+| Ověřeno naživo (produkce, prezentační účet) | Částečně / jen v simulaci | Neexistuje (LATER) |
 |---|---|---|
-| plánování, pozvaní, odkazy, kopírování; analýza + schválení úkolů (RC5); PI; produkce s vypnutými přepínači | živý přepis Soniox, Meet z Google API, pozvánky, PI nad skutečnou poradou | boti v hovorech, nativní Zoom/Teams, automatické nahrávání, video, hlasová identifikace |
+| Google událost se skutečným Meet, pozvánky e-mailem, Mac + iPad v hovoru, živý přepis CZ/EN/mix (Soniox), pauza/pokračování/stop, mluvčí (funkční, ne vždy přesní), izolace dat, smazání porady, náklady v limitu | vzdálený účastník čistě ze zvuku karty (PARTIAL), Gemini analýza + schválení úkolu + PI citace nad živou poradou (čeká na denní limit AI), obnova po výpadku sítě, zrušení přepisu a test mikrofonu (MOCK) | boti v hovorech, nativní Zoom/Teams, systémový zvuk, automatické nahrávání, video, hlasová identifikace, přímé odeslání pozvánky do hubu |
+
+Omezení, která říkat nahlas: rozlišení mluvčích občas zamění osoby (doplňte jména ručně); Safari/iPad jen mikrofon; živý přepis
+v prezentačním účtu je po akceptaci vypnutý limitem minut (0), dokud vlastník neschválí trvalý rozpočet.
 
 ## 8. Demo scénáře
 * **2 min (HR)**: seznam porad → hotová porada → shrnutí s citací → schválený úkol na boardu.
@@ -66,4 +75,7 @@ Demo účet má denní limity (AI 40k tokenů/den, přepis dle schválení).
 * *Co když někdo nesouhlasí?* Organizátor přepis pozastaví/ukončí a nedokončené části může zahodit.
 * *Proč Soniox?* Ověřená kvalita češtiny a angličtiny (měřeno v aplikaci scribe_), nízká cena, dočasné klíče pro prohlížeč.
 * *Funguje to v Safari / na iPadu?* Jen mikrofon; zvuk jiné karty Safari neumí.
+* *Jak poznám, že nahrávám správný mikrofon?* Před startem „Otestovat mikrofon“ (zdarma); během přepisu se hýbe ukazatel úrovně, po 12 s
+  ticha se objeví upozornění.
+* *Rozpozná to, kdo mluví?* Rozliší hlasy jako „Mluvčí 1, 2…“, občas je zamění; jména doplní člověk. Identitu AI nehádá.
 * *Kolik to stojí?* ~0,12 USD za hodinu přepisu + zlomky centu za analýzu; limity hlídá server před voláním poskytovatele.

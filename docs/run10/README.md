@@ -1,5 +1,23 @@
 # RUN 10 – Meeting Intelligence: závěrečná zpráva (2026-11-28)
 
+## Aktualizace po živé akceptaci a hardeningu (2026-11-28)
+**Verdikt: GO pro feature freeze. Uzavření RUN 10: podmíněné – chybí jen živá Gemini část (analýza → schválení úkolu → PI citace),
+zablokovaná denním limitem tokenů prezentačního účtu, ne kódem; dokončit po obnově limitu (≤ 5 dotazů, ≤ 0,05 USD, bez změny limitů).**
+
+* Živě ověřeno (LIVE PASS): OAuth „Plánování porad“, skutečná událost + Meet, pozvánky e-mailem, Mac + iPad v hovoru, Soniox CZ / EN /
+  mix, pauza / pokračování / stop, ledger a náklady v limitu, izolace dat (RLS v produkci), smazání porady. Diarizace a vzdálený
+  účastník přes kartu: PARTIAL. Matice: `ACCEPTANCE.md` (28 bodů).
+* Opraveno a nasazeno (`dpl_9xskrK75…`, commit `2fd55c6`): výběr mikrofonu, bezplatný lokální test, živé úrovně mikrofonu / karty,
+  ticho / odpojení, „Zrušit přepis“ s potvrzením, poctivé koncové stavy, termín vs. skutečný průběh, čitelné „Připojit se ke schůzce“.
+* Náklady: Soniox 4 relace / 6,37 min / 0,0127 USD (limit 6 / 30 / 0,06) · Gemini 0 / 0 USD (limit 8 / 0,30).
+* Po akceptaci: minuty přepisu prezentačního účtu = 0 (schválen byl test, ne trvalá spotřeba); ostatní pilotní přepínače zůstávají.
+* Úklid: lokální stack `cs-run10-sb` smazán (jen syntetická data, schváleno), porada „RUN10 Diktat“ smazána (mikrofon zachytil i
+  nesouvisející hovor z místnosti), worktree `V1-run10-release` sloučen a odstraněn.
+
+---
+
+## Původní zpráva (před živou akceptací)
+
 **Verdikt: GO pro produkci s vypnutými přepínači (hotovo) · NO-GO pro „hotovou“ Meeting Intelligence, dokud neproběhne jediný blok
 vlastníka (`OWNER_BLOCK.md`) – živý přepis, Meet z Google API a placená AI jsou ověřené jen v simulaci.**
 

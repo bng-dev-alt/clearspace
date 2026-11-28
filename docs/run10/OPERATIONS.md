@@ -2,7 +2,19 @@
 
 Produkce: `https://clearspace.luffast.com`, Supabase `twjlnsxjtuntujarwner`, Vercel `clearspace` (jen staged build + promote).
 
-## Stav k 2026-11-28 (po RUN 10)
+## Stav k 2026-11-28 (po živé akceptaci a RUN 10 hardening)
+* Kód: `dpl_9xskrK75aKhaWsR4z51fbuHzbbue` (commit `2fd55c6`, hardening) → po sloučení do `main` nové nasazení z `main` (viz README).
+  Předchozí: `dpl_49j9aY8y…` (pilot zapnut), `dpl_FZMYZjkv…` (vše OFF), rollback RUN 09 `dpl_GWQF6jGs…`.
+* Pilot (prezentační účet): `MEETING_PILOT_USER_IDS` (Sensitive, = Keychain `ClearSpace V1 - Hub (production) | pilot_user_ids`),
+  `MEETING_LIVE_ENABLED=1`, `NEXT_PUBLIC_ENABLE_MEETING_LIVE=1`, `MEETING_LIVE_SEGMENT_MIN=10`, `CALENDAR_WRITE_ENABLED=pilot`,
+  `MEETING_PI_ENABLED=1`. Přepínání jen `frontend/scripts/meetings-prod.sh pilot-on|minutes <n>|status` (hodnoty přes stdin) + nové nasazení.
+* **Minuty přepisu po akceptaci = 0** (`meetings-prod.sh minutes 0`): schválen byl jednorázový test (30 min), ne trvalá denní spotřeba.
+  Živý přepis je tím pro prezentační účet nedostupný; plánování, Meet, pozvánky, analýza a PI fungují. Trvalý rozpočet = rozhodnutí
+  vlastníka (návrh: 30 min/den ≈ max. 0,06 USD/den, `meetings-prod.sh minutes 30` + nasazení).
+* Google Cloud `clearspace-prod-515815` (Testing): scope `calendar.events.owned` přidán (Data Access); prezentační účet povolil
+  „Plánování porad“.
+
+## Stav k 2026-11-28 (po RUN 10, před živou akceptací)
 * DB: migrace **1800** aplikována (`scripts/apply-meetings-hosted.sh`, rehearsal `scripts/rehearse-meetings-prod.sh` PASS). Šifrovaná záloha
   `/Volumes/WORKSPACE/_G2_BACKUP/20261128-v1-run10-pre-meetings-encrypted` (AES-256, klíč Keychain `g2-backup-20261128-v1-run10-pre-meetings`,
   SHA256SUMS, obnova ověřena počty řádků).

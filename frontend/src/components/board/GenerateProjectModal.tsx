@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { X, Sparkles, Check, ChevronDown, ChevronUp, Cpu, Activity, ListChecks, AlertTriangle } from 'lucide-react';
 import { aiClient } from '../../services/ai/aiClient';
 
@@ -300,6 +301,7 @@ export default function GenerateProjectModal({
         aria-modal="true"
         data-testid="generate-project-studio"
       >
+        <DialogFocus />
         {/* Modal Header */}
         <div
           className="modal-header"

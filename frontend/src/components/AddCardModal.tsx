@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DialogFocus } from './ui/useDialogFocus';
 import { X } from 'lucide-react';
 import { TeamMember, Assignee } from '../types/kanban';
 import MultiAssigneeSelect from './board/MultiAssigneeSelect';
@@ -85,6 +86,7 @@ export default function AddCardModal({
         role="dialog"
         aria-modal="true"
       >
+        <DialogFocus />
         <div className="modal-header">
           <h2 className="modal-title">Přidat kartu do: {columnName}</h2>
           <button

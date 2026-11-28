@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { createElement, useEffect, useRef, useState, type RefObject } from 'react';
 
 /** Only the top-most open modal dialog reacts to keys (a confirmation can sit on top of another dialog). */
 export function isTopDialog(el: HTMLElement | null): boolean {
@@ -24,7 +24,8 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, active: boole
       (first ?? el).focus({ preventScroll: true });
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || !ref.current || !isTopDialog(ref.current)) return;
+      // only modal dialogs keep Tab inside; non-modal panels (popovers, side drawers) just get focus in and back
+      if (e.key !== 'Tab' || !ref.current || ref.current.getAttribute('aria-modal') !== 'true' || !isTopDialog(ref.current)) return;
       const all = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE));
       const shown = all.filter((n) => n.getClientRects().length > 0);
       const items = shown.length ? shown : all; // jsdom has no layout: treat everything as visible
@@ -39,4 +40,21 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, active: boole
       if (opener && opener.isConnected) opener.focus({ preventScroll: true });
     };
   }, [ref, active]);
+}
+
+/**
+ * Drop-in for dialogs that are not built on ModalShell: render <DialogFocus active={open} /> as the FIRST child of the element with
+ * role="dialog"; it finds that element itself (no ref plumbing) and applies the same focus management.
+ */
+export function DialogFocus({ active = true }: { active?: boolean }) {
+  const marker = useRef<HTMLSpanElement>(null);
+  const container = useRef<HTMLElement | null>(null);
+  const [, setReady] = useState(false);
+  useEffect(() => {
+    container.current = marker.current?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? null;
+    if (container.current && !container.current.hasAttribute('tabindex')) container.current.setAttribute('tabindex', '-1');
+    setReady(true);
+  }, []);
+  useDialogFocus(container, active && container.current !== null);
+  return createElement('span', { ref: marker, hidden: true });
 }

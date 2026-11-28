@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { useRouter } from 'next/navigation';
 import { X, Sparkles, AlertTriangle, Check, Calendar, Users, Info, ChevronRight } from 'lucide-react';
 import type { Card } from '../../types/kanban';
@@ -185,6 +186,7 @@ export default function GenerateSprintModal({
         role="dialog"
         aria-modal="true"
       >
+        <DialogFocus />
         {/* Modal Header */}
         <div className="modal-header" style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

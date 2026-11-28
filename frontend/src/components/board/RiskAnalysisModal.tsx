@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { X, ShieldAlert, AlertTriangle, AlertCircle, Info, Check, ShieldCheck, HelpCircle, Activity } from 'lucide-react';
 import { Column } from '../../types/kanban';
 import { aiClient } from '../../services/ai/aiClient';
@@ -102,6 +103,7 @@ export default function RiskAnalysisModal({ isOpen, onClose, projectName }: Risk
         role="dialog"
         aria-modal="true"
       >
+        <DialogFocus />
         {/* Modal Header */}
         <div className="modal-header" style={{ padding: '1.25rem 2rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>

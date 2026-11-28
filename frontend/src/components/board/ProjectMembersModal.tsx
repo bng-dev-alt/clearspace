@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { X, Search, Settings2, Users, UserSearch, Check } from 'lucide-react';
 import { TeamMember } from '../../types/kanban';
 import { Button, EmptyState } from '../ui';
@@ -65,6 +66,7 @@ export default function ProjectMembersModal({
         aria-modal="true"
         data-testid="project-members-modal"
       >
+        <DialogFocus />
         <div className="modal-header">
           <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Users size={18} />

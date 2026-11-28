@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import {
   X,
   Sparkles,
@@ -253,6 +254,7 @@ export default function ProjectIntelligenceDrawer({
         aria-label="Project Intelligence"
         data-testid="project-intelligence-drawer"
       >
+        <DialogFocus />
         {/* Header s pozicovacím barem (Left / Focused / Right) */}
         <div className="drawer-header" style={{ justifyContent: 'space-between', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

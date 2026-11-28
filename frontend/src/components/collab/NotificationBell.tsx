@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -71,6 +72,7 @@ export default function NotificationBell() {
 
       {open && (
         <div className="notifications-panel" role="dialog" aria-label="Oznámení" data-testid="notifications-panel">
+          <DialogFocus />
           <div className="notifications-head">
             <span>Oznámení</span>
             {unread > 0 && (

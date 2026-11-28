@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DialogFocus } from '../../components/ui/useDialogFocus';
 import { useConfirm } from '../../components/ui/useConfirm';
 import StatusMessage from '../../components/ui/StatusMessage';
 import Navbar from '../../components/layout/Navbar';
@@ -380,6 +381,7 @@ export default function AiHistoryPage() {
             role="dialog"
             aria-modal="true"
           >
+            <DialogFocus />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem' }}>
               <div style={{ backgroundColor: 'var(--warning-soft)', color: 'var(--warning)', padding: '0.6rem', borderRadius: '50%', flexShrink: 0 }}>
                 <AlertTriangle size={24} />

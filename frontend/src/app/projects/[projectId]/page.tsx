@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { DialogFocus } from '../../../components/ui/useDialogFocus';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Navbar from '../../../components/layout/Navbar';
@@ -879,6 +880,7 @@ export default function ProjectBoardPage() {
             aria-modal="true"
             data-testid="add-column-modal"
           >
+            <DialogFocus />
             <div className="modal-header">
               <h2 className="modal-title">Přidat sloupec</h2>
               <button
@@ -935,6 +937,7 @@ export default function ProjectBoardPage() {
             aria-modal="true"
             data-testid="delete-column-transfer-modal"
           >
+            <DialogFocus />
             <div className="modal-header">
               <h2 className="modal-title" style={{ color: 'var(--danger)' }}>Odstranit sloupec a převést úkoly</h2>
               <button

@@ -1,6 +1,7 @@
 'use client';
 
 import { TaskConversation } from '../hub/CommunicationList';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { useConfirm } from '../ui/useConfirm';
 import { hubService } from '../../services/hubService';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -425,6 +426,7 @@ export default function TaskDetailDrawer({
         aria-modal="true" 
         data-testid="task-detail-drawer"
       >
+        <DialogFocus />
         {/* Drawer Header */}
         <div className="drawer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="drawer-header-left">

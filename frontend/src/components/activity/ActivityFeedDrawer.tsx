@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import {
   X, History, PlusCircle, ArrowRightLeft, Archive, Columns3, UserPlus, Sparkles,
   CheckCircle2, PencilLine, UserCheck, MessageSquare, FolderKanban, HardDrive,
@@ -99,6 +100,7 @@ export default function ActivityFeedDrawer({ isOpen, onClose, projectId, onOpenC
         aria-label="Aktivita projektu"
         data-testid="activity-feed-drawer"
       >
+        <DialogFocus />
         <div className="drawer-header">
           <div className="drawer-header-left">
             <History size={18} />

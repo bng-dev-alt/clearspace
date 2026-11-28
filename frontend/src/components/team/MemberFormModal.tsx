@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import { X, Check } from 'lucide-react';
 import { TeamMember, WorkspaceRole } from '../../types/kanban';
 import { deriveInitials } from '../../services/workspaceService';
@@ -109,6 +110,7 @@ export default function MemberFormModal({ isOpen, mode, member, isOwner, onClose
         aria-modal="true"
         data-testid="member-form-modal"
       >
+        <DialogFocus />
         <div className="modal-header">
           <h2 className="modal-title">{mode === 'add' ? 'Přidat člena' : 'Upravit člena'}</h2>
           <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Zavřít okno">

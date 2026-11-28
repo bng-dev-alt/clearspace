@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
@@ -413,6 +414,7 @@ export default function Navbar({ boardActions }: NavbarProps) {
             onClick={(e) => e.stopPropagation()}
             data-testid="mobile-menu"
           >
+            <DialogFocus />
             <div className="mobile-menu-head">
               <span className="navbar-logo">clearspace<span className="logo-dot">.</span></span>
               <button

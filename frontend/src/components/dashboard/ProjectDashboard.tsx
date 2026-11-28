@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DialogFocus } from '../ui/useDialogFocus';
 import StatusMessage from '../ui/StatusMessage';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -355,6 +356,7 @@ export default function ProjectDashboard() {
             role="dialog"
             aria-modal="true"
           >
+            <DialogFocus />
             <div className="modal-header">
               <h2 className="modal-title">Nový projekt</h2>
               <button
@@ -419,6 +421,7 @@ export default function ProjectDashboard() {
             aria-modal="true"
             data-testid="delete-project-modal"
           >
+            <DialogFocus />
             <div className="modal-header">
               <h2 className="modal-title" style={{ color: 'var(--danger)' }}>Odstranit projekt</h2>
               <button

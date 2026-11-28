@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, test, expect, beforeEach } from 'vitest';
 import KanbanBoard from '../app/projects/[projectId]/page';
 import { vi } from 'vitest';
+import { answerConfirm } from './helpers/confirmDialog';
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ projectId: 'project-default' }),
@@ -127,12 +128,15 @@ describe('Kanban Board App Unit Tests', () => {
     const countBadge = screen.getByTestId('column-count-column-1');
     expect(countBadge).toHaveTextContent('2');
     
-    // Kliknutí na smazat kartu card-1
+    // RUN 11: the card icon ARCHIVES the card and asks first (same dialog as the task drawer); nothing happens before the answer
     const deleteBtn = screen.getByTestId('delete-card-card-1');
+    expect(deleteBtn).toHaveAttribute('aria-label', 'Archivovat kartu: Návrh mockupů hlavní stránky');
     fireEvent.click(deleteBtn);
-    
-    // Ověření, že karta byla smazána
-    expect(screen.queryByText('Návrh mockupů hlavní stránky')).not.toBeInTheDocument();
+    expect(screen.getByText('Návrh mockupů hlavní stránky')).toBeInTheDocument();
+    await answerConfirm({ match: /přesune se do archivu/ });
+
+    // Ověření, že karta z boardu zmizela (archiv)
+    await waitFor(() => expect(screen.queryByText('Návrh mockupů hlavní stránky')).not.toBeInTheDocument());
     expect(countBadge).toHaveTextContent('1');
   });
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { readableOn } from '../../lib/color';
-import { Trash2, Calendar, MoreHorizontal } from 'lucide-react';
+import { Archive, Calendar, MoreHorizontal } from 'lucide-react';
 import { Card } from '../../types/kanban';
 import { translatePriority, getPriorityColor } from '../../utils/kanban';
 
@@ -31,10 +31,11 @@ function KanbanCard({
         type="button"
         className="card-delete-btn"
         onClick={(e) => { e.stopPropagation(); onDelete(columnId, card.id); }}
-        aria-label={`Smazat kartu: ${card.title}`}
+        aria-label={`Archivovat kartu: ${card.title}`}
+        title="Archivovat"
         data-testid={`delete-card-${card.id}`}
       >
-        <Trash2 size={14} />
+        <Archive size={14} />
       </button>
 
       <div className="card-drag-handle" aria-hidden="true">

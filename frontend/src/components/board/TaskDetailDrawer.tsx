@@ -6,7 +6,7 @@ import { useConfirm } from '../ui/useConfirm';
 import { hubService } from '../../services/hubService';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { X, Trash2, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, AlignRight, Maximize2 } from 'lucide-react';
+import { X, Trash2, Archive, CheckSquare, MessageSquare, Sparkles, Clock, AlignLeft, AlignRight, Maximize2 } from 'lucide-react';
 import MultiAssigneeSelect from './MultiAssigneeSelect';
 import TaskResourcesSection from './TaskResourcesSection';
 import DriveLinksPanel from '../drive/DriveLinksPanel';
@@ -396,7 +396,8 @@ export default function TaskDetailDrawer({
   };
 
   const handleDeleteCard = async () => {
-    if (!(await ask({ title: 'Smazat úkol?', message: `Úkol „${card.title}“ se smaže i s checklistem, komentáři a přílohami. Tuto akci nelze vrátit.`, confirmLabel: 'Smazat úkol', danger: true }))) return;
+    // RUN 11: "delete" here ARCHIVES the card (useKanbanBoard.deleteCard sets archived=true) – the dialog says exactly that
+    if (!(await ask({ title: 'Archivovat úkol?', message: `Úkol „${card.title}“ zmizí z boardu a přesune se do archivu (filtr Archivované). Checklist, komentáře a přílohy zůstávají uložené.`, confirmLabel: 'Archivovat' }))) return;
     onDeleteCard(columnId, card.id);
     requestClose();
   };
@@ -536,10 +537,11 @@ export default function TaskDetailDrawer({
               }}
               onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
               onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--gray-text)')}
-              title="Smazat úkol"
+              title="Archivovat úkol"
+              aria-label="Archivovat úkol"
               data-testid="drawer-delete-btn"
             >
-              <Trash2 size={18} />
+              <Archive size={18} />
             </button>
             <button
               type="button"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useConfirm } from '../../../components/ui/useConfirm';
 import { plural } from '../../../lib/plural';
 import { DialogFocus } from '../../../components/ui/useDialogFocus';
 import dynamic from 'next/dynamic';
@@ -133,6 +134,12 @@ export default function ProjectBoardPage() {
   // Viewer: board actions are no-ops (the database refuses them anyway; this just avoids dead clicks).
   const editOnly = <T extends unknown[]>(fn: (...args: T) => unknown) => (...args: T) => {
     if (!readOnly) fn(...args);
+  };
+  // RUN 11: the card's archive icon asks the same question as the task drawer (archive has no undo button in the UI)
+  const [askArchive, archiveDialog] = useConfirm();
+  const archiveCard = async (columnId: string, cardId: string) => {
+    const title = columns.find((c) => c.id === columnId)?.cards.find((c) => c.id === cardId)?.title ?? 'úkol';
+    if (await askArchive({ title: 'Archivovat úkol?', message: `Úkol „${title}“ zmizí z boardu a přesune se do archivu (filtr Archivované). Checklist, komentáře a přílohy zůstávají uložené.`, confirmLabel: 'Archivovat' })) deleteCard(columnId, cardId);
   };
 
   const {
@@ -568,6 +575,7 @@ export default function ProjectBoardPage() {
 
   return (
     <div className={`app-container${readOnly ? ' is-readonly' : ''}`} data-hydrated={isHydrated ? 'true' : 'false'}>
+      {archiveDialog}
       {/* Board akce se na mobilu objeví v hamburger menu (na desktopu zůstávají v toolbaru). */}
       <Navbar
         boardActions={{
@@ -765,7 +773,7 @@ export default function ProjectBoardPage() {
             onKeyDownColumnName={handleKeyDown}
             onOpenAddModal={editOnly(handleOpenAddModal)}
             onOpenEditModal={handleOpenDrawer}
-            onDeleteCard={editOnly(deleteCard)}
+            onDeleteCard={editOnly(archiveCard)}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragOverColumn={handleDragOverColumn}

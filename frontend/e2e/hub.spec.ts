@@ -177,7 +177,7 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
       await pi.click();                                                                // off again: imports are deleted
       await expect(pi).not.toBeChecked();
     } else {
-      await expect(dest).toContainText('Na serveru vypnuto');
+      await expect(dest.getByTestId('hub-cap-intelligence-off')).toContainText('na tomto serveru vypnuto');   // RUN 11 (D10)
     }
     await expect(modal().getByTestId('hub-audit')).toContainText('Historie změn');
     await shot(a.page, `hub-integrations-${OWNER_SCHEME}`);

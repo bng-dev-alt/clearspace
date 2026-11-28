@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { plural } from '../../lib/plural';
+import MeetingBreadcrumb from './MeetingBreadcrumb';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, EmptyState } from '../ui';
@@ -27,6 +29,9 @@ import ScheduleCard from './ScheduleCard';
 import { LIVE_ENABLED } from './NewMeetingForm';
 import type { MeetingAccess } from '../../services/meetingService';
 import './meetings.css';
+
+/** RUN 11 (F-06): where a transcript revision came from, in words (never the internal enum). */
+const SOURCE_LABEL: Record<string, string> = { paste: 'vložený text', upload: 'nahraný soubor', soniox: 'strojový přepis', live: 'živý přepis', edit: 'úprava' };
 
 export default function MeetingDetail({ projectId, meetingId }: { projectId: string; meetingId: string }) {
   const router = useRouter();
@@ -168,8 +173,8 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
       const r = await meetingService.analyze(projectId, meetingId, force);
       setNotice(
         r.rejectedCount > 0
-          ? `Analýza hotová: ${r.itemCount} návrhů, ${r.rejectedCount} položek bez důkazu bylo vynecháno.`
-          : `Analýza hotová: ${r.itemCount} návrhů.`
+          ? `Analýza hotová: ${r.itemCount} ${plural(r.itemCount, 'návrh', 'návrhy', 'návrhů')}; ${r.rejectedCount} ${plural(r.rejectedCount, 'položka bez důkazu byla vynechána', 'položky bez důkazu byly vynechány', 'položek bez důkazu bylo vynecháno')}.`
+          : `Analýza hotová: ${r.itemCount} ${plural(r.itemCount, 'návrh', 'návrhy', 'návrhů')}.`
       );
       await load();
     } catch (e) {
@@ -186,7 +191,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
     return (
       <section className="mi-page">
         <EmptyState icon={<Sparkles size={28} />} title="Porada nenalezena" description={error ?? 'Porada neexistuje nebo k ní nemáte přístup.'} />
-        <Link href={`/projects/${projectId}/meetings`}>← Zpět na porady</Link>
+        <MeetingBreadcrumb projectId={projectId} />
       </section>
     );
   }
@@ -195,15 +200,13 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
 
   return (
     <section className="mi-page" aria-labelledby="mi-title" data-testid="meeting-detail">
+      <MeetingBreadcrumb projectId={projectId} current={meeting.title} />
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <div>
           <h1 id="mi-title">{meeting.title}</h1>
           <span className="mi-muted">{new Date(meeting.occurredAt).toLocaleDateString('cs-CZ')}</span>
         </div>
-        <div className="mi-row">
-          <Link href={`/projects/${projectId}/meetings`}>← Porady</Link>
-          <Badge>{STATUS_LABEL[meeting.status]}</Badge>
-        </div>
+        <Badge>{STATUS_LABEL[meeting.status]}</Badge>
       </div>
 
       <ol className="mi-steps" aria-label="Postup zpracování" data-testid="meeting-steps">
@@ -230,9 +233,12 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
 
       <div className="mi-row">
         {!run ? (
-          <Button variant="primary" onClick={() => analyze(false)} disabled={analyzing || !transcript} data-testid="meeting-analyze">
-            {analyzing ? 'Analyzuji… (může trvat desítky sekund)' : 'Analyzovat'}
-          </Button>
+          // RUN 11 (#17): no transcript = nothing to analyse, so no button that cannot work
+          transcript ? (
+            <Button variant="primary" onClick={() => analyze(false)} disabled={analyzing} data-testid="meeting-analyze">
+              {analyzing ? 'Analyzuji… (může trvat desítky sekund)' : 'Analyzovat'}
+            </Button>
+          ) : <span className="mi-muted" data-testid="meeting-analyze-later">Analýza bude k dispozici, až bude mít porada přepis.</span>
         ) : confirmRerun ? (
           <>
             <span>Znovu analyzovat? Nahradí se jen neschválené a zamítnuté návrhy; závěry, které jste schválili, zůstanou (jsou-li zastaralé, stáhnete je ručně). Spotřebuje se AI kvóta.</span>
@@ -286,7 +292,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
               <select id="rev-select" value={viewRev ?? ''} onChange={(e) => setSelectedRev(e.target.value)} data-testid="revision-select">
                 {revisions.map((r, i) => (
                   <option key={r.revision} value={r.revision}>
-                    {`#${revisions.length - i} · ${new Date(r.createdAt).toLocaleString('cs-CZ')} · ${r.source === 'edit' ? 'úprava' : r.source}${r.revision === currentRev ? ' · aktuální' : ''}${r.analyzed ? ' · analyzováno' : ''}`}
+                    {`#${revisions.length - i} · ${new Date(r.createdAt).toLocaleString('cs-CZ')} · ${SOURCE_LABEL[r.source] ?? r.source}${r.revision === currentRev ? ' · aktuální' : ''}${r.analyzed ? ' · analyzováno' : ''}`}
                   </option>
                 ))}
               </select>
@@ -343,8 +349,8 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
             <>
               <p data-testid="meeting-summary">{run.summary}</p>
               <p className="mi-muted">
-                Model {run.model ?? '?'} · {pending} čeká na schválení
-                {run.rejectedCount > 0 ? ` · ${run.rejectedCount} položek bez důkazu vynecháno` : ''}
+                {run.model ? `Model ${run.model} · ` : ''}{pending} čeká na schválení
+                {run.rejectedCount > 0 ? ` · ${run.rejectedCount} ${plural(run.rejectedCount, 'položka bez důkazu vynechána', 'položky bez důkazu vynechány', 'položek bez důkazu vynecháno')}` : ''}
               </p>
               {run.chapters.length > 0 && (
                 <ul className="mi-list" aria-label="Kapitoly">

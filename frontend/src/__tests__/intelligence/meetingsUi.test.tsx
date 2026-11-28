@@ -369,7 +369,7 @@ describe('MeetingDetail', () => {
     fireEvent.click(await screen.findByTestId('meeting-analyze'));
     expect(screen.getByTestId('meeting-analyze')).toBeDisabled(); // no double submit
     await waitFor(() => expect(svc().analyze).toHaveBeenCalledWith('p1', 'm-1', false));
-    expect(await screen.findByTestId('meeting-notice')).toHaveTextContent('3 návrhů, 1 položek bez důkazu');
+    expect(await screen.findByTestId('meeting-notice')).toHaveTextContent('3 návrhy; 1 položka bez důkazu byla vynechána');
     expect(svc().get.mock.calls.length).toBeGreaterThan(1); // reloaded
   });
   test('AI disabled (production firewall) and rate limits are shown as readable errors', async () => {
@@ -401,7 +401,7 @@ describe('MeetingDetail', () => {
     expect(screen.getByRole('heading', { name: 'Rozhodnutí (1)' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Úkoly (1)' })).toBeInTheDocument();
     expect(screen.getByTestId('meeting-results')).toHaveTextContent('1 čeká na schválení');
-    expect(screen.getByTestId('meeting-results')).toHaveTextContent('2 položek bez důkazu vynecháno');
+    expect(screen.getByTestId('meeting-results')).toHaveTextContent('2 položky bez důkazu vynechány');
     fireEvent.click(within(screen.getByTestId('item-it-1')).getByTestId('evidence-link'));
     expect(screen.getByTestId('segment-seg-1')).toHaveAttribute('data-highlight', 'true');
   });
@@ -492,7 +492,7 @@ describe('MeetingDetail', () => {
       const sel = await screen.findByTestId('revision-select');
       const opts = within(sel).getAllByRole('option').map((o) => o.textContent ?? '');
       expect(opts[0]).toMatch(/#2 .*úprava.*aktuální.*analyzováno/);
-      expect(opts[1]).toMatch(/#1 .*paste/);
+      expect(opts[1]).toMatch(/#1 .*vložený text/);
       expect(opts[1]).not.toMatch(/aktuální/);
     });
     test('editing prefills "Jméno: věta", saves as a NEW revision whose parent is the current one, and never analyses automatically', async () => {

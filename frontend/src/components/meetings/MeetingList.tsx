@@ -8,6 +8,8 @@ import { Badge, Button, EmptyState } from '../ui';
 import { meetingService, MeetingServiceError, type Meeting } from '../../services/meetingService';
 import { STATUS_LABEL } from './labels';
 import NewMeetingForm from './NewMeetingForm';
+import MeetingBreadcrumb from './MeetingBreadcrumb';
+import { GROUP_LABEL, groupMeetings, startsSoon, type MeetingGroup } from '../../lib/meetings/groups';
 import { conferenceProvider } from './ScheduleCard';
 import './meetings.css';
 
@@ -40,20 +42,19 @@ export default function MeetingList({ projectId }: { projectId: string }) {
     void meetingService.sweepAudio(projectId);
   }, [load, projectId]);
 
-  const isUpcoming = (m: Meeting) => !m.currentRevision && m.live.state !== 'live' && Date.parse(m.endsAt ?? m.occurredAt) > now;
-  const upcoming = (meetings ?? []).filter(isUpcoming).sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt));
-  const past = (meetings ?? []).filter((m) => !isUpcoming(m));
+  // RUN 11 (#15, #22): today / this week / later / overdue without transcript / done – presentation only, from the loaded list
+  const groups = groupMeetings(meetings ?? [], now);
+  // existing test ids stay meaningful: planned → meeting-list-upcoming(-week|-later), transcribed → meeting-list
+  const listId = (g: MeetingGroup) => (g === 'today' ? 'meeting-list-upcoming' : g === 'week' || g === 'later' ? `meeting-list-upcoming-${g}` : g === 'done' ? 'meeting-list' : `meeting-list-${g}`);
 
   return (
     <section className="mi-page" aria-labelledby="mi-heading" data-testid="meetings-page">
+      <MeetingBreadcrumb projectId={projectId} />
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <h1 id="mi-heading">Porady</h1>
-        <div className="mi-row">
-          <Link href={`/projects/${projectId}`}>← Zpět na projekt</Link>
-          <Button variant="primary" onClick={() => setShowForm((v) => !v)} data-testid="meeting-new" aria-expanded={showForm}>
-            Nová porada
-          </Button>
-        </div>
+        <Button variant={showForm ? 'ghost' : 'primary'} onClick={() => setShowForm((v) => !v)} data-testid="meeting-new" aria-expanded={showForm}>
+          {showForm ? 'Zavřít formulář' : 'Nová porada'}
+        </Button>
       </div>
 
       {showForm && (
@@ -79,13 +80,12 @@ export default function MeetingList({ projectId }: { projectId: string }) {
         />
       ) : (
         <>
-          {[['Nadcházející', upcoming, 'meeting-list-upcoming'], ['Proběhlé', past, 'meeting-list']].map(([label, list, tid]) =>
-            (list as Meeting[]).length === 0 ? null : (
-              <div key={tid as string} className="mi-field">
-                <h2 style={{ fontSize: '1rem' }}>{label as string}</h2>
-                <ul className="mi-list" data-testid={tid as string}>
-                  {(list as Meeting[]).map((m) => (
-                    <li key={m.id} className="mi-card">
+          {groups.map(({ group, items }) => (
+              <div key={group} className="mi-field">
+                <h2 style={{ fontSize: '1rem' }}>{GROUP_LABEL[group]} <span className="mi-muted">({items.length})</span></h2>
+                <ul className="mi-list" data-testid={listId(group)}>
+                  {items.map((m) => (
+                    <li key={m.id} className="mi-card" data-group={group}>
                       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
                         <Link href={`/projects/${projectId}/meetings/${m.id}`} data-testid={`meeting-link-${m.id}`}>
                           <strong>{m.title}</strong>
@@ -104,6 +104,11 @@ export default function MeetingList({ projectId }: { projectId: string }) {
                         {' · '}{m.sourceKind === 'text' ? 'vložený přepis' : m.live.segments ? 'živý přepis' : m.audio.path ? 'nahraný záznam' : 'zvuk'}
                         {m.conferenceUrl ? ` · ${conferenceProvider(m.conferenceUrl)}` : ''}
                       </span>
+                      {startsSoon(m, now) && (
+                        <Link href={`/projects/${projectId}/meetings/${m.id}`} className="mi-start-hint" data-testid={`meeting-start-hint-${m.id}`}>
+                          {Date.parse(m.occurredAt) <= now ? 'Porada probíhá – spusťte přepis' : 'Začíná brzy – připravte přepis'} →
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>

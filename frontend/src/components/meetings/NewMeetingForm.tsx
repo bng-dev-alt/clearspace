@@ -210,9 +210,9 @@ export default function NewMeetingForm({ projectId, onCreated }: Props) {
         )}
         <label htmlFor="mi-lang">Jazyk</label>
         <select id="mi-lang" value={language} onChange={(e) => setLanguage(e.target.value as '' | 'cs' | 'en')}>
-          <option value="">Čeština (výchozí)</option>
-          <option value="cs">Čeština</option>
-          <option value="en">English</option>
+          {/* RUN 11 (F-26): "" and "cs" behave the same (cs first, en second) – one Czech option, no duplicate */}
+          <option value="">Čeština</option>
+          <option value="en">Angličtina (English)</option>
         </select>
       </div>
       {error && (

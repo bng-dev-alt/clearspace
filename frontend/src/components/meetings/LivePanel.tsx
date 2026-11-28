@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import LiveTranscriptView from './LiveTranscriptView';
 import { Badge, Button } from '../ui';
 import { meetingService, MeetingServiceError, type Meeting } from '../../services/meetingService';
 import { browserDeps, listMics, LiveCaptureController, testMic, type CaptureState, type LiveSnapshot, type MicOption, type MicTestResult, type SourceMode, type TranscriptionState } from '../../lib/meetings/liveCapture';
@@ -216,7 +217,10 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
           <Badge variant={s?.transcription === 'receiving' ? 'accent' : s?.transcription === 'error' ? 'danger' : 'default'}>
             <span data-testid="live-transcription-state">{TRANSCRIPTION_LABEL[s?.transcription ?? 'off']}</span>
           </Badge>
-          <span className="mi-time" data-testid="live-duration" aria-label="Délka">{fmt(s?.elapsedMs ?? meeting.live.ms)}</span>
+          {/* RUN 11 (#21): outside a running capture the number is the BILLED total (cancelled captures included), so it says so */}
+          {live || s?.capture === 'paused' || s?.capture === 'connecting'
+            ? <span className="mi-time" data-testid="live-duration" aria-label="Délka přepisu">{fmt(s?.elapsedMs ?? meeting.live.ms)}</span>
+            : (s?.elapsedMs ?? meeting.live.ms) > 0 && <span className="mi-muted" data-testid="live-duration" title="Započítává se do denního limitu přepisu, včetně zrušených přepisů">účtováno celkem {fmt(s?.elapsedMs ?? meeting.live.ms)}</span>}
         </div>
       </div>
 
@@ -242,6 +246,12 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
 
       {(!s || s.capture === 'idle' || s.capture === 'error' || s.capture === 'stopped') && !unfinished && (
         <>
+          {/* RUN 11 (O5): officially supported = desktop Chrome / Edge; elsewhere say what to expect before anything starts */}
+          {!tabOk && (
+            <p className="cs-status cs-status--warning" role="note" data-testid="live-device-note">
+              Živý přepis je ověřený v Chrome a Edge na počítači. Na tomto zařízení (telefon, tablet, Safari) může fungovat jen s mikrofonem a bez záruky – pro důležitou poradu použijte počítač. Přehled porad, přepisy a analýzy tu fungují normálně.
+            </p>
+          )}
           <div className="mi-field" data-testid="live-mic">
             <label htmlFor="live-mic-select" style={{ fontWeight: 600 }}>Mikrofon</label>
             <div className="mi-row">
@@ -313,12 +323,8 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
       {(error || s?.error) && <p role="alert" className="mi-error" data-testid="live-error">{error ?? s?.error?.message}</p>}
 
       {s && (s.finals.length > 0 || s.partial.length > 0) && (
-        <div className="mi-card" aria-label="Průběžný přepis" data-testid="live-transcript" style={{ maxHeight: 360, overflow: 'auto' }}>
-          {groupBySpeaker(s.finals).map((g, i) => (
-            <p key={i} className="mi-seg"><span className="mi-time">{fmt(g.startMs)}</span>{g.speaker && <span className="mi-speaker">{speakerLabel(g.speaker)}</span>}{g.text}</p>
-          ))}
-          {s.partial.length > 0 && <p className="mi-muted" data-testid="live-partial">{s.partial.map((t) => t.text).join('')}</p>}
-        </div>
+        <LiveTranscriptView groups={groupBySpeaker(s.finals)} partial={s.partial.map((t) => t.text).join('')} speakerLabel={speakerLabel} fmt={fmt}
+          status={<>{live ? '● ' : ''}{CAPTURE_LABEL[s.capture ?? 'idle']} · {fmt(s.elapsedMs ?? 0)}</>} />
       )}
     </section>
   );

@@ -2,7 +2,15 @@
 
 Produkce: `https://clearspace.luffast.com`, Supabase `twjlnsxjtuntujarwner`, Vercel `clearspace` (jen staged build + promote).
 
-## Stav k 2026-11-28 (po živé akceptaci a RUN 10 hardening)
+## Stav k 2026-11-28 – FINÁLNÍ (RUN 10 uzavřen)
+* Kód: `dpl_FwWirB1MSS4hA7Mig8Rp67t92pia` (commit `c468e2e`). Rollback RUN 09: `dpl_GWQF6jGs…`.
+* Pilot prezentačního účtu: live + Calendar write (pilot) + PI porad; **živý/async přepis 30 min/den** (`AI_DEMO_STT_DAILY_AUDIO_MIN_PER_USER=30`,
+  `_GLOBAL=30`), max. **0,06 USD/den** (0,12 USD/h). AI tokeny demo tieru **40 000/den** (`AI_DEMO_DAILY_TOKEN_BUDGET`, ADR RUN 09).
+* Změny jen `frontend/scripts/meetings-prod.sh pilot-on|minutes <n>|tokens <n>|status` + staged nasazení; navýšení tokenů jen jednorázově se
+  souhlasem vlastníka (2026-11-28: 80 000 → zpět 40 000, ověřeno 429).
+* Kill switche beze změny (tabulka níže). Lokální stacky: Supabase CLI jen `<stack>.sh sb|reset` (pojistka loopback proxy).
+
+## Stav k 2026-11-28 (po živé akceptaci a RUN 10 hardening – historie)
 * Kód: `dpl_9xskrK75aKhaWsR4z51fbuHzbbue` (commit `2fd55c6`, hardening) → po sloučení do `main` nové nasazení z `main` (viz README).
   Předchozí: `dpl_49j9aY8y…` (pilot zapnut), `dpl_FZMYZjkv…` (vše OFF), rollback RUN 09 `dpl_GWQF6jGs…`.
 * Pilot (prezentační účet): `MEETING_PILOT_USER_IDS` (Sensitive, = Keychain `ClearSpace V1 - Hub (production) | pilot_user_ids`),

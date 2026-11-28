@@ -166,3 +166,9 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
   (dnes OK, demo tier = jen prezentační účet). Pokud se demo tier rozšíří, svázat i async přepis s pilotním seznamem.
 * Denní limit tokenů demo tieru (40 000) se počítá z rezervací (`greatest(reserved, total)`); analýza porady rezervuje ≥ 8 192 výstupních
   tokenů – po ranní práci s chatem může analýza ten den selhat. Zvážit menší `maxOutputTokens` pro krátké přepisy.
+
+## RUN 10 – zbývající dluh po uzavření (2026-11-28)
+* Gemini náklady se v ledgeru neukládají v USD (`cost_usd` prázdné u `chat` / `meeting-analyze`) – počítáno z tokenů a ceníku ručně.
+* Soniox Console (skutečně fakturované minuty) neověřeno; ledger má `billing_state=estimated`. Doporučeno nastavit měsíční limit projektu (R32).
+* Zrušení přepisu a ukazatele úrovně ověřeny jen MOCK + nasazením; první živé použití potvrdit při příští prezentaci (spotřebuje minuty).
+* `apply_intelligence_item` u úkolu vrací pro „Petr“ (ne-člen) jen upozornění – správně; přiřazení ne-členů je mimo rozsah V1.

@@ -1,5 +1,17 @@
 # RUN 10 – Meeting Intelligence: závěrečná zpráva (2026-11-28)
 
+## Finální uzavření (2026-11-28) – **GO: RUN 10 uzavřen, feature freeze V1 může začít**
+* Gemini část dokončena naživo (LIVE PASS): analýza revize Kickoff → rozhodnutí + úkol s citacemi → schválení → karta → idempotence →
+  PI s citací porady → izolace mezi projekty → vyloučení smazané porady. 4 dotazy ≈ 0,017 USD (limit 8 / 0,30).
+* Limit tokenů prezentačního účtu jednorázově 80 000 jen pro tento test, **obnoven na 40 000** a vynucení ověřeno (429, bez nákladu).
+* Trvalý pilot: živý přepis 30 min/den jen pro prezentační účet, max. 0,06 USD/den; vše ostatní zavřené.
+* Bezpečnost: preventivní pojistka lokálních stacků (`sb` / `reset` ověří loopback proxy PŘED spuštěním; test `stack-guard.test.sh`).
+* Produkce `dpl_FwWirB1MSS4hA7Mig8Rp67t92pia` (commit `c468e2e`; další commity na `main` jen dokumentace). Rollback: `dpl_GWQF6jGs…` (RUN 09).
+* Zůstává PARTIAL / NOT VERIFIED (bez důkazu se nevydává za živé): vzdálený účastník čistě ze zvuku karty, přesnost diarizace, hodinová
+  porada, zrušení přepisu a ukazatele úrovně naživo, Safari/iPad jako snímač, Soniox Console (náklady jen z ledgeru).
+* Úklid: testovací projekty „RUN10 Pilot – porady (test)“ a „RUN10 Izolace (test)“ smazány (porady, přepisy, karta); událost v Kalendáři
+  zrušena bez e-mailů; lokální stack smazán po záloze; dočasné worktree odstraněny.
+
 ## Aktualizace po živé akceptaci a hardeningu (2026-11-28)
 **Verdikt: GO pro feature freeze. Uzavření RUN 10: podmíněné – chybí jen živá Gemini část (analýza → schválení úkolu → PI citace),
 zablokovaná denním limitem tokenů prezentačního účtu, ne kódem; dokončit po obnově limitu (≤ 5 dotazů, ≤ 0,05 USD, bez změny limitů).**

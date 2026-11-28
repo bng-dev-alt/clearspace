@@ -54,13 +54,14 @@ informování účastníků a právní základ – ClearSpace **netvrdí automat
 Přepis real-time 0,12 USD/h (hodinová porada ≈ 0,12 USD); async 0,10 USD/h. Gemini analýza porady ≈ jednotky tisíc tokenů (zlomky centu).
 Demo účet má denní limity (AI 40k tokenů/den, přepis dle schválení).
 
-## 7. Skutečně funkční vs. simulace (stav po živé akceptaci 28. 11. 2026)
+## 7. Skutečně funkční vs. simulace (finální stav RUN 10, 28. 11. 2026)
 | Ověřeno naživo (produkce, prezentační účet) | Částečně / jen v simulaci | Neexistuje (LATER) |
 |---|---|---|
-| Google událost se skutečným Meet, pozvánky e-mailem, Mac + iPad v hovoru, živý přepis CZ/EN/mix (Soniox), pauza/pokračování/stop, mluvčí (funkční, ne vždy přesní), izolace dat, smazání porady, náklady v limitu | vzdálený účastník čistě ze zvuku karty (PARTIAL), Gemini analýza + schválení úkolu + PI citace nad živou poradou (čeká na denní limit AI), obnova po výpadku sítě, zrušení přepisu a test mikrofonu (MOCK) | boti v hovorech, nativní Zoom/Teams, systémový zvuk, automatické nahrávání, video, hlasová identifikace, přímé odeslání pozvánky do hubu |
+| Google událost se skutečným Meet, pozvánky e-mailem, Mac + iPad v hovoru, živý přepis CZ/EN/mix (Soniox), pauza/pokračování/stop, Gemini analýza s citacemi, schválení → karta (bez duplikátu), PI s citací porady, izolace projektů, smazání porady i vyloučení z PI, výběr a test mikrofonu (bez placení), náklady v limitu | vzdálený účastník čistě ze zvuku karty (PARTIAL), přesnost mluvčích (PARTIAL), hodinová porada, zrušení přepisu a ukazatele úrovně během streamu, obnova po výpadku sítě (MOCK) | boti v hovorech, nativní Zoom/Teams, systémový zvuk, automatické nahrávání, video, hlasová identifikace, přímé odeslání pozvánky do hubu |
 
-Omezení, která říkat nahlas: rozlišení mluvčích občas zamění osoby (doplňte jména ručně); Safari/iPad jen mikrofon; živý přepis
-v prezentačním účtu je po akceptaci vypnutý limitem minut (0), dokud vlastník neschválí trvalý rozpočet.
+Omezení, která říkat nahlas: rozlišení mluvčích občas zamění osoby (doplňte jména ručně); Safari/iPad jen mikrofon; prezentační účet má
+30 minut živého přepisu denně (max. 0,06 USD/den) a 40 000 AI tokenů denně – po intenzivním chatu může analýza ten den narazit na limit.
+Před demem: „Otestovat mikrofon“, sluchátka, nesouvisející zvuk (video) z přepisu vyřadit úpravou revize před analýzou.
 
 ## 8. Demo scénáře
 * **2 min (HR)**: seznam porad → hotová porada → shrnutí s citací → schválený úkol na boardu.

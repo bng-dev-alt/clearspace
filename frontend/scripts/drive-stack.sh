@@ -52,5 +52,6 @@ case "${1:-}" in
     mock_env
     echo "export E2E_BASE_URL=http://127.0.0.1:$PORT GOOGLE_MOCK_URL=http://127.0.0.1:$MOCK_PORT";;
   down) "$HERE/scripts/collab-stack.sh" down;;
-  *) echo "usage: $0 up|seed|mock|app|env|down"; exit 2;;
+  sb|reset) exec "$HERE/scripts/collab-stack.sh" "$@";;   # guarded Supabase CLI (loopback proxy verified first)
+  *) echo "usage: $0 up|seed|mock|app|env|sb <args>|reset|down"; exit 2;;
 esac

@@ -157,8 +157,11 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * **Zrušení přepisu** ponechá `live_state='stopped'` (RPC `stt_live_discard` z migrace 1800) – UI to bez uložených částí bere jako
   „lze spustit znovu“. Čistší je stav `idle` v RPC (nová migrace), až bude důvod.
 * Lokální stack: opakované `up` nad starými daty může selhat na CHECK z novější migrace (`external_resource_links_provider_check`);
-  řešení = čistý stack (migrace + seed). `supabase db reset` **nikdy** bez loopback proxy (`DOCKER_HOST` stacku) – kontejnery by byly
-  dostupné z LAN; pojistka skriptu stack okamžitě zastaví (`--no-backup`).
+  řešení = čistý stack (migrace + seed) přes `<stack>.sh reset`.
+* **Vyřešeno (RUN 10 final):** preventivní pojistka – `collab-stack.sh sb|reset` (a průchozí `drive-stack.sh` / `meetings-stack.sh`)
+  PŘED spuštěním ověří, že loopback proxy stacku odpovídá (`/_ping`), a vynutí `DOCKER_HOST` na ni; jinak nic nespustí. Následná kontrola
+  LAN už maže jen kontejnery bez dat (`supabase stop` bez `--no-backup`). Zbývá: přímé volání `supabase` v adresáři stacku technicky
+  zabránit nejde bez změny globální konfigurace – pravidlo v `frontend/AGENTS.md`. Test `scripts/stack-guard.test.sh`.
 * Demo tier: `AI_DEMO_STT_DAILY_AUDIO_MIN_*` platí pro async i živý přepis; async přepis není vázaný na `MEETING_PILOT_USER_IDS`
   (dnes OK, demo tier = jen prezentační účet). Pokud se demo tier rozšíří, svázat i async přepis s pilotním seznamem.
 * Denní limit tokenů demo tieru (40 000) se počítá z rezervací (`greatest(reserved, total)`); analýza porady rezervuje ≥ 8 192 výstupních

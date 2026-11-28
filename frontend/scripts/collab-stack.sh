@@ -7,6 +7,10 @@
 #                                            # starts the stack + seeds if needed and enables the DEV LOGIN (auto, as alice; DEV_LOGIN_AS=bob|vera)
 #   eval "$(frontend/scripts/collab-stack.sh env)"   # E2E_SUPABASE_* / RT_* for the specs
 #   frontend/scripts/collab-stack.sh down    # stop and delete the stack
+#   frontend/scripts/collab-stack.sh sb <supabase args>   # the ONLY way to run any other Supabase CLI command against the stack
+#   frontend/scripts/collab-stack.sh reset   # = sb db reset (guarded) + baseline/migrations again; then `seed`
+# NEVER run `supabase …` directly in the stack dir: without the loopback proxy (DOCKER_HOST) Docker publishes every port on 0.0.0.0
+# (LAN). `sb` / `reset` / `up` check BEFORE running that the stack's proxy answers and refuse otherwise (nothing is started).
 # Stack project dir: $COLLAB_STACK_DIR (default $TMPDIR/cs-collab-sb; ports 55530-55539). One-time creation:
 #   mkdir -p "$TMPDIR/cs-collab-sb" && cd "$_" && supabase init --force, then in supabase/config.toml: ports api 55531, db 55532,
 #   shadow 55530, pooler 55539, studio 55533, local_smtp port 55534 (Mailpit UI) + smtp_port 55535, analytics 55537,
@@ -23,18 +27,31 @@ SMTP_PORT=${COLLAB_SMTP_PORT:-55535}; MAIL_UI=${COLLAB_MAIL_UI:-55534}
 REAL=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null | sed 's|^unix://||'); REAL=${REAL:-/var/run/docker.sock}
 keys() { (cd "$DIR" && supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY|API_URL)='); }
 psql_db() { docker exec -i -e PGPASSWORD=postgres -e PGOPTIONS='-c client_min_messages=warning' "supabase_db_$NAME" psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
+# Preventive guard: start the stack's loopback proxy if needed and PROVE it answers before any container-creating CLI call.
+proxy_ensure() {
+  if ! { [ -S "$SOCK" ] && [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }; then
+    rm -f "$SOCK"; node "$HERE/scripts/docker-loopback-proxy.mjs" "$SOCK" "$REAL" >"$DIR/proxy.log" 2>&1 & echo $! >"$PIDF"; sleep 1
+  fi
+  curl -fsS --max-time 5 --unix-socket "$SOCK" http://docker/_ping >/dev/null 2>&1 \
+    || { echo "REFUSING: loopback proxy $SOCK does not answer - nothing was started (the stack would be LAN-reachable)"; exit 1; }
+}
+# Every Supabase CLI call that can (re)create containers goes through here: DOCKER_HOST is FORCED to the verified proxy.
+sb_guarded() { proxy_ensure; (cd "$DIR" && DOCKER_HOST=unix://$SOCK supabase "$@"); }
+lan_check() {
+  if docker ps --filter name=$NAME --format '{{.Ports}}' | tr ',' '\n' | grep -qE '(0\.0\.0\.0|\[::\]):[0-9]+->'; then
+    # second layer only: stop WITHOUT deleting data (volumes stay; RUN CLEANUP standard)
+    echo "REFUSING: stack is LAN-reachable - stopped, data kept"; (cd "$DIR" && supabase stop >/dev/null); exit 1
+  fi
+}
 case "${1:-}" in
+  sb) shift; [ -f "$DIR/supabase/config.toml" ] || { echo "no stack project in $DIR"; exit 2; }; sb_guarded "$@"; rc=$?; lan_check; exit $rc;;
+  reset) [ -f "$DIR/supabase/config.toml" ] || { echo "no stack project in $DIR"; exit 2; }; sb_guarded db reset; lan_check; exec "$0" up;;
   up)
     [ -f "$DIR/supabase/config.toml" ] || { echo "no stack project in $DIR (see header)"; exit 2; }
     if [ -z "$(docker ps -q --filter name=supabase_db_$NAME)" ]; then
-      if ! { [ -S "$SOCK" ] && [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }; then
-        rm -f "$SOCK"; node "$HERE/scripts/docker-loopback-proxy.mjs" "$SOCK" "$REAL" >"$DIR/proxy.log" 2>&1 & echo $! >"$PIDF"; sleep 1
-      fi
-      (cd "$DIR" && DOCKER_HOST=unix://$SOCK supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta,supavisor >/dev/null)
+      sb_guarded start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta,supavisor >/dev/null
     fi
-    if docker ps --filter name=$NAME --format '{{.Ports}}' | tr ',' '\n' | grep -qE '(0\.0\.0\.0|\[::\]):[0-9]+->'; then
-      echo "REFUSING: stack is LAN-reachable"; (cd "$DIR" && supabase stop --no-backup >/dev/null); exit 1
-    fi
+    lan_check
     if [ "$(psql_db -At -c "select to_regclass('public.clearspace_migrations') is null")" = "t" ]; then
       psql_db -f - < "$HERE/supabase/tests/01_helpers.sql" >/dev/null
       psql_db --single-transaction -f - < "$HERE/supabase_schema.sql" >/dev/null

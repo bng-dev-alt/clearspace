@@ -22,3 +22,6 @@ Delete a RUN's test stack (`collab-stack.sh down` = `supabase stop --no-backup`,
 to `/Volumes/WORKSPACE/_G2_BACKUP/<date>-<run>/` with SHA256SUMS and a verified restore, and (2) confirming the stack can be rebuilt
 from migrations + seed (`*-stack.sh up` + `seed`). Never touch other projects' containers, public demo services or tunnels; never
 `docker system prune -a --volumes`. Destructive deletions of data-bearing resources go to the owner as ONE consolidated list.
+Never run the Supabase CLI directly in a disposable stack dir: use `<stack>.sh sb <args>` / `<stack>.sh reset` (collab/drive/meetings
+stacks). They verify BEFORE running that the stack's loopback Docker proxy answers and force `DOCKER_HOST` to it; otherwise nothing starts
+(a direct `supabase start|db reset` publishes every port on 0.0.0.0). Hermetic check: `bash scripts/stack-guard.test.sh`.

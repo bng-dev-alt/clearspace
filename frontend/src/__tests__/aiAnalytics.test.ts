@@ -43,10 +43,12 @@ describe('AI Cost Estimator Tests', () => {
   });
 
   it('formats CZK cost amounts properly', () => {
-    expect(aiCostEstimator.formatCostCzk(0)).toBe('0.00 CZK');
-    expect(aiCostEstimator.formatCostCzk(0.1234)).toBe('0.12 CZK');
-    expect(aiCostEstimator.formatCostCzk(0.0002)).toBe('0.0002 CZK');
-    expect(aiCostEstimator.formatCostCzk(150.5)).toBe('150.50 CZK');
+    // RUN 11: Czech format (decimal comma, Kč); the space before Kč may be a no-break space
+    const n = (s: string) => s.replace(/\s/g, ' ');
+    expect(n(aiCostEstimator.formatCostCzk(0))).toBe('0,00 Kč');
+    expect(n(aiCostEstimator.formatCostCzk(0.1234))).toBe('0,12 Kč');
+    expect(n(aiCostEstimator.formatCostCzk(0.0002))).toBe('0,0002 Kč');
+    expect(n(aiCostEstimator.formatCostCzk(150.5))).toBe('150,50 Kč');
   });
 
   it('falls back to default pricing for unrecognized models', () => {
@@ -154,23 +156,4 @@ describe('AI Analytics Service Tests', () => {
     expect(generateProject!.totalTokens).toBe(8000);
   });
 
-  it('manages budget configuration and calculates monthly usage', async () => {
-    aiAnalyticsService.setBudgetLimit(500);
-    expect(aiAnalyticsService.getBudgetLimit()).toBe(500);
-
-    await aiAnalyticsService.logRequest({
-      timestamp: Date.now(),
-      feature: 'Improve Task',
-      provider: 'google',
-      model: 'gemini-3.5-flash',
-      inputTokens: 1000000, // 1M input tokens = $0.075 = ~1.76 CZK
-      outputTokens: 1000000, // 1M output tokens = $0.30 = ~7.05 CZK
-      totalTokens: 2000000,
-      responseTime: 1000,
-      success: true,
-    });
-
-    const usage = aiAnalyticsService.getMonthlyUsage();
-    expect(usage).toBeCloseTo(8.8125, 2); // 1.7625 + 7.05 = 8.8125 CZK
-  });
 });

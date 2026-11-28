@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import type { SectionSummary } from '../settings/ConnectedAccountsOverview';
+import ChatModesExplainer from '../settings/ChatModesExplainer';
+import { notifyService } from '../../services/notifyService';
 import Link from 'next/link';
 import { Plug } from 'lucide-react';
 import { DriveError } from '../../services/driveService';
@@ -22,10 +25,12 @@ const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
 let completion: Promise<{ outcome: string }> | null = null;
 
 /** Settings → "Slack a Telegram pro projekty": workspace install of the project app + my linked chat accounts. */
-export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: string | null }) {
+export default function HubSettingsCard({ returnOutcome, onSummary }: { returnOutcome?: string | null; onSummary?: (s: SectionSummary | null) => void }) {
   const [ids, setIds] = useState<HubIdentity[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  // RUN 11 (#7): the real install state of the project Slack app, from the server's own records (installed by me / used by a project I manage)
+  const [slackWs, setSlackWs] = useState<Array<{ label: string; status: 'active' | 'revoked' }> | null | undefined>(undefined);
   const [pending, setPending] = useState<{ provider: HubProvider; code: string; command: string; url?: string; openLabel: string; steps: string[]; until: number; known: number } | null>(null);
   const load = useCallback(async () => {
     try { setIds(await hubService.identities()); } catch (e) { setIds(null); setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Stav se nepodařilo načíst.' }); }
@@ -41,6 +46,27 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
     })();
     return () => { cancelled = true; };
   }, [returnOutcome, load]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const projects = await notifyService.projects().catch(() => []);
+      for (const pr of projects.slice(0, 5)) {
+        const st = await hubService.project(pr.id).catch(() => null);
+        if (st?.canManage) { if (!cancelled) setSlackWs(st.slackWorkspaces); return; }
+      }
+      if (!cancelled) setSlackWs(null); // no project I manage: the server does not tell (and I could not install anyway)
+    })();
+    return () => { cancelled = true; };
+  }, [returnOutcome]);
+  useEffect(() => {
+    if (!onSummary || ids === undefined) return;
+    if (ids === null) { onSummary(null); return; }
+    const active = (slackWs ?? []).filter((w) => w.status === 'active');
+    const parts = [active.length ? `Slack aplikace: ${active.map((w) => w.label).join(', ')}` : null, ids.length ? `chat účty: ${ids.length}` : null].filter(Boolean);
+    const revoked = (slackWs ?? []).some((w) => w.status === 'revoked') && active.length === 0;
+    onSummary({ state: revoked ? 'attention' : active.length && ids.length ? 'connected' : active.length || ids.length ? 'partial' : 'disconnected',
+      detail: parts.length ? parts.join(' · ') : 'Nic nepropojeno' });
+  }, [ids, slackWs, onSummary]);
   const run = async (fn: () => Promise<unknown>, fallback: string) => {
     setBusy(true);
     try { await fn(); } catch (e) { setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : fallback }); } finally { setBusy(false); }
@@ -65,20 +91,32 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
     }
   }, [pending]);
 
-  if (ids === undefined || ids === null) return message ? <section className="settings-card" id="hub" data-testid="hub-settings"><p role="alert" className="drive-message is-error">{message.text}</p></section> : null;
+  if (ids === undefined || ids === null) return message ? <section className="settings-card" id="projekty" data-testid="hub-settings"><p role="alert" className="drive-message is-error">{message.text}</p></section> : null;
   return (
-    <section className="settings-card" id="hub" data-testid="hub-settings" aria-labelledby="hub-settings-title">
+    <section className="settings-card" id="projekty" data-testid="hub-settings" aria-labelledby="hub-settings-title">
+      <span id="hub" aria-hidden="true" />
       <h2 id="hub-settings-title"><Plug size={18} aria-hidden="true" /> Slack a Telegram pro projekty</h2>
-      <p>Projekty můžete propojit s vybranými Slack kanály a Telegram skupinami (projekt → Integrace). Tady je instalace Slack aplikace pro projekty a vaše propojené chat účty.</p>
+      <p className="settings-lead">Sdílené kanály a skupiny týmu: oznámení projektu a úkoly z chatu. Kanál nebo skupinu propojíte v projektu → Integrace; tady je instalace Slack aplikace a vaše chat účty.</p>
+      <ChatModesExplainer />
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="hub-settings-message">{message.text}</p>}
       <ul className="settings-services">
         <li className="settings-service">
           <div>
             <strong><ProviderIcon provider="slack" size={13} /> Aplikace ClearSpace Projekty ve Slacku</strong>
-            <p>Samostatná aplikace (jiná než osobní oznámení). Oprávnění: psát do kanálů, kam ji pozvete, příkaz /clearspace, akce u zprávy a čtení zpráv jen v kanálech, kde je členem. Instalovat může vlastník nebo správce projektu.</p>
+            <p data-testid="hub-slack-install-state">
+              {slackWs === undefined ? 'Zjišťuji stav instalace…'
+                : slackWs === null ? 'Stav instalace vidí vlastník nebo správce projektu (instalovat může také jen on).'
+                : slackWs.some((w) => w.status === 'active') ? <><span className="settings-chip is-connected">Nainstalováno</span> do {slackWs.filter((w) => w.status === 'active').map((w) => `„${w.label}“`).join(', ')}</>
+                : slackWs.length ? <><span className="settings-chip is-attention">Instalace zrušena</span> v {slackWs.map((w) => `„${w.label}“`).join(', ')} – nainstalujte znovu</>
+                : <><span className="settings-chip is-disconnected">Nenainstalováno</span></>}
+            </p>
+            <p className="settings-hint">Samostatná aplikace (jiná než osobní oznámení). Smí psát do kanálů, kam ji pozvete, příkaz /clearspace, akce u zprávy a čtení zpráv jen v kanálech, kde je členem.</p>
           </div>
-          <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} data-testid="hub-slack-install"
-            onClick={() => run(() => hubService.installSlack(), 'Instalaci se nepodařilo zahájit.')}>Nainstalovat do Slacku</button>
+          {(() => {
+            const installed = !!slackWs?.some((w) => w.status === 'active');
+            return <button type="button" className={`cs-btn cs-btn--sm ${installed ? 'cs-btn--secondary' : 'cs-btn--primary'}`} disabled={busy} data-testid="hub-slack-install"
+              onClick={() => run(() => hubService.installSlack(), 'Instalaci se nepodařilo zahájit.')}>{installed ? 'Přeinstalovat' : 'Nainstalovat do Slacku'}</button>;
+          })()}
         </li>
       </ul>
       <h3 className="hub-subtitle">Moje propojené chat účty</h3>
@@ -97,7 +135,7 @@ export default function HubSettingsCard({ returnOutcome }: { returnOutcome?: str
         {ids.map((i) => (
           <li key={`${i.provider}:${i.key}`} className="settings-service">
             <div><strong><ProviderIcon provider={i.provider} size={13} /> {i.label}</strong><p>propojeno {new Date(i.createdAt).toLocaleDateString('cs-CZ')}</p></div>
-            <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" disabled={busy} data-testid="hub-identity-remove"
+            <button type="button" className="cs-btn cs-btn--danger-outline cs-btn--sm" disabled={busy} data-testid="hub-identity-remove"
               onClick={() => run(async () => { await hubService.removeIdentity(i.provider, i.key); setMessage({ kind: 'info', text: `${PROVIDER_NAME[i.provider]} účet odpojen.` }); await load(); }, 'Účet se nepodařilo odpojit.')}>Odpojit</button>
           </li>
         ))}

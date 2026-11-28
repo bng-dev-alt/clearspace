@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useConfirm } from '../ui/useConfirm';
+import CopyButton from '../ui/CopyButton';
 import Link from 'next/link';
 import { MessageSquare, Send, Plug } from 'lucide-react';
 import { ModalShell, Badge } from '../ui';
@@ -39,6 +40,8 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   const [, setClock] = useState(0);
   useEffect(() => { const t = setInterval(() => setClock((c) => c + 1), 1000); return () => clearInterval(t); }, []);
   const [piAsk, setPiAsk] = useState<{ d: HubDestination; full: boolean } | null>(null);
+  // RUN 11 (#2, #8, #9): the destination just confirmed gets a clear success state with its next steps
+  const [justLinked, setJustLinked] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setStatus(await hubService.project(projectId)); } catch (e) {
@@ -73,8 +76,8 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   }, [projectId, code]);
   const decide = (d: HubDestination, decision: 'confirm' | 'reject') => run(async () => {
     await hubService.decide(d.id, decision);
-    setMessage({ kind: 'info', text: decision === 'confirm' ? `${d.label} je propojený s projektem.` : `${d.label}: propojení odmítnuto.` });
-    if (decision === 'confirm') setCode(null);
+    setMessage(decision === 'confirm' ? null : { kind: 'info', text: `${d.label}: propojení odmítnuto.` });
+    if (decision === 'confirm') { setCode(null); setJustLinked(d.id); }
     await load();
   }, 'Rozhodnutí se nepodařilo uložit.');
   const save = (d: HubDestination, patch: Partial<Pick<HubDestination, 'notify' | 'interactive' | 'intelligence' | 'eventTypes' | 'fullIngest'>>, ack = false) => run(async () => {
@@ -86,8 +89,9 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
   const test = (d: HubDestination) => run(async () => {
     setCooldown((c) => ({ ...c, [d.id]: Date.now() + 30_000 }));
     const r = await hubService.test(d.id);
+    // RUN 11 (#6): a test message is not a notification – say what was sent and how real notifications behave
     setMessage({ kind: r.outcome === 'sent' ? 'info' : 'error', text: r.outcome === 'sent'
-      ? `${r.message} (${new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} – ${d.label})` : r.message });   // a successful re-check re-activates the destination
+      ? `${r.message} (${new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} – ${d.label}). Jde jen o zkušební zprávu; skutečná oznámení chodí souhrnně nejvýš jednou za minutu podle zapnutých událostí.` : r.message });   // a successful re-check re-activates the destination
     await load();
   }, 'Zkušební zprávu se nepodařilo odeslat.');
   const remove = async (d: HubDestination) => {
@@ -122,7 +126,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
           </div>
         )}
         {status?.canManage && status.providers.slack && !status.slackWorkspaces.some((w) => w.status === 'active') && (
-          <p className="hub-muted" data-testid="hub-slack-install-hint">Slack: nejdřív nainstalujte aplikaci <strong>ClearSpace Projekty</strong> do svého workspace v <Link href="/settings#hub">Nastavení → Slack a Telegram pro projekty</Link>.</p>
+          <p className="hub-muted" data-testid="hub-slack-install-hint">Slack: nejdřív nainstalujte aplikaci <strong>ClearSpace Projekty</strong> do svého workspace v <Link href="/settings#projekty">Nastavení → Slack a Telegram pro projekty</Link>.</p>
         )}
         {code && (
           <PairingBox testId="hub-code-box" onTick={watch} onRenew={() => void issue(code.provider)} onClose={() => setCode(null)}
@@ -140,6 +144,19 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                   <Badge variant={d.status === 'active' ? 'success' : d.status === 'pending' ? 'warning' : 'danger'}>{STATUS_LABEL[d.status]}</Badge>
                   <span className="hub-muted">{d.kind === 'slack_channel' ? 'Slack kanál' : d.kind === 'telegram_supergroup' ? 'Telegram superskupina' : 'Telegram skupina'} · zpráv: {d.messages}</span>
                 </div>
+                {justLinked === d.id && d.status !== 'pending' && (
+                  <div className="hub-linked-ok" role="status" data-testid="hub-linked-ok">
+                    <strong>Propojeno ✓ {d.label}</strong>
+                    <span>{d.provider === 'slack'
+                      ? 'Aby sem ClearSpace mohl psát, musí být aplikace ClearSpace Projekty členem kanálu (v kanálu: /invite @ClearSpace Projekty). Ověříte to zkušební zprávou.'
+                      : 'Bot je ve skupině. Zkušební zprávou ověříte, že mu Telegram dovolí psát.'}</span>
+                    <div className="hub-actions">
+                      <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-linked-test">Odeslat zkušební zprávu</button>
+                      {!d.interactive && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => save(d, { interactive: true })} data-testid="hub-linked-interactive">Zapnout i úkoly z chatu</button>}
+                      <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setJustLinked(null)}>Hotovo</button>
+                    </div>
+                  </div>
+                )}
                 {d.status === 'pending' && status.canManage && (
                   <div className="hub-actions">
                     <span data-testid="hub-linked-by">{d.linkedBy ?? 'Někdo'} zadal v {d.provider === 'slack' ? 'kanálu' : 'skupině'} „{d.label}“ kód tohoto projektu. Je to ten správný {d.provider === 'slack' ? 'kanál' : 'chat'}? Propojit?</span>
@@ -160,11 +177,25 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                       </div>
                     )}
                     <label className="notify-check"><input type="checkbox" checked={d.interactive} onChange={(e) => save(d, { interactive: e.target.checked })} data-testid="hub-cap-interactive" />
-                      <span><strong>Interaktivní</strong> – úkol ze zprávy ({d.provider === 'slack' ? 'akce u zprávy „Vytvořit úkol“' : 'odpověď na zprávu příkazem /task'}), odpovědi ve vlákně úkolu ↔ komentáře. Jen pro lidi s propojeným účtem a právem upravovat.</span></label>
-                    <label className="notify-check"><input type="checkbox" checked={d.intelligence} disabled={!status.intelligenceAvailable && !d.intelligence}
-                      onChange={(e) => (e.target.checked ? setPiAsk({ d, full: false }) : save(d, { intelligence: false, fullIngest: false }))} data-testid="hub-cap-intelligence" />
-                      <span><strong>Project Intelligence</strong> – AI smí číst komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'}. Výchozí stav vypnuto.{!status.intelligenceAvailable && ' (Na serveru vypnuto.)'}
-                        {d.intelligence && <><br /><em data-testid="hub-pi-scope">Rozsah: {piScope(d)}.</em></>}</span></label>
+                      <span><strong>Úkoly z chatu (Interaktivní)</strong> – úkol ze zprávy ({d.provider === 'slack' ? 'akce u zprávy „Vytvořit úkol“' : 'příkaz /task s názvem úkolu za ním, volitelně jako odpověď na zprávu'}), odpovědi ve vlákně úkolu ↔ komentáře. Jen pro lidi s propojeným účtem a právem upravovat. Nový kanál ji má vypnutou, dokud ji nezapnete.</span></label>
+                    {d.provider === 'telegram' && d.interactive && status.telegramBot && (
+                      <div className="hub-command" data-testid="hub-task-command">
+                        <code>{`/task@${status.telegramBot} Název úkolu`}</code>
+                        <CopyButton text={`/task@${status.telegramBot} `} label="Kopírovat příkaz" ariaLabel="Kopírovat příkaz pro vytvoření úkolu" testId="hub-task-command-copy" />
+                      </div>
+                    )}
+                    {status.intelligenceAvailable ? (
+                      <label className="notify-check"><input type="checkbox" checked={d.intelligence}
+                        onChange={(e) => (e.target.checked ? setPiAsk({ d, full: false }) : save(d, { intelligence: false, fullIngest: false }))} data-testid="hub-cap-intelligence" />
+                        <span><strong>Project Intelligence</strong> – AI smí číst komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'}. Výchozí stav vypnuto.
+                          {d.intelligence && <><br /><em data-testid="hub-pi-scope">Rozsah: {piScope(d)}.</em></>}</span></label>
+                    ) : (
+                      // RUN 11 (D10): never a ticked box for something the server does not do
+                      <div className="notify-check is-unavailable" data-testid="hub-cap-intelligence-off">
+                        <span><strong>Project Intelligence</strong> – na tomto serveru vypnuto: AI komunikaci {d.provider === 'slack' ? 'tohoto kanálu' : 'této skupiny'} nečte.
+                          {d.intelligence && <> Pro tento cíl je uložená volba „zapnuto“; začne platit až po zapnutí na serveru. <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy || !status.canManage} onClick={() => save(d, { intelligence: false, fullIngest: false })} data-testid="hub-cap-intelligence-clear">Zrušit uloženou volbu</button></>}</span>
+                      </div>
+                    )}
                     {d.provider === 'telegram' && d.intelligence && status.telegramPiBot && (
                       <label className="notify-check" style={{ paddingLeft: "1.4rem" }}><input type="checkbox" checked={d.fullIngest}
                         onChange={(e) => (e.target.checked ? setPiAsk({ d, full: true }) : save(d, { fullIngest: false }))} data-testid="hub-cap-full-ingest" />
@@ -181,7 +212,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                         {wait > 0 ? `Odesláno · znovu za ${wait} s` : 'Zkušební zpráva'}</button>;
                     })()}
                     {['removed_bot', 'archived', 'error', 'revoked'].includes(d.status) && <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} onClick={() => test(d)} data-testid="hub-recheck">Ověřit znovu</button>}
-                    {d.status !== 'pending' && <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" disabled={busy} onClick={() => remove(d)} data-testid="hub-remove">Odpojit</button>}
+                    {d.status !== 'pending' && <button type="button" className="cs-btn cs-btn--danger-outline cs-btn--sm" disabled={busy} onClick={() => remove(d)} data-testid="hub-remove">Odpojit</button>}
                   </div>
                 )}
               </li>

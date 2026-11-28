@@ -18,23 +18,23 @@ export default function AiDashboardStats({ stats }: AiDashboardStatsProps) {
     },
     {
       title: 'Spotřebované tokeny dnes',
-      value: stats.todayTokens.toLocaleString(),
+      value: stats.todayTokens.toLocaleString('cs-CZ'),
       icon: <Cpu size={20} />,
-      desc: 'Prompt + completion tokeny',
+      desc: 'Vstup + výstup podle serverového záznamu',
     },
     {
       title: 'Odhadované náklady dnes',
       value: aiCostEstimator.formatCostCzk(stats.todayCostCzk),
       icon: <Coins size={20} />,
-      desc: 'Přepočteno z USD dle ceníku',
+      desc: 'Odhad z tokenů a ceníku (ne faktura)',
     },
     {
       title: 'Průměrná doba odezvy',
       value: stats.averageResponseTime > 0
-        ? `${(stats.averageResponseTime / 1000).toFixed(2)} s`
-        : '0.00 s',
+        ? `${(stats.averageResponseTime / 1000).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s`
+        : '—',
       icon: <Clock size={20} />,
-      desc: 'Průměrná latence AI requestů',
+      desc: 'Průměrná doba odpovědi AI'
     },
   ];
 

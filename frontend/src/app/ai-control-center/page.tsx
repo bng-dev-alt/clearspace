@@ -3,16 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/layout/Navbar';
 import AiDashboardStats from '../../components/ai/AiDashboardStats';
-import AiBudgetWidget from '../../components/ai/AiBudgetWidget';
+import AiLimitsCard from '../../components/ai/AiLimitsCard';
+import { meetingService } from '../../services/meetingService';
+import type { AiStatus } from '../../lib/ai/status';
 import AiCharts from '../../components/ai/AiCharts';
 import AiFeatureBreakdown from '../../components/ai/AiFeatureBreakdown';
 import AiRequestHistory from '../../components/ai/AiRequestHistory';
 import { aiAnalyticsService, AiStats, FeatureStats, AiRequestLog } from '../../services/ai/aiAnalyticsService';
 import { Trash2, Cpu, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../components/ui/useConfirm';
 
 export default function AiControlCenterPage() {
   const { profile } = useAuth();
+  const [ask, confirmDialog] = useConfirm();
   const userRole = profile?.workspace_role || 'owner';
   const isAdminOrOwner = userRole === 'owner' || userRole === 'admin';
   const [stats, setStats] = useState<AiStats>({
@@ -21,13 +25,12 @@ export default function AiControlCenterPage() {
     todayCostCzk: 0,
     averageResponseTime: 0,
     currentProvider: 'google',
-    currentModel: 'gemini-3.5-flash',
+    currentModel: '',
   });
 
   const [featureBreakdown, setFeatureBreakdown] = useState<FeatureStats[]>([]);
   const [history, setHistory] = useState<AiRequestLog[]>([]);
-  const [budgetLimit, setBudgetLimit] = useState(300);
-  const [monthlyUsage, setMonthlyUsage] = useState(0);
+  const [aiStatus, setAiStatus] = useState<AiStatus | null | undefined>(undefined);
 
   const [ledgerBacked, setLedgerBacked] = useState(false);
 
@@ -37,14 +40,12 @@ export default function AiControlCenterPage() {
     const s = await aiAnalyticsService.getStats();
     const fb = await aiAnalyticsService.getFeatureBreakdown();
     const hist = await aiAnalyticsService.getHistory();
-    const limit = aiAnalyticsService.getBudgetLimit();
-    const usage = aiAnalyticsService.getMonthlyUsage();
+    const access = await meetingService.aiAccess().catch(() => null);
 
     setStats(s);
     setFeatureBreakdown(fb);
     setHistory(hist);
-    setBudgetLimit(limit);
-    setMonthlyUsage(usage);
+    setAiStatus(access?.ai ?? null);
   };
 
   useEffect(() => {
@@ -59,16 +60,13 @@ export default function AiControlCenterPage() {
   }, []);
 
   const handleClearLogs = async () => {
-    if (window.confirm('Opravdu chcete vymazat celou historii a statistiky AI dotazů?')) {
+    if (await ask({ title: 'Vymazat místní historii AI?', message: 'Smaže se historie a statistiky AI uložené jen v tomto prohlížeči. Serverový záznam to neovlivní.', confirmLabel: 'Vymazat', danger: true })) {
       await aiAnalyticsService.clearLogs();
       await loadData();
     }
   };
-
-  const handleBudgetChange = (newLimit: number) => {
-    aiAnalyticsService.setBudgetLimit(newLimit);
-    setBudgetLimit(newLimit);
-  };
+  // RUN 11 (D3): the model shown is the one the server actually uses (access status), else the last recorded one, else "neuveden"
+  const modelText = aiStatus?.model ?? (stats.currentModel ? stats.currentModel.replace(/^models\//, '') : null);
 
   if (!isAdminOrOwner) {
     return (
@@ -88,14 +86,15 @@ export default function AiControlCenterPage() {
   return (
     <div className="app-container" style={{ backgroundColor: 'var(--bg-page)' }}>
       <Navbar />
+      {confirmDialog}
 
       {/* Hero sekce ve stejném stylu jako ostatní stránky */}
       <section className="app-hero">
         <div className="hero-content">
           <div className="hero-left">
-            <span className="hero-team-label">AI WORKSPACE</span>
+            <span className="hero-team-label">AI</span>
             <h1 className="hero-title">AI Studio</h1>
-            <p className="hero-desc">Sledování spotřeby tokenů, nákladů, latencí a ladění AI požadavků v reálném čase.</p>
+            <p className="hero-desc">Spotřeba, limity a historie vašich AI požadavků.</p>
           </div>
           <div className="hero-right" />
         </div>
@@ -132,7 +131,7 @@ export default function AiControlCenterPage() {
             fontWeight: 700,
           }}>
             <Cpu size={14} />
-            <span>Aktivní model: {stats.currentModel.replace(/^models\//, '')}</span>
+            <span data-testid="ai-active-model">{modelText ? `Model na serveru: ${modelText}` : 'Model: neuveden'}</span>
           </div>
 
           {ledgerBacked && (
@@ -140,9 +139,10 @@ export default function AiControlCenterPage() {
               Data pocházejí ze serverového záznamu (posledních 30 dní, jen vaše dotazy). Obsah dotazů se neukládá.
             </span>
           )}
-          <button
+          {/* the server ledger cannot be deleted from the browser: the button exists only for local (demo) history */}
+          {!ledgerBacked && <button
             onClick={handleClearLogs}
-            disabled={history.length === 0 || ledgerBacked}
+            disabled={history.length === 0}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -169,8 +169,8 @@ export default function AiControlCenterPage() {
             className="ai-cc-clear-logs"
           >
             <Trash2 size={14} />
-            Vymazat logy
-          </button>
+            Vymazat místní historii
+          </button>}
         </div>
 
         {/* 1. Stats Row */}
@@ -184,11 +184,7 @@ export default function AiControlCenterPage() {
             <AiCharts logs={history} featureBreakdown={featureBreakdown} />
           </div>
           <div style={{ gridColumn: 'span 1' }}>
-            <AiBudgetWidget
-              monthlyUsage={monthlyUsage}
-              budgetLimit={budgetLimit}
-              onBudgetChange={handleBudgetChange}
-            />
+            <AiLimitsCard status={aiStatus} todayTokens={stats.todayTokens} ledgerBacked={ledgerBacked} />
           </div>
         </div>
 

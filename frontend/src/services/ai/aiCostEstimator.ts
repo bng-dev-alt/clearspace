@@ -99,10 +99,10 @@ export const aiCostEstimator = {
    * Formats a cost number in CZK to a readable string (e.g. 0.12 CZK).
    */
   formatCostCzk(amount: number): string {
-    if (amount === 0) return '0.00 CZK';
-    if (amount < 0.01) {
-      return `${amount.toFixed(4)} CZK`;
-    }
-    return `${amount.toFixed(2)} CZK`;
+    // RUN 11: Czech number format (decimal comma, Kč)
+    const fmt = (d: number) => amount.toLocaleString('cs-CZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+    if (amount === 0) return '0,00 Kč';
+    if (amount < 0.01) return `${fmt(4)} Kč`;
+    return `${fmt(2)} Kč`;
   },
 };

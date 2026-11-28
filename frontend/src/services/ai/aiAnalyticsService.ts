@@ -77,7 +77,6 @@ function mapLedgerRow(r: LedgerRow): AiRequestLog {
 }
 
 const STORAGE_KEY = 'ai_control_center_logs';
-const BUDGET_KEY = 'ai_control_center_budget';
 
 export const aiAnalyticsService = {
   /**
@@ -267,28 +266,5 @@ export const aiAnalyticsService = {
     });
   },
 
-  /**
-   * Budget management
-   */
-  getBudgetLimit(): number {
-    if (typeof window === 'undefined') return 300;
-    const limit = localStorage.getItem(BUDGET_KEY);
-    return limit ? parseFloat(limit) : 300;
-  },
-
-  setBudgetLimit(limit: number): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(BUDGET_KEY, limit.toString());
-      window.dispatchEvent(new Event('ai_log_updated'));
-    }
-  },
-
-  getMonthlyUsage(): number {
-    const logs = this.getRawLogs();
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-
-    const monthlyLogs = logs.filter(log => log.timestamp >= startOfMonth);
-    return monthlyLogs.reduce((sum, log) => sum + (log.estimatedCostCzk || 0), 0);
-  },
+  // RUN 11 (D3): the browser-only "monthly budget" (localStorage) was removed – limits come from the server (lib/ai/status.ts).
 };

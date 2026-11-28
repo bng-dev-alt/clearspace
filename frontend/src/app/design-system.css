@@ -33,6 +33,9 @@
 .cs-btn--ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .cs-btn--danger { background: var(--danger); color: #ffffff; }
 .cs-btn--danger:hover:not(:disabled) { filter: brightness(0.94); transform: translateY(-1px); }
+/* RUN 11: odpojení / odebrání vedle běžných akcí – zřetelné, ale ne dominantní (potvrzuje se dialogem) */
+.cs-btn--danger-outline { background: transparent; color: var(--danger); border-color: var(--danger); }
+.cs-btn--danger-outline:hover:not(:disabled) { background: var(--danger-soft, var(--surface-2)); }
 
 .cs-btn--sm { padding: 0.42rem 0.72rem; font-size: 0.78rem; border-radius: var(--radius); }
 .cs-btn--lg { padding: 0.8rem 1.3rem; font-size: 0.95rem; }
@@ -282,3 +285,17 @@ span.cs-status { display: inline-flex; margin: 0 0 0 0.5rem; padding: 0.25rem 0.
 .cs-confirm-option input { margin-top: 0.2rem; accent-color: var(--accent); }
 .cs-confirm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; flex-wrap: wrap; }
 @media (max-width: 767px) { .cs-confirm-actions { flex-direction: column-reverse; } .cs-confirm-actions .cs-btn { width: 100%; min-height: 44px; } }
+
+/* RUN 11 (D3): AI Studio – limity účtu ze serveru */
+.ai-limits-title { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 700; color: var(--text); }
+.ai-limits-list { display: grid; gap: 0.6rem; margin: 0; }
+.ai-limits-list > div { display: grid; gap: 0.1rem; }
+.ai-limits-list dt { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.ai-limits-list dd { margin: 0; font-size: 0.9rem; color: var(--text); }
+.ai-limits-note { margin: 0.9rem 0 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-secondary); }
+
+/* RUN 11: hub – úspěšné propojení s dalšími kroky, kopírovatelný příkaz, nedostupná volba */
+.hub-linked-ok { display: grid; gap: 0.4rem; margin: 0.5rem 0; padding: 0.75rem 0.9rem; border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 0.82rem; color: var(--text); }
+.hub-command { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0.5rem 1.4rem; }
+.hub-command code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); font-size: 0.8rem; overflow-wrap: anywhere; }
+.notify-check.is-unavailable { color: var(--text-secondary); }

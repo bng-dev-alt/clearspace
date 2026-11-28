@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import type { SectionSummary } from '../settings/ConnectedAccountsOverview';
 import { CalendarDays, HardDrive, Mail, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { driveService, serviceActive, DriveError, type GoogleServiceName, type GoogleStatus } from '../../services/driveService';
@@ -32,7 +33,7 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
 };
 
 /** Integration settings: ONE Google account, per-service state (Drive / Gmail / Calendar). Extends into the RUN 07 Integrations Hub. */
-export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?: string | null }) {
+export default function GoogleConnectionCard({ returnOutcome, onSummary }: { returnOutcome?: string | null; onSummary?: (s: SectionSummary | null) => void }) {
   const [ask, confirmDialog] = useConfirm();
   const [status, setStatus] = useState<GoogleStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,14 +115,23 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   const gmailOn = serviceActive(status, 'gmail');
   const meetingsOn = serviceActive(status, 'meetings');
   const active = c?.status === 'active';
+  // RUN 11 (D1): the overview row shows what the server says, nothing guessed
+  useEffect(() => {
+    if (!onSummary || status === null) return;
+    if (!status.configured) { onSummary(null); return; }
+    const on = [driveOn && 'Disk', gmailOn && 'Gmail', calendarOn && 'Kalendář', meetingsOn && 'plánování porad'].filter(Boolean).join(' · ');
+    onSummary(!c ? { state: 'disconnected', detail: 'Účet Google nepřipojen' }
+      : !active ? { state: 'attention', detail: `${c.email} – přístup zrušen, připojte znovu` }
+      : { state: 'connected', detail: `${c.email}${on ? ` · ${on}` : ''}` });
+  }, [status, c, active, driveOn, gmailOn, calendarOn, meetingsOn, onSummary]);
   return (
-    <section className="settings-card" data-testid="google-connection-card" aria-labelledby="google-card-title">
+    <section className="settings-card" id="google" data-testid="google-connection-card" aria-labelledby="google-card-title">
       {confirmDialog}
       <h2 id="google-card-title">
-        <Link2 size={18} aria-hidden="true" /> Účet Google
+        <Link2 size={18} aria-hidden="true" /> Google
         {status?.simulated && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Google">simulace</span>}
       </h2>
-      <p>Připojení účtu Google je oddělené od přihlášení do ClearSpace a vaši identitu v ClearSpace nemění. Jednotlivé služby povolujete zvlášť.</p>
+      <p className="settings-lead">Soubory, e-maily a události, které sami připojíte k projektům. Připojení je oddělené od přihlášení do ClearSpace; jednotlivé služby povolujete zvlášť.</p>
       {status?.configured && status.pilot && <p className="drive-hint" data-testid="google-pilot-note">{PILOT_TEXT}</p>}
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="google-connection-message">{message.text}</p>}
 
@@ -140,7 +150,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {!active && <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={() => connect(c.services?.drive ? 'drive' : c.services?.gmail ? 'gmail' : c.services?.calendar ? 'calendar' : 'drive')} disabled={busy} data-testid="google-reconnect">Znovu připojit účet</button>}
-                <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={disconnect} disabled={busy} data-testid="google-disconnect">Odpojit Google účet</button>
+                <button type="button" className="cs-btn cs-btn--danger-outline cs-btn--sm" onClick={disconnect} disabled={busy} data-testid="google-disconnect">Odpojit Google účet</button>
               </div>
             </div>
           )}
@@ -206,6 +216,8 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
             )}
           </ul>
 
+          <details className="settings-details">
+          <summary>Co ClearSpace vidí a ukládá</summary>
           <ul data-testid="google-privacy">
             <li>ClearSpace vidí jen soubory, které sami vyberete v okně Google Disku – ne celý váš Disk. Odkazy na ně uvidí členové projektu; otevřít je mohou jen ti, komu je zpřístupníte v Google Disku.</li>
             <li>U e-mailů uvidí členové projektu jen předmět, odesílatele (jméno nebo doménu), datum a počet zpráv. Obsah, adresy a přílohy zůstávají ve vaší schránce; náhled vidíte jen vy.</li>
@@ -214,6 +226,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
             <li><strong>Vypnout Gmail / Kalendář</strong> = ClearSpace danou službu přestane používat (ostatní zůstanou). <strong>Odpojit Google účet</strong> = Google zruší celé oprávnění ClearSpace (všechny služby najednou); jednotlivé služby Google zvlášť zrušit neumí.</li>
             <li>Podrobnosti: <Link href="/privacy#google">Ochrana osobních údajů – Google</Link>.</li>
           </ul>
+          </details>
         </>
       )}
     </section>

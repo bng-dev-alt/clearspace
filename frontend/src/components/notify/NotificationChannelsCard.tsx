@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { SectionSummary } from '../settings/ConnectedAccountsOverview';
 import { useConfirm } from '../ui/useConfirm';
 import Link from 'next/link';
 import { BellRing, MessageSquare, Send } from 'lucide-react';
@@ -35,7 +36,7 @@ function stateText(c: NotifyChannel | undefined, provider: NotifyProvider): { te
 }
 
 /** Settings card "Notifications outside the app": Slack + Telegram channels and what is sent. Same structure as GoogleConnectionCard. */
-export default function NotificationChannelsCard({ returnOutcome }: { returnOutcome?: string | null }) {
+export default function NotificationChannelsCard({ returnOutcome, onSummary }: { returnOutcome?: string | null; onSummary?: (s: SectionSummary | null) => void }) {
   const [ask, confirmDialog] = useConfirm();
   const [status, setStatus] = useState<NotifyStatus | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -51,7 +52,13 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
     try {
       const s = await notifyService.status();
       setStatus(s);
-      if (s) setPrefs(s.preferences ?? DEFAULT_PREFERENCES);
+      if (s) {
+        // RUN 11 (D6): a NEW setup (nothing saved, no channel yet) starts with "Jen vybrané projekty" as an UNSAVED choice; anybody
+        // who already has a channel or saved preferences keeps exactly what the server uses (null = all projects).
+        const fresh = s.preferences === null && !s.channels.some((c) => c.status === 'active' || c.status === 'confirm');
+        setPrefs(s.preferences ?? (fresh ? { ...DEFAULT_PREFERENCES, projectIds: [] } : DEFAULT_PREFERENCES));
+        setPrefsDirty(fresh);
+      }
       return s;
     } catch (e) {
       setStatus(null);
@@ -143,6 +150,22 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
     setMessage({ kind: 'info', text: 'Nastavení oznámení je uložené (platí i pro zprávy, které ještě čekají na odeslání).' });
   }, 'Nastavení se nepodařilo uložit.');
 
+  const prefsValid = prefs.projectIds === null || prefs.projectIds.length > 0;
+  // D6: when a brand-new setup connects its first channel, the visible (valid) choice is saved first, so the server uses what the form shows
+  const saveFreshChoice = async () => {
+    if (status && status.preferences === null && prefsDirty && prefsValid) {
+      try { await notifyService.savePreferences(prefs); setPrefsDirty(false); } catch { /* the connect still runs; the form keeps the unsaved choice */ }
+    }
+  };
+  useEffect(() => {
+    if (!onSummary || status === undefined) return;
+    if (status === null) { onSummary(null); return; }
+    const active = status.channels.filter((c) => c.status === 'active');
+    const broken = status.channels.some((c) => c.status === 'reconnect' || c.status === 'blocked' || c.status === 'confirm');
+    const names = active.map((c) => `${PROVIDER_NAME[c.provider]}${c.enabled ? '' : ' (pozastaveno)'}`);
+    onSummary({ state: broken ? 'attention' : active.length ? 'connected' : 'disconnected', detail: names.length ? names.join(' · ') : 'Slack ani Telegram nepřipojen' });
+  }, [status, onSummary]);
+
   if (status === undefined || status === null) {
     // feature off on this server (or not loaded yet): no card at all; a load error still shows its message
     return message ? <section className="settings-card" data-testid="notify-card"><p role="alert" className="drive-message is-error">{message.text}</p></section> : null;
@@ -161,7 +184,7 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {(!c || c.status === 'linking' || broken) && (
           <button type="button" className="cs-btn cs-btn--secondary cs-btn--sm" disabled={busy} data-testid={`${p}-connect`}
-            onClick={() => (p === 'slack' ? run(() => notifyService.connectSlack(), 'Připojení se nepodařilo zahájit.') : linkTelegram())}>
+            onClick={async () => { await saveFreshChoice(); if (p === 'slack') void run(() => notifyService.connectSlack(), 'Připojení se nepodařilo zahájit.'); else void linkTelegram(); }}>
             {broken ? 'Připojit znovu' : `Připojit ${PROVIDER_NAME[p]}`}
           </button>
         )}
@@ -174,20 +197,20 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
           <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy} onClick={() => toggle(p, !c.enabled)} data-testid={`${p}-toggle`}>{c.enabled ? 'Pozastavit' : 'Obnovit'}</button>
         </>)}
         {c && c.status !== 'linking' && (
-          <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" disabled={busy} onClick={() => disconnect(p)} data-testid={`${p}-disconnect`}>Odpojit</button>
+          <button type="button" className="cs-btn cs-btn--danger-outline cs-btn--sm" disabled={busy} onClick={() => disconnect(p)} data-testid={`${p}-disconnect`}>Odpojit</button>
         )}
       </div>
     );
   };
 
   return (
-    <section className="settings-card" data-testid="notify-card" aria-labelledby="notify-card-title">
+    <section className="settings-card" id="oznameni" data-testid="notify-card" aria-labelledby="notify-card-title">
       {confirmDialog}
       <h2 id="notify-card-title">
-        <BellRing size={18} aria-hidden="true" /> Oznámení mimo aplikaci
+        <BellRing size={18} aria-hidden="true" /> Osobní oznámení
         {(status.slack.simulated || status.telegram.simulated) && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Slack / Telegram">simulace</span>}
       </h2>
-      <p>Vybraná oznámení vám ClearSpace může posílat i do Slacku nebo Telegramu – vždy jen vám osobně, nikdy do kanálů ani skupin. Oznámení v aplikaci (zvonek) fungují dál beze změny.</p>
+      <p className="settings-lead">Jen vám, soukromou zprávou do Slacku nebo Telegramu – nikdy do kanálů ani skupin týmu (ty jsou níže v části Slack a Telegram pro projekty). Oznámení v aplikaci (zvonek) fungují dál beze změny.</p>
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="notify-message">{message.text}</p>}
 
       <ul className="settings-services">
@@ -233,16 +256,22 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
           )}
         </div>
         <label className="notify-check"><input type="checkbox" checked={prefs.hideTitles} onChange={(ev) => { setPrefs((p) => ({ ...p, hideTitles: ev.target.checked })); setPrefsDirty(true); }} data-testid="notify-hide-titles" /> Neposílat názvy úkolů a projektů (jen typ oznámení a odkaz)</label>
-        <div><button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={savePrefs} disabled={busy || !prefsDirty} data-testid="notify-save">Uložit nastavení</button></div>
-        {!hasChannel && <p>Nastavení se použije, jakmile připojíte Slack nebo Telegram.</p>}
+        <p className="settings-hint" data-testid="notify-projects-help"><strong>Všechny moje projekty</strong> = i projekty, do kterých vás přidají později. <strong>Jen vybrané</strong> = jen zaškrtnuté projekty; nové se nepřidají samy.</p>
+        {prefs.projectIds !== null && prefs.projectIds.length === 0 && <p className="settings-hint" data-testid="notify-projects-empty">Vyberte aspoň jeden projekt, jinak by vám nic nepřišlo.</p>}
+        <div><button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={savePrefs} disabled={busy || !prefsDirty || !prefsValid} data-testid="notify-save">Uložit nastavení</button></div>
+        {status.preferences === null && <p className="settings-hint" data-testid="notify-effective">Zatím neuloženo – dokud nastavení neuložíte, platí: všechny vaše projekty a všechny typy oznámení.</p>}
+        {!hasChannel && <p className="settings-hint">Nastavení se použije, jakmile připojíte Slack nebo Telegram.</p>}
       </fieldset>
 
+      <details className="settings-details">
+      <summary>Co zpráva obsahuje a jak se chrání</summary>
       <ul data-testid="notify-privacy">
         <li>Zpráva obsahuje jen typ události, kdo ji udělal, název úkolu a projektu, termín a odkaz do ClearSpace. Nikdy text komentářů, popisy, přílohy ani obsah z Google Disku, Gmailu či Kalendáře.</li>
         <li>Před každým odesláním se znovu ověří, že k projektu stále máte přístup; jinak se zpráva nepošle. Připomenutí termínu chodí den předem v 9:00 (čas v Praze).</li>
         <li>Slack a Telegram zprávy ukládají u sebe podle svých pravidel. Přístupové údaje ukládá ClearSpace šifrovaně a po odpojení je smaže.</li>
         <li>Podrobnosti: <Link href="/privacy#notifikace">Ochrana osobních údajů – oznámení mimo aplikaci</Link>.</li>
       </ul>
+      </details>
     </section>
   );
 }

@@ -3524,7 +3524,6 @@ body {
      Mřížka 3fr 1fr na 375px přetékala o 181px ven z obrazovky. */
   .ai-cc-charts-grid { grid-template-columns: minmax(0, 1fr); }
   .ai-cc-clear-logs { min-height: 44px; }
-  .ai-budget-edit-btn { width: 44px; height: 44px; justify-content: center; }
   .project-delete-btn { width: 44px; height: 44px; }
   .toolbar-btn { min-height: 44px; }
 }
@@ -3825,4 +3824,40 @@ body {
   .app-stats-row .cs-metric-label { font-size: 0.56rem; white-space: normal; }
   .app-stats-row .cs-metric-action { display: none; }
   .app-toolbar .toolbar-new-task-btn { display: inline-flex; order: -1; flex: 1 1 100%; justify-content: center; min-height: 44px; }
+}
+
+/* ---------- RUN 11 (D1): Propojené účty – přehled, stavové štítky, sbalené detaily ----------
+   Jen existující tokeny; Monograph přebírá přes proměnné (ostré rohy řeší jeho vlastní pravidla pro .settings-card). */
+.settings-overview { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.25rem; }
+.settings-overview-title { margin: 0 0 0.5rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.settings-overview ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.settings-overview-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) auto; gap: 0.75rem; align-items: center; padding: 0.6rem 0; border-top: 1px solid var(--border); }
+.settings-overview-row:first-child { border-top: 0; }
+.settings-overview-main { display: grid; gap: 0.1rem; min-width: 0; }
+.settings-overview-main strong { font-size: 0.85rem; color: var(--text); }
+.settings-overview-purpose, .settings-overview-detail { font-size: 0.75rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.settings-overview-state { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-width: 0; }
+.settings-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.1rem 0.5rem; border-radius: var(--radius-pill); border: 1px solid var(--border-strong); font-size: 0.7rem; font-weight: 700; color: var(--text); white-space: nowrap; }
+.settings-chip::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--text-muted); }
+.settings-chip.is-connected::before { background: var(--success); }
+.settings-chip.is-partial::before { background: var(--accent); }
+.settings-chip.is-attention::before { background: var(--warning); }
+.settings-chip.is-disconnected::before { background: var(--text-muted); }
+.settings-card .settings-lead { color: var(--text); font-size: 0.85rem; }
+.settings-card .settings-hint, .settings-hint { font-size: 0.75rem; color: var(--text-secondary); margin: 0.25rem 0 0; }
+.settings-details > summary, .settings-explainer > summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text); padding: 0.35rem 0; min-height: 32px; display: flex; align-items: center; }
+.settings-details > summary:focus-visible, .settings-explainer > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-details[open] > ul { margin-top: 0.4rem; }
+.settings-explainer-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.75rem; color: var(--text); }
+.settings-explainer-table th, .settings-explainer-table td { text-align: left; vertical-align: top; padding: 0.4rem 0.5rem; border-top: 1px solid var(--border); }
+.settings-explainer-table thead th { border-top: 0; color: var(--text-secondary); font-weight: 700; }
+.settings-page a:not(.cs-btn) { color: var(--accent); text-underline-offset: 3px; }
+@media (max-width: 767px) {
+  .settings-page { padding: 0 1rem 2rem; }
+  .settings-overview-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-overview-state { grid-column: 1 / -1; grid-row: 2; }
+  .settings-explainer-table, .settings-explainer-table tbody, .settings-explainer-table tr, .settings-explainer-table th, .settings-explainer-table td { display: block; }
+  .settings-explainer-table thead { display: none; }
+  .settings-explainer-table tr { padding: 0.4rem 0; border-top: 1px solid var(--border); }
+  .settings-explainer-table th, .settings-explainer-table td { border-top: 0; padding: 0.15rem 0; }
 }

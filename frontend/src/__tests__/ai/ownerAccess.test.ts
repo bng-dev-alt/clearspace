@@ -114,14 +114,26 @@ describe('every owner route: a non-owner is refused BEFORE any database, storage
   });
   test('the access question: owner true, other false, anonymous 401, and it reveals nothing else', async () => {
     // RUN 10: two more booleans (live transcription / meeting scheduling available) -- still no lists, ids or configuration
-    h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: true, live: false, schedule: false });
-    h.userId = OTHER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: false, stt: false, live: false, schedule: false });
+    // RUN 11: + `ai` = the CALLER's own limits/model from the enforced policy (lib/ai/status.ts) – a fixed key set, never ids or lists
+    const AI_KEYS = ['available', 'dailyTokens', 'model', 'perMinute', 'sttMinutesPerDay', 'tier'];
+    const strip = (j: Record<string, unknown>) => { const { ai, ...rest } = j; return { ai: ai as Record<string, unknown>, rest }; };
+    h.userId = OWNER;
+    const own = strip(await (await post(access, TOKEN)).json());
+    expect(own.rest).toEqual({ aiOwner: true, stt: true, live: false, schedule: false });
+    expect(Object.keys(own.ai).sort()).toEqual(AI_KEYS);
+    expect(own.ai).toMatchObject({ available: true, tier: 'owner', dailyTokens: null });
+    expect(JSON.stringify(own)).not.toContain(OWNER);
+    h.userId = OTHER;
+    const other = strip(await (await post(access, TOKEN)).json());
+    expect(other.rest).toEqual({ aiOwner: false, stt: false, live: false, schedule: false });
+    expect(other.ai).toEqual({ available: false, tier: null, model: null, dailyTokens: null, perMinute: null, sttMinutesPerDay: 0 });
+    expect(JSON.stringify(other)).not.toContain(OWNER);
     expect((await post(access, null)).status).toBe(401);
     vi.stubEnv('MEETING_LIVE_ENABLED', '1'); vi.stubEnv('MEETING_PILOT_USER_IDS', 'someone-else');
     h.userId = OWNER; expect((await (await post(access, TOKEN)).json()).live).toBe(false); // switch on, but not in the meeting pilot
     vi.stubEnv('MEETING_PILOT_USER_IDS', OWNER);
     expect((await (await post(access, TOKEN)).json()).live).toBe(true);
     h.userId = OTHER; expect((await (await post(access, TOKEN)).json()).live).toBe(false);
-    vi.stubEnv('STT_ENABLED', ''); h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: false, live: false, schedule: false });
+    vi.stubEnv('STT_ENABLED', ''); h.userId = OWNER; expect(strip(await (await post(access, TOKEN)).json()).rest).toEqual({ aiOwner: true, stt: false, live: false, schedule: false });
   });
 });

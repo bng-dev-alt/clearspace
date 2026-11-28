@@ -105,7 +105,7 @@ test('2. A REAL PROJECT MEMBER who is not the owner is refused everywhere with a
     expect(res.status(), r).toBe(403);
     expect((await res.json()).code, r).toBe('ai_owner_only');
   }
-  expect(await (await callApp(request, '/api/intelligence/access', member.token)).json()).toEqual({ aiOwner: false, stt: false });
+  expect(await (await callApp(request, '/api/intelligence/access', member.token)).json()).toMatchObject({ aiOwner: false, stt: false, ai: { available: false } });
   expect([await geminiCalls(request), await sonioxJobs(request)]).toEqual([g0, s0]);
   expect((await sb(request, '/rest/v1/ai_requests?select=id', { token: member.token })).json).toEqual([]);
   expect((await sb(request, '/rest/v1/intelligence_runs?select=id', { token: member.token })).json).toEqual([]);
@@ -129,7 +129,7 @@ test('3. the member in the UI: text meetings still work, there is NO audio optio
 });
 
 test('4. the owner in the UI sees the audio option; the access answer is true/true', async ({ browser, request }) => {
-  expect(await (await callApp(request, '/api/intelligence/access', owner.token)).json()).toEqual({ aiOwner: true, stt: true });
+  expect(await (await callApp(request, '/api/intelligence/access', owner.token)).json()).toMatchObject({ aiOwner: true, stt: true, ai: { available: true, tier: 'owner' } });
   const ctx = await browser.newContext(); const page = await ctx.newPage();
   await loginUi(page, ownerEmail);
   await page.goto(`/projects/${PA}/meetings`);

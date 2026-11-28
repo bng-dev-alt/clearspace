@@ -1,4 +1,5 @@
 import { parseAiHttpError, AI_NETWORK_ERROR } from '../lib/ai/clientErrors';
+import type { AiStatus } from '../lib/ai/status';
 import { SNIFF_BYTES, validateAudio } from '../lib/stt/audio';
 import { supabase, hasSupabaseConfig } from '../lib/supabase';
 import { AudioCleanupError, deleteMeetingAudio, deleteProjectAudio, sweepProjectAudio } from '../lib/stt/audioCleanup';
@@ -219,7 +220,8 @@ export interface NewMeetingInput {
   languageHint?: 'cs' | 'en' | null;
 }
 
-export interface MeetingAccess { aiOwner: boolean; stt: boolean; live: boolean; schedule: boolean }
+/** `ai` (RUN 11): the caller's own AI limits/model as the server enforces them; null = unknown (demo mode, network error, old server). */
+export interface MeetingAccess { aiOwner: boolean; stt: boolean; live: boolean; schedule: boolean; ai?: AiStatus | null }
 const accessCache = new Map<string, Promise<MeetingAccess>>();
 const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
@@ -548,7 +550,7 @@ export const meetingService = {
    * podle uživatele; jakákoli chyba = bez přístupu (volby zvuku se nezobrazí, nic se neodešle).
    */
   async aiAccess(): Promise<MeetingAccess> {
-    const none: MeetingAccess = { aiOwner: false, stt: false, live: false, schedule: false };
+    const none: MeetingAccess = { aiOwner: false, stt: false, live: false, schedule: false, ai: null };
     if (!hasSupabaseConfig) return none;
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
@@ -560,8 +562,8 @@ export const meetingService = {
         try {
           const res = await fetch('/api/intelligence/access', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' });
           if (!res.ok) return none;
-          const j = (await res.json()) as { aiOwner?: unknown; stt?: unknown; live?: unknown; schedule?: unknown };
-          return { aiOwner: j.aiOwner === true, stt: j.stt === true, live: j.live === true, schedule: j.schedule === true };
+          const j = (await res.json()) as { aiOwner?: unknown; stt?: unknown; live?: unknown; schedule?: unknown; ai?: AiStatus };
+          return { aiOwner: j.aiOwner === true, stt: j.stt === true, live: j.live === true, schedule: j.schedule === true, ai: j.ai && typeof j.ai === 'object' ? j.ai : null };
         } catch {
           return none;
         }

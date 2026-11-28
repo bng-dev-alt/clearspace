@@ -11,7 +11,7 @@ const GATED = /\b(runAi|runStt|runSttDelete)\b/;
 // then the tier's STT permission -- all before any provider call. Checked explicitly below.
 const SELF_GATED = new Set(['intelligence/meetings/live/route.ts']);
 const REEXPORT = /export \{ POST \} from '(\.\.\/)+ai\/[a-z-]+\/route'/;
-const ALLOWED_OTHER = new Set(['intelligence/access/route.ts']); // authenticate(req,{gate:false}); answers only {aiOwner, stt}
+const ALLOWED_OTHER = new Set(['intelligence/access/route.ts']); // authenticate(req,{gate:false}); answers {aiOwner, stt, live, schedule, ai (caller's own limits)}
 
 function routes(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {

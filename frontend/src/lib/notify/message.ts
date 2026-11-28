@@ -106,6 +106,6 @@ export function renderMessage(item: DeliveryItem, appBaseUrl: string, now: Date 
 }
 
 export const TEST_MESSAGE = 'Zkušební zpráva – oznámení z ClearSpace sem budou chodit.';
-export const TELEGRAM_CONFIRM_MESSAGE = 'Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
-export const TELEGRAM_HELP_MESSAGE = 'Tento bot jen doručuje oznámení z ClearSpace. Propojení začněte v ClearSpace → Nastavení → Oznámení mimo aplikaci.';
+export const TELEGRAM_CONFIRM_MESSAGE = 'Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Propojené účty → Osobní oznámení.';
+export const TELEGRAM_HELP_MESSAGE = 'Tento bot jen doručuje oznámení z ClearSpace. Propojení začněte v ClearSpace → Nastavení → Propojené účty → Osobní oznámení.';
 export const TELEGRAM_BYE_MESSAGE = 'Oznámení z ClearSpace jsou odpojená. Sem už nic chodit nebude.';

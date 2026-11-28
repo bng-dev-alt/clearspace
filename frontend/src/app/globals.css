@@ -3871,3 +3871,10 @@ body {
 }
 /* RUN 11 (F-71): "Porady" is a link among buttons – same look as the other view tabs */
 a.view-switch-btn { text-decoration: none; }
+/* RUN 11: on phones the project name above the board (shown only while the project header is collapsed) is one compact line,
+   so the collapsed state keeps the board higher than the expanded one; the new-task button keeps the 44 px touch target */
+@media (max-width: 767px) {
+  .board-panel-header { padding: 0.5rem 0.9rem; }
+  .board-panel-header .panel-title { font-size: 0.95rem; margin: 0; }
+  .app-toolbar .cs-btn.toolbar-new-task-btn { height: auto; min-height: 44px; }
+}

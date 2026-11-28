@@ -80,3 +80,16 @@ Před demem: „Otestovat mikrofon“, sluchátka, nesouvisející zvuk (video) 
   ticha se objeví upozornění.
 * *Rozpozná to, kdo mluví?* Rozliší hlasy jako „Mluvčí 1, 2…“, občas je zamění; jména doplní člověk. Identitu AI nehádá.
 * *Kolik to stojí?* ~0,12 USD za hodinu přepisu + zlomky centu za analýzu; limity hlídá server před voláním poskytovatele.
+
+## 10. Co se změnilo v RUN 11 (UX polish)
+* **Seznam porad** se dělí podle skutečného stavu: Probíhající a nedokončené přepisy · Dnes · Tento týden · Později · Uplynulý termín bez přepisu ·
+  Proběhlé. U porady, která začíná do 15 minut nebo právě probíhá a nikdo nespustil přepis, je odkaz „spusťte přepis“ (jen nápověda, nic neposílá).
+* **Celá obrazovka** v živém přepisu (tlačítko nad průběžným textem): velké písmo pro promítání v místnosti, mluvčí odlišení barevnou značkou
+  a stále i jménem; Esc nebo „Ukončit celou obrazovku“. Na iPadu/Safari bez Fullscreen API se ukáže stejná vrstva přes celé okno.
+* Na telefonu/tabletu panel živého přepisu předem řekne, že **ověřené jsou Chrome a Edge na počítači** – přehled, přepisy a analýzy fungují všude.
+* Bez přepisu se tlačítko **Analyzovat** nenabízí; mimo nahrávání časomíra ukazuje „účtováno celkem“ (včetně zrušených přepisů).
+* Nahoře je drobečková navigace **Projekt › Porady › Porada**; Classic vzhled má porady ve stylu zbytku aplikace (dřív holé formuláře).
+* Výsledky analýzy jsou česky správně („1 návrh“, „2 položky bez důkazu“); revize přepisu říká „vložený text / strojový přepis / úprava“.
+
+**Cvičení:** naplánujte poradu na dnešek za 10 minut a ukažte v seznamu upozornění; spusťte živý přepis (MOCK lokálně), přepněte na celou obrazovku
+a vysvětlete, proč se barva mluvčího po pauze může změnit (Soniox čísluje mluvčí v rámci streamu – TECH_DEBT RUN 10).

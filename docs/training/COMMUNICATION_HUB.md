@@ -70,3 +70,21 @@ Po ukázce smazat testovací projekt (vazby a data se odstraní kaskádou; synte
 * *Vidí ClearSpace celý Slack/Telegram?* Ne – jen kanály/skupiny, kam aplikaci/bota výslovně přidáte a propojení potvrdíte; Cortex navíc jen po opt-inu.
 * *Co když bot unikne?* Vypínače `HUB_*_ENABLED`, plánovač off, `deleteWebhook`; rotace tokenu (BotFather `/revoke`) – postup v `OPERATIONS.md`.
 * *Proč dvě Slack aplikace?* Osobní DM s minimálním oprávněním vs. projektová s příkazy a čtením kanálů – oddělené tokeny, oddělené odvolání.
+
+## 8. Co se změnilo v RUN 11 (UX polish) – co ukazovat a říkat
+* **Nastavení → Propojené účty** má nahoře **Přehled** (Google · Osobní oznámení · Slack a Telegram pro projekty) se stavem každé části,
+  který hlásí sama sekce podle serveru. Rozbalovací „Jak spolu souvisí Slack, Telegram a ClearSpace“ vysvětluje čtyři identity z §1
+  běžnou řečí (osobní oznámení = jen vám; kanály a skupiny projektu = tým; Cortex jen čte; chat účty = autor úkolů z chatu).
+* Stav **instalace Slack aplikace** je vidět (Nainstalováno do „…“ / Nenainstalováno / Instalace zrušena) – dřív bylo tlačítko pořád stejné.
+* Po **potvrzení propojení** kanálu/skupiny: „Propojeno ✓“ + „Odeslat zkušební zprávu“ (ověří, že aplikace/bot v kanálu smí psát; u Slacku
+  připomene `/invite`) + „Zapnout i úkoly z chatu“ (Interaktivní zůstává výchozí vypnuté).
+* U Telegram skupiny s úkoly z chatu je přesný příkaz `/task@bot Název úkolu` s tlačítkem Kopírovat.
+* Zkušební zpráva výslovně říká, že **není** oznámením (skutečná oznámení chodí souhrnně nejvýš jednou za minutu).
+* Project Intelligence při vypnutém serveru **není zaškrtnutá** – stojí tam „na tomto serveru vypnuto“ a případně „uložená volba se použije po zapnutí“.
+* Odpojení (kanál, skupina, Slack, Telegram, Google) má jednotný potvrzovací dialog s následky; u Telegram skupiny řekne, že ji bot opustí;
+  volba „smazat i záznamy zpráv“ je zaškrtávací pole ve stejném dialogu (výchozí = ponechat).
+* Osobní oznámení – **nové** nastavení začíná „Jen vybrané projekty“ (neuloženo, dokud neuložíte nebo nepřipojíte kanál); stávající nastavení beze změny.
+  Rozdíl režimů: „Všechny moje projekty“ zahrnuje i projekty, do kterých vás přidají později; „Jen vybrané“ ne.
+
+**Cvičení (bez placených volání):** projděte Přehled → najděte, proč je část „Vyžaduje akci“ → spravte ji; vysvětlete kolegovi rozdíl mezi
+osobním Telegramem (HQ) a Telegram skupinou projektu (Relay) jen podle obrazovky Nastavení.

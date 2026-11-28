@@ -172,3 +172,30 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Soniox Console (skutečně fakturované minuty) neověřeno; ledger má `billing_state=estimated`. Doporučeno nastavit měsíční limit projektu (R32).
 * Zrušení přepisu a ukazatele úrovně ověřeny jen MOCK + nasazením; první živé použití potvrdit při příští prezentaci (spotřebuje minuty).
 * `apply_intelligence_item` u úkolu vrací pro „Petr“ (ne-člen) jen upozornění – správně; přiřazení ne-členů je mimo rozsah V1.
+
+## RUN 11 (Global UX/UI polish, 2026-11-28) – vyřešeno, změněno a zbývající
+**Vyřešeno**
+* **TD-3** – test opraven, ne aplikace: dva záznamy (`card_created` + `card_assigned` z triggeru `collab_assignee_events`) jsou legitimní;
+  `e2e/meetings.spec.ts` je ověřuje přesně podle typu včetně detailů přiřazení. Notifikace přiřazení je end-to-end v `notify.spec` (zvonek + Telegram).
+* Nativní `confirm()` / `alert()` (14 + 11 míst) → `useConfirm` / `StatusMessage`; dialogy mají správu focusu (`useDialogFocus`, `DialogFocus`).
+* Classic navbar přetékal při 1024 px (od RUN 04) i 768 px → vzhled/motiv pod 1280 px v menu avataru.
+* `GEMINI_MODEL=fake-gemini` je výchozí v `meetings-stack.sh app` (RUN 10 dluh).
+* Falešné prvky odstraněny: přepínač AI modelu (jen localStorage), rozpočet 300 CZK v AI Studiu (jen localStorage), natvrdo „Aktivní model“,
+  „Fullscreen (připravuje se)“ ×2, neaktivní „Nastavení (připravujeme)“, šablonové hero se špatným číslem „THIS WEEK“.
+
+**Změněno vědomě (k revizi v RUN 12)**
+* `POST /api/intelligence/access` vrací navíc `ai` = limity a model **jen volajícího** (`lib/ai/status.ts`, stejná politika jako vynucení):
+  pevná sada klíčů, žádná ID/seznamy; unit test `ownerAccess` hlídá tvar a že neprozradí ID vlastníka. `e2e/owner-access.spec.ts` upraven
+  (`toMatchObject`), v RUN 11 nespuštěn (běží jen přes `owner-e2e.sh` na samostatném s1 stacku).
+* Nastavení zjišťuje stav instalace Slacku přes `hubService.project()` prvního spravovaného projektu (max. 5 dotazů) – bez nové migrace.
+
+**Zbývá**
+* TD-1, TD-2 beze změny (TD-2 `task-resources:140` padá i ve výchozí regresi RUN 11).
+* `e2e/r6-quality.spec.ts:102` padá **už ve výchozí regresi** RUN 11 (před změnami) – `daily-brief` prázdného projektu nevrací `deterministic`;
+  souvisí s režimem AI (allow-all vs. vlastník), mimo rozsah UX; k prověření v RUN 12.
+* #8 ověření členství bota v kanálu přímo při potvrzení = serverová změna (Slack API v potvrzovací cestě) → LATER; UI teď vede ke zkušební zprávě.
+* #13 (AI preferuje názvy místo ID) – změna promptu bez možnosti ověřit bez placeného volání → LATER.
+* Lokální stack: opakované `meetings-stack.sh up` nad starými daty znovu aplikuje migrace a rozbije oprávnění (pozvaní u porady → 42501).
+  RUN 11 proto použil nový čistý stack `MEETINGS_STACK_NAME=cs-run11-sb` (skript nově parametr přijímá); starý `cs-run10-sb` zůstal zastavený s daty.
+* Playwright v repu čeká Chromium 1228, nainstalovaný je 1234 – `scripts/run11-e2e.sh` nastavuje `PW_CHROMIUM_PATH` (nic se nestahuje).
+* Lokální stack hubu (`cs-notify-sb`) obsahuje skutečné popisky identit vlastníka z RUN 08 → snímky z něj se necommitují.

@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 04 in the browser, on the LOCAL calendar stack (real GoTrue / PostgREST / Realtime, the real app) with the Google MOCK incl.
@@ -200,8 +201,8 @@ test(`Calendar (${STYLE}): incremental consent, personal layer (only me), attach
     await expect(sec.getByTestId('calendar-list')).toContainText('10. 12. 2026 16:00 – 11. 12. 2026 12:00');
     await expect(bsec.getByTestId('calendar-list').locator('li')).toHaveCount(1, { timeout: 15_000 });
     await shot(a.page, 'task-drawer-calendar');
-    b.page.once('dialog', (d) => { expect(d.message()).toContain('Ve vašem Google Kalendáři se nic nezmění'); void d.accept(); });
     await bsec.getByTestId('calendar-remove').click();
+    await answerConfirm(b.page, { contains: 'Ve vašem Google Kalendáři se nic nezmění' });
     await expect(bsec.getByTestId('calendar-empty')).toBeVisible();
     await expect(sec.getByTestId('calendar-empty')).toBeVisible({ timeout: 15_000 });
   });

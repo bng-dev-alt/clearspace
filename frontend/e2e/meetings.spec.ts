@@ -111,7 +111,7 @@ test('analysis (fake Gemini): evidence-backed proposals only; hallucinated owner
   await loginUi(page, ownerEmail);
   await page.goto(meetingUrl);
   await page.getByTestId('meeting-analyze').click();
-  await expect(page.getByTestId('meeting-notice')).toContainText('Analýza hotová: 4 návrhů, 1 položek bez důkazu');
+  await expect(page.getByTestId('meeting-notice')).toContainText('Analýza hotová: 4 návrhy; 1 položka bez důkazu byla vynechána');
   await expect(page.getByTestId('meeting-summary')).toContainText('release');
   await expect(page.getByRole('heading', { name: 'Rozhodnutí (1)' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Úkoly (2)' })).toBeVisible();

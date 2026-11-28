@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { answerConfirm } from './support/confirm';
 
 /**
  * Task attachments (Task Detail -> Resources) end to end against a THROWAWAY local Supabase stack: real GoTrue, PostgREST, RLS and Storage
@@ -156,8 +157,8 @@ test('deletion removes the Storage object AND the metadata row; the other files 
   await openCard(page, CARD);
   const rows = (await sb(request, `/rest/v1/task_resources?task_id=eq.${CARD}&filename=eq.synthetic.csv&select=id,storage_path`, { token: A.token })).json as J[];
   const total = (await objects(request, A.token, CARD)).length;
-  page.once('dialog', (d) => d.accept());
   await page.getByTestId(`delete-resource-${rows[0].id}`).click();
+  await answerConfirm(page, { contains: 'smaže z úkolu i z úložiště' });
   await expect(page.getByTestId(`resource-item-${rows[0].id}`)).toHaveCount(0);
   expect((await sb(request, `/rest/v1/task_resources?id=eq.${rows[0].id}&select=id`, { token: A.token })).json).toEqual([]);
   const left = (await objects(request, A.token, CARD)).map((o) => o.name);

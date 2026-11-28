@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
 import { createHmac } from 'node:crypto';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 07 in the browser, on the LOCAL hub stack (real GoTrue / PostgREST / Postgres, the real app) with the hub MOCK (scripts/hub-mock.mjs).
@@ -125,11 +126,19 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     await shot(a.page, 'hub-pending');
     await dest.getByTestId('hub-confirm').click();
     await expect(dest).toContainText('aktivní');
+    // RUN 11 (#2, #8, #9): a clear success state with the next steps; Interaktivní stays off until the manager turns it on
+    await expect(dest.getByTestId('hub-linked-ok')).toContainText('Propojeno ✓');
+    await expect(dest.getByTestId('hub-linked-ok')).toContainText('/invite @ClearSpace Projekty');
+    await expect(dest.getByTestId('hub-linked-interactive')).toBeVisible();
     await expect(dest.getByTestId('hub-cap-notify')).toBeChecked();
     await expect(dest.getByTestId('hub-cap-interactive')).not.toBeChecked();
-    await expect(dest.getByTestId('hub-cap-intelligence')).not.toBeChecked();
+    // RUN 11 (D10): PI is never a ticked box when the server does not do it
+    const piBox = dest.getByTestId('hub-cap-intelligence');
+    if (await piBox.count()) await expect(piBox).not.toBeChecked();
+    else await expect(dest.getByTestId('hub-cap-intelligence-off')).toContainText('na tomto serveru vypnuto');
     await dest.getByTestId('hub-test').click();
     await expect(modal().getByTestId('hub-message')).toContainText('Zkušební zpráva odeslána');
+    await expect(modal().getByTestId('hub-message')).toContainText('skutečná oznámení chodí souhrnně');   // RUN 11 (#6)
     const sm = (await messages(request)).slack;
     expect(sm.at(-1).channel).toBe(CH);
   });
@@ -145,8 +154,11 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
     await expect(dest).toContainText('aktivní');
     await dest.getByTestId('hub-cap-interactive').click();      // controlled: checked once the server saved it
     await expect(dest.getByTestId('hub-cap-interactive')).toBeChecked();
+    // RUN 11 (#5, #12): the exact /task command with the bot name, copyable
+    await expect(dest.getByTestId('hub-task-command')).toContainText(`/task@${BOT} Název úkolu`);
+    await expect(dest.getByTestId('hub-task-command-copy')).toBeVisible();
     const pi = dest.getByTestId('hub-cap-intelligence');
-    if (await pi.isEnabled()) {
+    if ((await pi.count()) > 0 && (await pi.isEnabled())) {
       await pi.click();
       await expect(modal().getByTestId('hub-pi-confirm')).toContainText('jen vybrané zprávy');      // honest scope (privacy mode)
       await modal().getByTestId('hub-pi-cancel').click();
@@ -225,10 +237,10 @@ test(`Communication hub (${STYLE}): Slack install, channel + group linking, capa
   await test.step('disconnect: the group goes away at once', async () => {
     await a.page.goto(`/projects/${P}`);
     await a.page.getByTestId('project-integrations-btn').click();
-    let n = 0;
-    a.page.on('dialog', (d) => { n += 1; void (n === 1 ? d.accept() : d.dismiss()); });   // 1: disconnect? yes  2: purge history? no
     const dest = modal().getByTestId('hub-destination-telegram');
     await dest.getByTestId('hub-remove').click();
+    // RUN 11: one dialog – disconnect yes, "also delete message records" left unchecked (= keep history), and it says the bot leaves the group
+    await answerConfirm(a.page, { contains: 'Bot ClearSpace pak skupinu sám opustí', option: false });
     await expect(modal().getByTestId('hub-message')).toContainText('je odpojený');
     await expect(modal().getByTestId('hub-destination-telegram')).toHaveCount(0);
   });

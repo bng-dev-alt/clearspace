@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 05 in the browser, on the LOCAL notify stack (real GoTrue / PostgREST / Realtime / Postgres + pg_net, the real app) with the
@@ -92,7 +93,7 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
   await test.step('Telegram: deep link -> "Start" in Telegram (simulated) -> found chat confirmed in ClearSpace', async () => {
     await b.page.goto('/settings');
     const card = b.page.getByTestId('notify-card');
-    await expect(card.getByRole('heading', { name: /Oznámení mimo aplikaci/ })).toBeVisible();
+    await expect(card.getByRole('heading', { name: /Osobní oznámení/ })).toBeVisible();   // RUN 11: personal vs project sections
     await expect(card.getByTestId('telegram-service-state')).toHaveText('Nepřipojeno.');
     await card.getByTestId('telegram-connect').click();
     const href = await card.getByTestId('telegram-link-box-open').getAttribute('href');
@@ -106,7 +107,7 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
     await expect(card.getByTestId('notify-message')).toContainText('Telegram je připojený');
     await expect(card.getByTestId('telegram-service-state')).toContainText('Aktivní');
     const msgs = (await (await ctl(request, 'messages')).json()).telegram.filter((m: { chatId: number }) => m.chatId === 9101);
-    expect(msgs.map((m: { text: string }) => m.text)).toEqual(['Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Oznámení mimo aplikaci.', 'Hotovo – oznámení z ClearSpace budou chodit sem.']);
+    expect(msgs.map((m: { text: string }) => m.text)).toEqual(['Propojení čeká na potvrzení. Dokončete ho v ClearSpace → Nastavení → Propojené účty → Osobní oznámení.', 'Hotovo – oznámení z ClearSpace budou chodit sem.']);
   });
 
   await test.step('Slack (phone, dark): OAuth with the simulated Slack consent, back to Settings', async () => {
@@ -163,8 +164,8 @@ test(`Notifications outside the app (${STYLE}): Telegram link + confirm, Slack O
     await card.getByTestId('telegram-toggle').click();
     await expect(card.getByTestId('telegram-service-state')).toContainText('Pozastaveno');
     await shot(b.page, 'telegram-paused');
-    b.page.once('dialog', (d) => d.accept());
     await card.getByTestId('telegram-disconnect').click();
+    await answerConfirm(b.page, { contains: 'přestane posílat vaše osobní oznámení' });
     await expect(card.getByTestId('notify-message')).toContainText('Telegram je odpojený');
     await expect(card.getByTestId('telegram-service-state')).toHaveText('Nepřipojeno.');
     await expect(b.page.getByTestId('google-connection-card')).toBeVisible();   // the Google card is untouched

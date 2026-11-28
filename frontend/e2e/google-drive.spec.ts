@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 02 in the browser, on the LOCAL drive stack (real GoTrue / PostgREST / Realtime / Storage, the real app) with
@@ -200,8 +201,8 @@ test('Google Drive: connect, pick, attach to project and task, realtime, roles, 
   await test.step('13. removing an association keeps the Drive file; B sees it go live', async () => {
     const m = filesModal(a.page);
     await a.page.getByTestId('project-files-btn').click();
-    a.page.once('dialog', (dlg) => { expect(dlg.message()).toContain('Soubor v Google Disku zůstane beze změny'); void dlg.accept(); });
     await m.locator('li', { hasText: 'Rozpočet projektu Q1' }).getByTestId('drive-remove').click();
+    await answerConfirm(a.page, { contains: 'Soubor v Google Disku zůstane beze změny' });
     await expect(m.getByTestId('drive-list').locator('li')).toHaveCount(2);
     await expect(filesModal(b.page).getByTestId('drive-list').locator('li')).toHaveCount(2, { timeout: 15_000 });
     // the file still exists at the (mock) provider: A can pick it again
@@ -245,8 +246,8 @@ test('Google Drive: connect, pick, attach to project and task, realtime, roles, 
     await a.page.goto('/settings');
     await expect(a.page.getByTestId('google-reconnect')).toBeVisible();
     await expect(a.page.getByTestId('google-connection-state')).toContainText('Připojte účet prosím znovu');
-    a.page.once('dialog', (dlg) => { expect(dlg.message()).toContain('Soubory připojené k projektům'); void dlg.accept(); });
     await a.page.getByTestId('google-disconnect').click();
+    await answerConfirm(a.page, { contains: 'Soubory připojené k projektům' });
     await expect(a.page.getByTestId('google-connect')).toBeVisible();
     const r = await rest(request, `/rest/v1/external_resource_links?project_id=eq.${P}&select=id`, { token: A.token });
     expect(r.json.length).toBe(5);

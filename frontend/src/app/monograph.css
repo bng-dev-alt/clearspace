@@ -370,3 +370,6 @@ html[data-style="monograph"] [data-testid='project-dashboard-view'] { padding-in
 html[data-style="monograph"] [data-testid='project-dashboard-view'] .cs-empty { padding: 0.25rem 1rem; gap: 0.25rem; }
 html[data-style="monograph"] [data-testid='project-dashboard-view'] .cs-empty-visual { display: none; }
 html[data-style="monograph"] [data-testid='project-dashboard-view'] .cs-empty-title { font-size: 1.125rem; }
+/* RUN 11: compact project name above the board on phones (only while the project header is collapsed) */
+@media (max-width: 767px) { html[data-style="monograph"] .board-panel-header .panel-title { font-size: 1.05rem; } }
+@media (max-width: 767px) { html[data-style="monograph"] .app-toolbar .cs-btn.toolbar-new-task-btn { min-height: 44px; } }

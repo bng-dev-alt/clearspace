@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 03 in the browser, on the LOCAL gmail stack (real GoTrue / PostgREST / Realtime, the real app) with the Google + Gmail
@@ -225,8 +226,8 @@ test(`Gmail (${STYLE}): incremental consent next to Drive, select + attach to pr
   });
 
   await test.step('editor removes the owner\'s link (association only); disappears live for everyone', async () => {
-    b.page.once('dialog', (d) => { expect(d.message()).toContain('Ve vaší schránce Gmail se nic nezmění'); void d.accept(); });
     await b.page.getByTestId('task-detail-drawer').getByTestId('task-gmail-section').getByTestId('gmail-remove').click();
+    await answerConfirm(b.page, { contains: 'Ve vaší schránce Gmail se nic nezmění' });
     await expect(b.page.getByTestId('task-detail-drawer').getByTestId('task-gmail-section').getByTestId('gmail-empty')).toBeVisible();
     await expect(a.page.getByTestId('task-detail-drawer').getByTestId('task-gmail-section').getByTestId('gmail-empty')).toBeVisible({ timeout: 15_000 });
   });

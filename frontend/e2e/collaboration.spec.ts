@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page, type APIRequestContext } from '@playwright/test';
+import { answerConfirm } from './support/confirm';
 
 /**
  * RUN 01 -- multi-user collaboration in the browser, against a THROWAWAY local Supabase stack with Realtime
@@ -216,8 +217,8 @@ test('two independently signed-in users collaborate on one project in realtime',
   await test.step('removing V revokes access live; V cannot read via the API either', async () => {
     await a.page.getByTestId('toolbar-manage-team-btn').click();
     const vm = await rest(request, `/rest/v1/workspace_members?select=id&profile_id=eq.${V.id}&owner_id=eq.${A.id}`, { token: A.token });
-    a.page.once('dialog', (d) => d.accept());
     await a.page.getByTestId(`project-team-remove-${vm.json[0].id}`).click();
+    await answerConfirm(a.page, { contains: 'Ztratí přístup k projektu okamžitě' });
     await expect(a.page.getByTestId(`project-team-member-${vm.json[0].id}`)).toHaveCount(0);
     await a.page.getByTestId('project-team-done-btn').click();
     await expect(v.page.getByTestId('access-revoked')).toBeVisible({ timeout: 15_000 });

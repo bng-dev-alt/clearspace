@@ -159,7 +159,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
                 )}
                 {d.status === 'pending' && status.canManage && (
                   <div className="hub-actions">
-                    <span data-testid="hub-linked-by">{d.linkedBy ?? 'Někdo'} zadal v {d.provider === 'slack' ? 'kanálu' : 'skupině'} „{d.label}“ kód tohoto projektu. Je to ten správný {d.provider === 'slack' ? 'kanál' : 'chat'}? Propojit?</span>
+                    <span data-testid="hub-linked-by">{d.linkedBy ?? 'Někdo'} zadal {d.provider === 'slack' ? 'v kanálu' : 've skupině'} „{d.label}“ kód tohoto projektu. Je to ten správný {d.provider === 'slack' ? 'kanál' : 'chat'}? Propojit?</span>
                     <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" disabled={busy} onClick={() => decide(d, 'confirm')} data-testid="hub-confirm">Potvrdit propojení</button>
                     <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" disabled={busy} onClick={() => decide(d, 'reject')} data-testid="hub-reject">Odmítnout</button>
                   </div>

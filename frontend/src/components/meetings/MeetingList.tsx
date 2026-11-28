@@ -75,7 +75,7 @@ export default function MeetingList({ projectId }: { projectId: string }) {
         <EmptyState
           icon={<CalendarClock size={28} />}
           title="Zatím žádné porady"
-          description="Naplánujte poradu nebo vložte přepis. ClearSpace z něj navrhne rozhodnutí, úkoly a rizika; do projektu se nic nezapíše bez vašeho schválení."
+          description="Vložte přepis porady a ClearSpace z něj navrhne rozhodnutí, úkoly a rizika. Do projektu se nic nezapíše bez vašeho schválení."
         />
       ) : (
         <>

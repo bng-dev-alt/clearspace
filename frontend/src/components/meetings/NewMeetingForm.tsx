@@ -54,7 +54,7 @@ export default function NewMeetingForm({ projectId, onCreated }: Props) {
   const [language, setLanguage] = useState<'' | 'cs' | 'en'>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<'text' | 'audio' | 'plan'>(LIVE_ENABLED ? 'plan' : 'text');
+  const [mode, setMode] = useState<'text' | 'audio' | 'plan'>('text');
   const localNow = () => { const d = new Date(Date.now() + 5 * 60_000); d.setSeconds(0, 0); return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
   const [startAt, setStartAt] = useState(localNow);
   const [durationMin, setDurationMin] = useState(60);

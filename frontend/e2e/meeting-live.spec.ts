@@ -16,6 +16,8 @@ const SB = process.env.E2E_SUPABASE_URL as string;
 const ANON = process.env.E2E_SUPABASE_ANON_KEY ?? '';
 const FAKE = process.env.FAKE_SONIOX_URL ?? 'http://127.0.0.1:55643';
 
+test.beforeEach(async ({ request }) => { await request.post(`${FAKE}/__control`, { data: { reset: true } }); }); // default synthetic turns, fresh key/stream log
+
 async function tokenOf(request: import('@playwright/test').APIRequestContext, who: string) {
   const r = await request.post(`${SB}/auth/v1/token?grant_type=password`, { headers: { apikey: ANON }, data: { email: `${who}@collab.test`, password: process.env.E2E_COLLAB_PASSWORD } });
   return (await r.json()).access_token as string;

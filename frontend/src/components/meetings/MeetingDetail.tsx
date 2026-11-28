@@ -260,7 +260,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
         )}
       </div>
 
-      {meeting.sourceKind === 'audio' && (meeting.endsAt || meeting.conferenceUrl || meeting.live.segments > 0 || !meeting.audio.path) && (
+      {meeting.sourceKind === 'audio' && (meeting.endsAt || meeting.conferenceUrl || meeting.live.segments > 0 || (!meeting.audio.uploadedAt && !meeting.currentRevision)) && (
         <ScheduleCard meeting={meeting} projectId={projectId} isOrganizer={organizer} canSchedule={LIVE_ENABLED && access.schedule} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
       )}
       {meeting.sourceKind === 'audio' && LIVE_ENABLED && access.live && !meeting.audio.path && !meeting.currentRevision && (
@@ -269,7 +269,7 @@ export default function MeetingDetail({ projectId, meetingId }: { projectId: str
       {meeting.sourceKind === 'audio' && meeting.live.state === 'finalized' && (
         <p className="mi-muted" data-testid="live-finalized">Přepsáno živě ({meeting.audio.model ?? 'Soniox real-time'}) · délka {Math.round(meeting.live.ms / 60000)} min{meeting.audio.costUsd !== null ? ` · odhad nákladů ${meeting.audio.costUsd.toFixed(3)} USD` : ''} · zvuk se neukládal.</p>
       )}
-      {meeting.sourceKind === 'audio' && (meeting.audio.path || (meeting.live.segments === 0 && !meeting.currentRevision)) && (
+      {meeting.sourceKind === 'audio' && (meeting.live?.segments ?? 0) === 0 && (
         <AudioPanel meeting={meeting} projectId={projectId} onChanged={(msg) => { if (msg) setNotice(msg); return load(); }} />
       )}
       {transcript && revisions.find((r) => r.revision === viewRev)?.source === 'soniox' && (

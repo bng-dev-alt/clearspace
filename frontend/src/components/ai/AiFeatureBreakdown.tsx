@@ -22,7 +22,7 @@ export default function AiFeatureBreakdown({ breakdown }: AiFeatureBreakdownProp
   }
 
   return (
-    <div style={{ width: '100%', overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
+    <div role="region" aria-label="Spotřeba podle AI modulů (tabulka)" tabIndex={0} style={{ width: '100%', overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
       <table style={{
         width: '100%',
         borderCollapse: 'collapse',

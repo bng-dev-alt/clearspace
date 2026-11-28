@@ -47,6 +47,12 @@ test('plan -> live capture with pause/resume -> one stored transcript; access an
   await expect(page.getByTestId('live-capture-state')).toHaveText(/Nahrává se/, { timeout: 20_000 });
   await expect(page.getByTestId('live-transcription-state')).toHaveText('Přepis běží');
   await expect(page.getByTestId('live-transcript')).toContainText('Dobrý', { timeout: 20_000 });
+  // RUN 11 (#16): a working full-screen view of the running transcript (Fullscreen API, or the full-window layer where it is refused)
+  await page.getByTestId('live-fullscreen').click();
+  await expect(page.getByTestId('live-transcript')).toHaveAttribute('data-presenting', 'true');
+  await expect(page.getByTestId('live-fullscreen-status')).toContainText(/Nahrává|Přepis|Pozastaveno|Připojování/);
+  await page.getByTestId('live-fullscreen').click();
+  await expect(page.getByTestId('live-transcript')).toHaveAttribute('data-presenting', 'false');
   await expect(page.getByTestId('live-source-state')).toContainText('jen mikrofon');
 
   // double start from a second tab is refused by the database (no second paid stream)

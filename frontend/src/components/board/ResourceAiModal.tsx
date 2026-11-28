@@ -308,7 +308,7 @@ export default function ResourceAiModal({
                             style={{
                               padding: '0.35rem 0.65rem',
                               backgroundColor: 'var(--purple-secondary)',
-                              color: '#fff',
+                              color: 'var(--text-on-accent)',
                               border: 'none',
                               borderRadius: '6px',
                               fontSize: '0.75rem',
@@ -366,7 +366,7 @@ export default function ResourceAiModal({
                       style={{
                         alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                         backgroundColor: msg.role === 'user' ? 'var(--purple-secondary)' : 'var(--surface-1)',
-                        color: msg.role === 'user' ? '#fff' : 'var(--dark-navy)',
+                        color: msg.role === 'user' ? 'var(--text-on-accent)' : 'var(--dark-navy)',
                         padding: '0.5rem 0.75rem',
                         borderRadius: '8px',
                         fontSize: '0.8rem',
@@ -400,7 +400,7 @@ export default function ResourceAiModal({
                     style={{
                       padding: '0.5rem 0.85rem',
                       backgroundColor: 'var(--purple-secondary)',
-                      color: '#fff',
+                      color: 'var(--text-on-accent)',
                       border: 'none',
                       borderRadius: '6px',
                       cursor: 'pointer',

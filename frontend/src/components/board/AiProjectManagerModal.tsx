@@ -491,7 +491,7 @@ export default function AiProjectManagerModal({
               gap: '0.4rem',
               padding: '0.55rem 1.25rem',
               backgroundColor: selectedChangeIds.size > 0 ? 'var(--purple-secondary)' : 'var(--bg-column)',
-              color: selectedChangeIds.size > 0 ? '#fff' : 'var(--gray-text)',
+              color: selectedChangeIds.size > 0 ? 'var(--text-on-accent)' : 'var(--gray-text)',
               border: 'none',
               borderRadius: '6px',
               fontSize: '0.85rem',

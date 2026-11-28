@@ -282,7 +282,7 @@ function AcceptInviteForm() {
                 width: '100%',
                 padding: '0.75rem',
                 backgroundColor: 'var(--purple-secondary)',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '0.9rem',

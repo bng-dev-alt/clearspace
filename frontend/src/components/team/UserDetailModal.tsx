@@ -192,7 +192,7 @@ export default function UserDetailModal({ isOpen, onClose, member, columns = [] 
             style={{
               padding: '0.5rem 1.25rem',
               backgroundColor: 'var(--purple-secondary)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
               borderRadius: '6px',
               fontSize: '0.85rem',

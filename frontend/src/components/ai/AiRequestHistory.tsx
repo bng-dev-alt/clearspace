@@ -53,7 +53,8 @@ export default function AiRequestHistory({ history }: AiRequestHistoryProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
+      {/* RUN 11: a horizontally scrollable table must be reachable by keyboard (axe scrollable-region-focusable) */}
+      <div role="region" aria-label="Historie AI požadavků (tabulka)" tabIndex={0} style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-card)' }}>
         <table style={{
           width: '100%',
           borderCollapse: 'collapse',
@@ -110,7 +111,7 @@ export default function AiRequestHistory({ history }: AiRequestHistoryProps) {
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       {log.success ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--success)', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--success-text, var(--success))', fontWeight: 600 }}>
                           <CheckCircle2 size={14} /> OK
                         </div>
                       ) : (

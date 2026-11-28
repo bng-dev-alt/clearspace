@@ -172,7 +172,7 @@ export default function GlobalSearchModal({
                 fontWeight: 700,
                 cursor: 'pointer',
                 backgroundColor: category === cat.id ? 'var(--purple-secondary)' : 'transparent',
-                color: category === cat.id ? '#fff' : 'var(--gray-text)',
+                color: category === cat.id ? 'var(--text-on-accent)' : 'var(--gray-text)',
               }}
             >
               {cat.label}

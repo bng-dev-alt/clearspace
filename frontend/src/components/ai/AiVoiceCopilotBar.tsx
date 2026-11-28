@@ -350,7 +350,7 @@ export default function AiVoiceCopilotBar({
             style={{
               padding: '0.65rem 1rem',
               backgroundColor: 'var(--purple-secondary)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
               borderRadius: '8px',
               fontSize: '0.82rem',

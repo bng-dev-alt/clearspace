@@ -2803,7 +2803,8 @@ body {
 }
 .calendar-week > .calendar-day:last-child { border-right: none; }
 .calendar-day.is-outside { background-color: var(--surface-2); }
-.calendar-day.is-outside .calendar-day-number { color: var(--text-muted); opacity: 0.6; }
+/* RUN 11: days of the neighbouring month stay readable (AA) – distinguished by the inset background, not by fading the text */
+.calendar-day.is-outside .calendar-day-number { color: var(--text-muted); }
 .calendar-day-number {
   font-size: 0.78rem;
   font-weight: 600;
@@ -3012,7 +3013,7 @@ body {
   font-size: 0.68rem;
   font-weight: 700;
 }
-.role-badge.is-owner { background: var(--accent-soft); color: var(--accent); }
+.role-badge.is-owner { background: var(--accent-soft); color: var(--accent-text, var(--accent)); }
 .role-badge.is-admin { background: var(--warning-soft); color: var(--warning); }
 .role-badge.is-member { background: var(--surface-3); color: var(--text-secondary); }
 .account-chip {
@@ -3024,7 +3025,7 @@ body {
   font-size: 0.68rem;
   font-weight: 600;
 }
-.account-chip.is-linked { background: var(--success-soft); color: var(--success); }
+.account-chip.is-linked { background: var(--success-soft); color: var(--success-text, var(--success)); }
 .account-chip.is-contact { background: var(--surface-3); color: var(--text-muted); }
 .member-projects {
   display: inline-flex;
@@ -3225,7 +3226,7 @@ body {
   transition: var(--transition-base);
 }
 .mobile-menu-item:hover { background: var(--surface-2); }
-.mobile-menu-item.active { background: var(--accent-soft); color: var(--accent); }
+.mobile-menu-item.active { background: var(--accent-soft); color: var(--accent-text, var(--accent)); }
 .mobile-menu-item.is-danger { color: var(--danger); }
 .mobile-menu-item.is-danger:hover { background: var(--danger-soft); }
 .mobile-menu-name { font-size: 0.9rem; font-weight: 700; color: var(--text); padding: 0 0.15rem; }

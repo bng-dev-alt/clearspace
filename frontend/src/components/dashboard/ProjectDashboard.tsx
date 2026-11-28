@@ -262,14 +262,11 @@ export default function ProjectDashboard() {
             }}
             data-testid="ai-generate-project-cta"
           >
-            <div style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', fontSize: '0.55rem', fontWeight: 800, background: 'var(--purple-secondary)', color: '#ffffff', padding: '0.15rem 0.45rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              AI
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: 'var(--radius-card)', backgroundColor: 'var(--surface)', color: 'var(--accent)', flexShrink: 0 }}>
               <Sparkles size={22} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--purple-secondary)', margin: 0 }}>Vygenerovat projekt s AI</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-text, var(--accent))', margin: 0 }}>Vygenerovat projekt s AI</h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', margin: 0 }}>AI navrhne na míru celou architekturu sloupců i backlog.</p>
             </div>
           </div>

@@ -124,7 +124,7 @@ export default function AiControlCenterPage() {
             alignItems: 'center',
             gap: '0.4rem',
             backgroundColor: 'var(--accent-soft)',
-            color: 'var(--accent)',
+            color: 'var(--accent-text, var(--accent))',
             padding: '0.4rem 0.75rem',
             borderRadius: 'var(--radius-full)',
             fontSize: '0.75rem',

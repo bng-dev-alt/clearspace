@@ -274,7 +274,7 @@ export default function AiDailyBriefModal({ isOpen, onClose, columns: _columns, 
             style={{
               padding: '0.5rem 1.2rem',
               backgroundColor: 'var(--purple-secondary)',
-              color: '#fff',
+              color: 'var(--text-on-accent)',
               border: 'none',
               borderRadius: '6px',
               fontSize: '0.85rem',

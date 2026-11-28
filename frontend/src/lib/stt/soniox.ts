@@ -221,6 +221,29 @@ export class SonioxClient {
     });
   }
 
+  /**
+   * RUN 10: krátkodobý klíč pro PŘÍMÝ stream prohlížeče do Soniox real-time (docs/run10/ARCHITECTURE.md §3). Jednorázový
+   * (`single_use`), platný 60 s pro otevření streamu a s `max_session_duration_seconds` = rezervace v DB, takže náklady segmentu
+   * ohraničuje sám poskytovatel. Dlouhodobý klíč nikdy neopustí server. Vytvoření klíče nic nestojí, přesto se neopakuje.
+   */
+  async createTemporaryKey(input: { maxSessionSec: number; clientReferenceId: string }): Promise<{ apiKey: string; expiresAt: string }> {
+    const res = await this.raw('POST', '/auth/temporary-api-key', {
+      json: {
+        usage_type: 'transcribe_websocket',
+        expires_in_seconds: 60,
+        single_use: true,
+        max_session_duration_seconds: Math.min(Math.max(Math.floor(input.maxSessionSec), 1), 18_000),
+        client_reference_id: clipStr(input.clientReferenceId, 256),
+      },
+    });
+    if (!res.ok) return this.fail(res);
+    const j = (await res.json().catch(() => null)) as { api_key?: unknown; expires_at?: unknown } | null;
+    if (typeof j?.api_key !== 'string' || !/^snx_temp_[A-Za-z0-9._-]{10,2000}$/.test(j.api_key)) {
+      throw new SonioxError('terminal', res.status, 'bad_response');
+    }
+    return { apiKey: j.api_key, expiresAt: typeof j.expires_at === 'string' ? j.expires_at.slice(0, 40) : '' };
+  }
+
   /** Záložní cesta (audio_url nefunguje): nahrání souboru. Po dokončení je nutné smazat i soubor. */
   async uploadFile(bytes: Uint8Array, filename: string, mime: string, clientReferenceId?: string): Promise<{ id: string }> {
     const form = new FormData();

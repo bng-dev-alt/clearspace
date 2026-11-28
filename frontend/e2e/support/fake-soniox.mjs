@@ -5,6 +5,7 @@
 // tokeny jsou části slov s vlastní úvodní mezerou, `speaker` je číselný řetězec, stavy queued|processing|completed|error.
 // Řízení z testu: POST /__control {mode, pollsUntilDone, turns, durationMs, fetchAudio}, čtení: GET /__stats.
 import http from 'node:http';
+import { WebSocketServer } from 'ws';
 
 const KEY = 'fake-soniox-key';
 
@@ -54,6 +55,10 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
     audioFetches: [],
     n: 0,
     flaky: new Set(),
+    // RUN 10 real-time: minted single-use keys, opened streams, configs, audio bytes, end-of-audio frames
+    tempKeys: new Map(), // key -> { used, maxSessionSec, ref }
+    rt: [],
+    rtMode: 'ok', // ok | drop_after_first | error_401 | mint_402
   };
 
   const json = (res, status, body) => {
@@ -98,6 +103,14 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
     }
     state.calls.push({ method: req.method, path: url.pathname, auth: req.headers.authorization ? 'present' : 'missing' });
     if (!url.pathname.startsWith('/v1/')) return json(res, 404, { error_type: 'not_found' });
+    if (url.pathname === '/v1/auth/temporary-api-key' && req.method === 'POST') {
+      if (req.headers.authorization !== `Bearer ${expectKey}`) return err(res, 401, 'unauthenticated');
+      if (state.rtMode === 'mint_402') return err(res, 402, 'organization_balance_exhausted');
+      if (body?.usage_type !== 'transcribe_websocket' || body?.single_use !== true || !(body?.max_session_duration_seconds >= 1)) return err(res, 400, 'invalid_request');
+      const key = `snx_temp_fake${(state.n += 1)}x${Math.random().toString(36).slice(2, 10)}`;
+      state.tempKeys.set(key, { used: false, maxSessionSec: body.max_session_duration_seconds, ref: body.client_reference_id ?? null });
+      return json(res, 201, { api_key: key, expires_at: new Date(Date.now() + 60_000).toISOString() });
+    }
     if (req.headers.authorization !== `Bearer ${expectKey}`) return err(res, 401, 'unauthenticated');
 
     const path = url.pathname.slice(3); // "/transcriptions..."
@@ -184,16 +197,60 @@ export function startFakeSoniox({ port = 0, expectKey = KEY } = {}) {
     return err(res, 404, 'not_found');
   });
 
+  // Real-time WebSocket (wss://stt-rt.soniox.com/transcribe-websocket), browser auth via the protocols list.
+  const wss = new WebSocketServer({ noServer: true, handleProtocols: (protocols) => (protocols.has('soniox-api-key') ? 'soniox-api-key' : false) });
+  server.on('upgrade', (req, socket, head) => {
+    if (!(req.url ?? '').startsWith('/transcribe-websocket')) { socket.destroy(); return; }
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  });
+  wss.on('connection', (ws, req) => {
+    const protos = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((x) => x.trim());
+    const key = protos[1];
+    const entry = state.tempKeys.get(key);
+    const stream = { key: key ? 'present' : 'missing', config: null, bytes: 0, frames: 0, ended: false, closed: false };
+    state.rt.push(stream);
+    const fail = (code, type) => { ws.send(JSON.stringify({ error_code: code, error_type: type, error_message: 'provider message that must never reach the app' })); ws.close(); };
+    if (!entry || entry.used || state.rtMode === 'error_401') return void ws.once('message', () => fail(401, 'unauthenticated'));
+    entry.used = true;
+    const words = tokensFor(state.turns, 0, 300);
+    let i = 0;
+    ws.on('message', (data, isBinary) => {
+      if (!isBinary) {
+        const text = data.toString('utf8');
+        if (text === '') { // end of audio -> flush everything as final, then finished
+          stream.ended = true;
+          ws.send(JSON.stringify({ tokens: words.slice(i).map((t) => ({ ...t, is_final: true })), final_audio_proc_ms: 0, total_audio_proc_ms: 0 }));
+          i = words.length;
+          ws.send(JSON.stringify({ tokens: [], finished: true }));
+          return void ws.close();
+        }
+        try { stream.config = JSON.parse(text); } catch { return fail(400, 'invalid_request'); }
+        if (stream.config.api_key) return fail(400, 'invalid_request'); // key belongs in the protocols list, never in the start message
+        return;
+      }
+      stream.bytes += data.length;
+      stream.frames += 1;
+      if (stream.frames % 4 === 0 && i < words.length) { // every ~1 s: one final + one partial token
+        const fin = words[i++];
+        const nxt = words[i];
+        ws.send(JSON.stringify({ tokens: [{ ...fin, is_final: true }, ...(nxt ? [{ ...nxt, is_final: false }] : [])] }));
+      }
+      if (state.rtMode === 'drop_after_first' && state.rt.length === 1 && stream.frames === 12) ws.terminate();
+    });
+    ws.on('close', () => { stream.closed = true; });
+  });
+
   return new Promise((resolve) => {
     server.listen(port, '127.0.0.1', () => {
       const { port: p } = server.address();
       resolve({
         url: `http://127.0.0.1:${p}/v1`,
+        wsUrl: `ws://127.0.0.1:${p}/transcribe-websocket`,
         origin: `http://127.0.0.1:${p}`,
         state,
         key: expectKey,
         control: (body) => fetch(`http://127.0.0.1:${p}/__control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-        close: () => new Promise((r) => server.close(() => r())),
+        close: () => new Promise((r) => { for (const c of wss.clients) c.terminate(); server.close(() => r()); }),
       });
     });
   });

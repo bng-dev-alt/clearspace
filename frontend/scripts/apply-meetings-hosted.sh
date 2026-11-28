@@ -75,13 +75,19 @@ dump 2> "$BK/pg_dump.stderr" | openssl enc -aes-256-cbc -pbkdf2 -salt -pass fd:3
 # verified restore: decrypt and restore into a throwaway Postgres, compare the table count
 RC=cs-run10-restore-$$; docker run -d --name $RC -e POSTGRES_PASSWORD=restore "$IMG" >/dev/null
 for _ in $(seq 1 40); do docker exec $RC pg_isready -U postgres -h localhost >/dev/null 2>&1 && break; sleep 2; done; sleep 2
-openssl enc -d -aes-256-cbc -pbkdf2 -pass fd:3 -in "$BK/public.dump.enc" 3<<<"$KEY" | docker exec -i -e PGPASSWORD=restore $RC pg_restore -h localhost -U supabase_admin -d postgres --schema=public --no-owner --no-privileges 2> "$BK/restore.stderr"
-RT=$(docker exec -e PGPASSWORD=restore $RC psql -h localhost -U supabase_admin -d postgres -At -c "select count(*) from pg_tables where schemaname='public'")
+# Supabase-hosted column option pg_attver is unknown to a plain Postgres: filtered from the verification restore only
+openssl enc -d -aes-256-cbc -pbkdf2 -pass fd:3 -in "$BK/public.dump.enc" 3<<<"$KEY" | docker exec -i $RC pg_restore -f - 2>/dev/null \
+  | grep -v 'SET (pg_attver=' | docker exec -i -e PGPASSWORD=restore $RC psql -h localhost -U supabase_admin -d postgres -q > /dev/null 2> "$BK/restore.stderr"
+RQ="select count(*) from pg_tables where schemaname='public'"
+ROWS="select 'projects='||(select count(*) from public.projects)||' cards='||(select count(*) from public.cards)||' meetings='||(select count(*) from public.meetings)||' transcripts='||(select count(*) from public.meeting_transcripts)||' links='||(select count(*) from public.external_resource_links)"
+RT=$(docker exec -e PGPASSWORD=restore $RC psql -h localhost -U supabase_admin -d postgres -At -c "$RQ")
+RR=$(docker exec -e PGPASSWORD=restore $RC psql -h localhost -U supabase_admin -d postgres -At -c "$ROWS" 2>/dev/null)
 docker rm -f $RC >/dev/null 2>&1
-ST=$(echo "select count(*) from pg_tables where schemaname='public';" | ro)
+ST=$(echo "$RQ;" | ro); SR=$(echo "$ROWS;" | ro)
+[ "$RR" = "$SR" ] || { echo "refusing: restored rows differ ($RR vs $SR)"; exit 2; }
 [ "$RT" = "$ST" ] && [ "$RT" -gt 20 ] || { echo "refusing: restore check failed (restored tables $RT, source $ST; see $BK/restore.stderr)"; exit 2; }
 echo "$CAT0" > "$BK/catalog-before.txt"; echo "$C0" > "$BK/counts-before.txt"; echo "$F0" > "$BK/fingerprint-before.txt"; echo "$M0" > "$BK/meetings-before.txt"
-echo "ok - encrypted backup $(du -h "$BK/public.dump.enc" | cut -f1), restore verified ($RT tables), key in Keychain: $KEYNAME"
+echo "ok - encrypted backup $(du -h "$BK/public.dump.enc" | cut -f1), restore verified ($RT tables, $RR), key in Keychain: $KEYNAME"
 
 echo "== 2. apply (ONE transaction)"
 if { echo "SET client_min_messages = warning;"; cat "$M"; } | pg -q -v ON_ERROR_STOP=1 --single-transaction -f - >/dev/null; then echo "applied 20261202001800_meeting_intelligence_live"

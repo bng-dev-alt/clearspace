@@ -15,6 +15,7 @@ vi.mock('../../services/gmailService', async () => {
 });
 import GmailLinksPanel from '../../components/gmail/GmailLinksPanel';
 import GoogleConnectionCard from '../../components/drive/GoogleConnectionCard';
+import { answerConfirm } from '../helpers/confirmDialog';
 
 const ME = 'u-alice';
 const st = (services: { drive: boolean; gmail: boolean } | null, gmailAvailable = true): GoogleStatus => ({
@@ -114,13 +115,11 @@ describe('GmailLinksPanel', () => {
   });
 
   it('remove asks first and says Gmail stays untouched', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     h.remove.mockResolvedValue(undefined);
     render(<GmailLinksPanel projectId="p1" canEdit returnTo="/projects/p1" />);
     fireEvent.click((await screen.findAllByTestId('gmail-remove'))[0]);
-    expect(confirm.mock.calls[0][0]).toMatch(/Ve vaší schránce Gmail se nic nezmění/);
+    await answerConfirm({ match: /Ve vaší schránce Gmail se nic nezmění/ });
     await waitFor(() => expect(h.remove).toHaveBeenCalledWith(link().id));
-    confirm.mockRestore();
   });
 
   it('picker: explains privacy, searches with filters, pages, attaches ONLY the explicit selection (max 10)', async () => {
@@ -169,17 +168,15 @@ describe('GoogleConnectionCard (Propojené účty)', () => {
   it('one account, per-service state; Gmail can be turned off without touching Drive; honest about grant-level revocation', async () => {
     h.status.mockResolvedValue(st({ drive: true, gmail: true }));
     h.disable.mockResolvedValue({ gmailRemoved: true, purged: { removed: 3, skipped: 1 } });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(true);
     render(<GoogleConnectionCard />);
     expect((await screen.findByTestId('google-account-email')).textContent).toBe('anna.mock@example.test');
     expect(screen.getByTestId('drive-service-state').textContent).toMatch(/^Povoleno/);
     expect(screen.getByTestId('gmail-service-state').textContent).toMatch(/^Povoleno – jen čtení/);
     expect(screen.getByTestId('google-privacy').textContent).toMatch(/jednotlivé služby Google zvlášť zrušit neumí/);
     fireEvent.click(screen.getByTestId('gmail-disable'));
-    expect(confirm.mock.calls[0][0]).toMatch(/Google Disk zůstane připojený.*Oprávnění u Googlu zůstane/);
+    await answerConfirm({ match: /Google Disk zůstane připojený.*Oprávnění u Googlu zůstane/, option: true });
     await waitFor(() => expect(h.disable).toHaveBeenCalledWith(true));
     expect((await screen.findByTestId('google-connection-message')).textContent).toMatch(/Odebráno připojených e-mailů: 3\. U 1 jste jen čtenář/);
-    confirm.mockRestore();
   });
 
   it('not connected: Drive button keeps the RUN 02 contract; Gmail offered separately; full disconnect says it ends Drive AND Gmail', async () => {
@@ -193,14 +190,12 @@ describe('GoogleConnectionCard (Propojené účty)', () => {
 
   it('full disconnect confirmation names both services; Gmail switched off on the server is shown as such', async () => {
     h.status.mockResolvedValue(st({ drive: true, gmail: false }, false));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<GoogleConnectionCard />);
     expect((await screen.findByTestId('gmail-service-state')).textContent).toMatch(/Na tomto serveru není zapnutý/);
     expect(screen.queryByTestId('gmail-connect-settings')).toBeNull();
     fireEvent.click(screen.getByTestId('google-disconnect'));
-    expect(confirm.mock.calls[0][0]).toMatch(/Google Disk i Gmail.*Soubory připojené k projektům/);
+    await answerConfirm({ match: /Google Disk i Gmail.*Soubory připojené k projektům/, accept: false });
     expect(h.disconnect).not.toHaveBeenCalled();
-    confirm.mockRestore();
   });
 
   it('return outcomes of the incremental Gmail consent are explained in Czech', async () => {

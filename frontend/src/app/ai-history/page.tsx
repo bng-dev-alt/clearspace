@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useConfirm } from '../../components/ui/useConfirm';
+import StatusMessage from '../../components/ui/StatusMessage';
 import Navbar from '../../components/layout/Navbar';
 import { EmptyState } from '../../components/ui';
 import { aiHistoryService, AiHistoryRecord } from '../../services/ai/aiHistoryService';
@@ -9,6 +11,8 @@ import { Clock, Sparkles, Folder, RotateCcw, AlertTriangle, Star, BarChart2, Eye
 import { useAuth } from '../../hooks/useAuth';
 
 export default function AiHistoryPage() {
+  const [ask, confirmDialog] = useConfirm();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { user, profile } = useAuth();
   const userRole = profile?.workspace_role || 'owner';
   const isAdminOrOwner = userRole === 'owner' || userRole === 'admin';
@@ -66,7 +70,7 @@ export default function AiHistoryPage() {
       }, 5000);
     } catch (e: unknown) {
       const error = e as Error;
-      alert(`Nepodařilo se provést obnovu: ${error.message}`);
+      setErrorMessage(`Obnova se nepodařila: ${error.message}`);
     }
   };
 
@@ -94,6 +98,7 @@ export default function AiHistoryPage() {
     return (
       <div className="app-container" style={{ backgroundColor: 'var(--bg-page)' }}>
         <Navbar />
+      {confirmDialog}
         <div style={{ textAlign: 'center', padding: '5rem 1.5rem', maxWidth: '500px', margin: '0 auto' }}>
           <ShieldAlert size={48} style={{ color: 'var(--purple-secondary)', marginBottom: '1rem' }} />
           <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--dark-navy)' }}>Přístup vyhrazen pro Admina a Ownera</h2>
@@ -126,8 +131,8 @@ export default function AiHistoryPage() {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
           <button
-            onClick={() => {
-              if (confirm('Opravdu chcete smazat celou historii operací?')) {
+            onClick={async () => {
+              if (await ask({ title: 'Smazat historii AI operací?', message: 'Smažou se všechny záznamy a s nimi i možnost obnovit projekty do stavu před AI změnou. Tuto akci nelze vrátit.', confirmLabel: 'Smazat historii', danger: true })) {
                 aiHistoryService.clearHistory();
                 loadHistory();
               }
@@ -157,6 +162,7 @@ export default function AiHistoryPage() {
           </button>
         </div>
 
+        {errorMessage && <StatusMessage kind="error" testId="ai-history-error" onDismiss={() => setErrorMessage(null)}>{errorMessage}</StatusMessage>}
         {successMessage && (
           <div style={{
             backgroundColor: 'var(--success-soft)',

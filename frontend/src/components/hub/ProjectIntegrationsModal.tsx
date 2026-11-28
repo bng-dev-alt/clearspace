@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useConfirm } from '../ui/useConfirm';
 import Link from 'next/link';
 import { MessageSquare, Send, Plug } from 'lucide-react';
 import { ModalShell, Badge } from '../ui';
@@ -29,6 +30,7 @@ interface Props { projectId: string; onClose: () => void }
 
 /** Project → Integrace: Slack channels and Telegram groups bound to this project, their capabilities and the audit trail. */
 export default function ProjectIntegrationsModal({ projectId, onClose }: Props) {
+  const [ask, confirmDialog] = useConfirm();
   const [status, setStatus] = useState<HubProjectStatus | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
@@ -88,9 +90,12 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
       ? `${r.message} (${new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} – ${d.label})` : r.message });   // a successful re-check re-activates the destination
     await load();
   }, 'Zkušební zprávu se nepodařilo odeslat.');
-  const remove = (d: HubDestination) => {
-    if (!confirm(`Odpojit ${d.label}? ClearSpace sem přestane posílat oznámení, přestane přijímat zprávy a zprávy načtené pro Project Intelligence smaže.`)) return;
-    const purge = confirm('Smazat i záznamy zpráv, ze kterých vznikly úkoly, a synchronizované odpovědi? (OK = smazat, Zrušit = ponechat jako historii u úkolů. Úkoly samotné zůstávají vždy.)');
+  const remove = async (d: HubDestination) => {
+    const r0 = await ask({ title: `Odpojit ${d.label}?`, confirmLabel: 'Odpojit', danger: true,
+      message: <>ClearSpace sem přestane posílat oznámení, přestane přijímat zprávy a zprávy načtené pro Project Intelligence smaže. Úkoly samotné zůstávají vždy.{d.provider === 'telegram' ? ' Bot ClearSpace pak skupinu sám opustí – pro nové propojení ho bude potřeba znovu přidat.' : ' Aplikace zůstane v kanálu, dokud ji ve Slacku neodeberete.'}</>,
+      option: 'Smazat i záznamy zpráv, ze kterých vznikly úkoly, a synchronizované odpovědi (jinak zůstanou jako historie u úkolů)' });
+    if (!r0) return;
+    const purge = r0.option;
     void run(async () => {
       const r = await hubService.remove(d.id, purge);
       setMessage({ kind: 'info', text: `${d.label} je odpojený${r.purgedMessages ? ` (smazáno záznamů: ${r.purgedMessages})` : ''}.` });
@@ -103,6 +108,7 @@ export default function ProjectIntegrationsModal({ projectId, onClose }: Props) 
 
   return (
     <ModalShell isOpen onClose={onClose} title={title} icon={<Plug size={18} />} maxWidth={760} testId="hub-integrations-modal">
+      {confirmDialog}
       <div className="hub-modal" data-testid="hub-integrations">
         <p className="hub-intro">Propojte projekt s konkrétními kanály ve Slacku a skupinami v Telegramu. ClearSpace pracuje jen s těmi, které výslovně propojíte a potvrdíte – nikdy s celým workspace, kontakty ani soukromými konverzacemi.</p>
         {message && <p role={message.kind === 'error' ? 'alert' : 'status'} className={`drive-message${message.kind === 'error' ? ' is-error' : ''}`} data-testid="hub-message">{message.text}</p>}

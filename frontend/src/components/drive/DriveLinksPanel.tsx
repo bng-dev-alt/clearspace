@@ -6,6 +6,7 @@ import { driveService, onLinksChanged, serviceActive, DriveError, type DriveLink
 import { pickDriveFiles } from '../../lib/google/picker';
 import { ACCESS_TEXT, PILOT_TEXT, fileIconKind, fileKind, safeDriveUrl, type AccessState } from '../../lib/google/labels';
 import ModalShell from '../ui/ModalShell';
+import { useConfirm } from '../ui/useConfirm';
 
 interface DriveLinksPanelProps {
   projectId: string;
@@ -38,6 +39,7 @@ function Icon({ mime }: { mime: string }) {
 const dateCs = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric' }) : '');
 
 export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, cardTitle, notice }: DriveLinksPanelProps) {
+  const [ask, confirmDialog] = useConfirm();
   const [links, setLinks] = useState<DriveLink[] | null>(null);
   const [status, setStatus] = useState<GoogleStatus | null>(null);
   const [access, setAccess] = useState<Record<string, AccessState>>({});
@@ -141,7 +143,7 @@ export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, 
   };
 
   const remove = async (link: DriveLink) => {
-    if (!confirm(`Odebrat přílohu „${link.name}“? Soubor v Google Disku zůstane beze změny.`)) return;
+    if (!(await ask({ title: 'Odebrat přílohu?', message: `Odebrat přílohu „${link.name}“? Soubor v Google Disku zůstane beze změny.`, confirmLabel: 'Odebrat', danger: true }))) return;
     try {
       await driveService.remove(link.id);
       setLinks((prev) => prev?.filter((l) => l.id !== link.id) ?? prev);
@@ -203,6 +205,7 @@ export default function DriveLinksPanel({ projectId, cardId, canEdit, returnTo, 
 
   return (
     <section className="drive-panel" data-testid={cardId ? 'task-drive-section' : 'project-drive-section'} aria-label="Soubory z Google Disku">
+      {confirmDialog}
       <div className="drive-panel-head">
         <h3 className="drawer-section-title drive-section-title">
           <HardDrive size={14} aria-hidden="true" /> {cardId ? 'Google Disk' : 'Soubory projektu'} ({own.length})

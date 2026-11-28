@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from '../ui/useConfirm';
 import type { Comment } from '../../types/kanban';
 import { formatRelativeTime } from '../../lib/collab/activityText';
 import { activeMentionQuery, collectMentions, splitMentions, type Mentionable } from '../../lib/collab/mentions';
@@ -121,6 +122,7 @@ function CommentBody({ content, names }: { content: string; names: string[] }) {
 export default function TaskComments({
   comments, mentionables, currentUserId, canModerate, readOnly, onAdd, onEdit, onDelete, chatSources, chatNotice,
 }: TaskCommentsProps) {
+  const [ask, confirmDialog] = useConfirm();
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -150,6 +152,7 @@ export default function TaskComments({
 
   return (
     <>
+      {confirmDialog}
       {error && <p role="alert" style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '0 0 0.5rem' }}>{error}</p>}
       {chatNotice && <p className="hub-muted" style={{ margin: '0 0 0.5rem' }} data-testid="comments-chat-notice">{chatNotice}</p>}
       <div className="drawer-comments-list" data-testid="comments-list">
@@ -196,7 +199,7 @@ export default function TaskComments({
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!confirm('Smazat komentář?')) return;
+                            if (!(await ask({ title: 'Smazat komentář?', message: 'Komentář zmizí pro všechny členy projektu.', confirmLabel: 'Smazat', danger: true }))) return;
                             if (!(await onDelete(c.id))) setError('Komentář se nepodařilo smazat.');
                           }}
                           data-testid={`comment-delete-${c.id}`}

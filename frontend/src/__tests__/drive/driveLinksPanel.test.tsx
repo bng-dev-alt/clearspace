@@ -11,6 +11,7 @@ vi.mock('../../services/driveService', async () => {
 });
 vi.mock('../../lib/google/picker', () => ({ pickDriveFiles: h.pick }));
 import DriveLinksPanel from '../../components/drive/DriveLinksPanel';
+import { answerConfirm } from '../helpers/confirmDialog';
 
 const connected: GoogleStatus = { configured: true, connection: { email: 'anna.mock@example.test', scopes: [], status: 'active', connectedAt: '2026-11-20T00:00:00Z' } };
 const links: DriveLink[] = DRIVE_FIXTURES;
@@ -86,12 +87,12 @@ describe('DriveLinksPanel', () => {
   });
 
   it('remove asks first, says the Drive file stays, then removes only the association', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     h.remove.mockResolvedValue(undefined);
     render(<DriveLinksPanel projectId="p1" canEdit returnTo="/projects/p1" />);
     await screen.findByText('Rozpočet projektu Q1');
     fireEvent.click(screen.getAllByTestId('drive-remove')[0]);
-    expect(confirm.mock.calls[0][0]).toMatch(/Soubor v Google Disku zůstane beze změny/);
+    expect(h.remove).not.toHaveBeenCalled(); // nothing happens before the answer
+    await answerConfirm({ match: /Soubor v Google Disku zůstane beze změny/ });
     await waitFor(() => expect(h.remove).toHaveBeenCalledWith(links[0].id));
   });
 

@@ -7,11 +7,13 @@
 # project_id cs-run10-sb, site_url/redirects 127.0.0.1:3481/3482.
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-export DRIVE_STACK_DIR=${MEETINGS_STACK_DIR:-${TMPDIR:-/tmp}/cs-run10-sb}
+# MEETINGS_STACK_NAME (RUN 11): a second, clean stack with the same ports (e.g. cs-run11-sb) instead of re-running `up` over old data
+NAME=${MEETINGS_STACK_NAME:-cs-run10-sb}
+export DRIVE_STACK_DIR=${MEETINGS_STACK_DIR:-${TMPDIR:-/tmp}/$NAME}
 export GMAIL_INTEGRATION_ENABLED=${GMAIL_INTEGRATION_ENABLED:-1} CALENDAR_INTEGRATION_ENABLED=${CALENDAR_INTEGRATION_ENABLED:-1}
 export PORT=${PORT:-3481} GOOGLE_MOCK_PORT=${GOOGLE_MOCK_PORT:-55642}
 SONIOX_PORT=${FAKE_SONIOX_PORT:-55643}
-export COLLAB_STACK_NAME_OVERRIDE=cs-run10-sb COLLAB_STACK_SOCK_OVERRIDE=/tmp/cs-run10-docker.sock COLLAB_SMTP_PORT_OVERRIDE=55635 COLLAB_MAIL_UI_OVERRIDE=55634
+export COLLAB_STACK_NAME_OVERRIDE=$NAME COLLAB_STACK_SOCK_OVERRIDE=/tmp/$NAME-docker.sock COLLAB_SMTP_PORT_OVERRIDE=55635 COLLAB_MAIL_UI_OVERRIDE=55634
 ACC=$DRIVE_STACK_DIR/collab-accounts.env
 stt_secret() { umask 077; grep -q '^STT_SERVER_SECRET=' "$ACC" || printf 'STT_SERVER_SECRET=%s\n' "$(openssl rand -hex 32)" >> "$ACC"; sed -n 's/^STT_SERVER_SECRET=//p' "$ACC" | head -1; }
 case "${1:-}" in
@@ -19,7 +21,7 @@ case "${1:-}" in
     "$HERE/scripts/drive-stack.sh" up
     S=$(stt_secret)
     printf "INSERT INTO public.server_trust (purpose, secret_sha256) VALUES ('stt', encode(sha256(convert_to('%s', 'UTF8')), 'hex')) ON CONFLICT (purpose) DO UPDATE SET secret_sha256 = EXCLUDED.secret_sha256, rotated_at = now();\n" "$S" \
-      | docker exec -i -e PGPASSWORD=postgres supabase_db_cs-run10-sb psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q >/dev/null
+      | docker exec -i -e PGPASSWORD=postgres supabase_db_$NAME psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q >/dev/null
     echo "server_trust('stt') registered";;
   soniox) exec node "$HERE/e2e/support/fake-soniox.mjs" "$SONIOX_PORT";;
   app)

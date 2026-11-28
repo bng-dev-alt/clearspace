@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useConfirm } from '../ui/useConfirm';
 import Link from 'next/link';
 import { BellRing, MessageSquare, Send } from 'lucide-react';
 import { DriveError } from '../../services/driveService';
@@ -35,6 +36,7 @@ function stateText(c: NotifyChannel | undefined, provider: NotifyProvider): { te
 
 /** Settings card "Notifications outside the app": Slack + Telegram channels and what is sent. Same structure as GoogleConnectionCard. */
 export default function NotificationChannelsCard({ returnOutcome }: { returnOutcome?: string | null }) {
+  const [ask, confirmDialog] = useConfirm();
   const [status, setStatus] = useState<NotifyStatus | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
@@ -124,8 +126,8 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
     setMessage({ kind: 'info', text: enabled ? `${PROVIDER_NAME[p]}: oznámení znovu zapnutá.` : `${PROVIDER_NAME[p]}: oznámení pozastavena (čekající zprávy se zahodily).` });
     await load();
   }, 'Změnu se nepodařilo uložit.');
-  const disconnect = (p: NotifyProvider) => {
-    if (!confirm(`Odpojit ${PROVIDER_NAME[p]}? ClearSpace do něj přestane posílat oznámení a smaže uložené přístupové údaje. Oznámení v aplikaci (zvonek) zůstávají.`)) return;
+  const disconnect = async (p: NotifyProvider) => {
+    if (!(await ask({ title: `Odpojit ${PROVIDER_NAME[p]}?`, message: `ClearSpace do ${p === 'slack' ? 'Slacku' : 'Telegramu'} přestane posílat vaše osobní oznámení a smaže uložené přístupové údaje. Oznámení v aplikaci (zvonek) zůstávají.`, confirmLabel: 'Odpojit', danger: true }))) return;
     void run(async () => {
       const r = await notifyService.disconnect(p);
       setTgLink(null);
@@ -180,6 +182,7 @@ export default function NotificationChannelsCard({ returnOutcome }: { returnOutc
 
   return (
     <section className="settings-card" data-testid="notify-card" aria-labelledby="notify-card-title">
+      {confirmDialog}
       <h2 id="notify-card-title">
         <BellRing size={18} aria-hidden="true" /> Oznámení mimo aplikaci
         {(status.slack.simulated || status.telegram.simulated) && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Slack / Telegram">simulace</span>}

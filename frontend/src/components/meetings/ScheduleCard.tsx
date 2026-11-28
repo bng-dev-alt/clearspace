@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Badge, Button } from '../ui';
+import { useConfirm } from '../ui/useConfirm';
+import { Badge, Button, CopyButton } from '../ui';
 import { meetingService, MeetingServiceError, parseAttendees, type Meeting, type MeetingAttendee } from '../../services/meetingService';
 import { INVITE_NOTICE } from './LivePanel';
 import './meetings.css';
@@ -20,16 +21,6 @@ export function conferenceProvider(url: string | null): string | null {
   }
 }
 
-function CopyButton({ text, label, testId }: { text: string; label: string; testId: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <Button size="sm" variant="ghost" data-testid={testId} aria-live="polite"
-      onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 2000); }); }}>
-      {done ? 'Zkopírováno ✓' : label}
-    </Button>
-  );
-}
-
 const when = (m: Meeting) => {
   const a = new Date(m.occurredAt);
   const d = a.toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' });
@@ -44,6 +35,7 @@ export function inviteText(m: Meeting, projectUrl: string): string {
 interface Props { meeting: Meeting; projectId: string; isOrganizer: boolean; canSchedule: boolean; onChanged: (message?: string) => void | Promise<void> }
 
 export default function ScheduleCard({ meeting, projectId, isOrganizer, canSchedule, onChanged }: Props) {
+  const [ask, confirmDialog] = useConfirm();
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [link, setLink] = useState<Awaited<ReturnType<typeof meetingService.calendarLink>>>(null);
   const [adding, setAdding] = useState('');
@@ -90,6 +82,7 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
 
   return (
     <section className="mi-card" aria-label="Termín a účastníci" data-testid="schedule-card">
+      {confirmDialog}
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <h2>Termín a připojení</h2>
         <div className="mi-row">
@@ -162,7 +155,7 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
                 <Button size="sm" disabled={busy} data-testid="schedule-sync-event"
                   onClick={() => void run(() => meetingService.calendar('PATCH', { projectId, meetingId: meeting.id, sendInvites, timeZone: tz }), 'Událost v Kalendáři aktualizována.')}>Synchronizovat změny do Kalendáře</Button>
                 <Button size="sm" variant="danger" disabled={busy} data-testid="schedule-cancel-event"
-                  onClick={() => { if (confirm(sendInvites ? 'Zrušit událost a poslat pozvaným zrušení?' : 'Zrušit událost jen ve vašem kalendáři (bez e-mailu pozvaným)?')) void run(() => meetingService.calendar('DELETE', { projectId, meetingId: meeting.id, sendInvites }), 'Událost v Kalendáři zrušena. Porada a její přepis zůstávají.'); }}>Zrušit událost</Button>
+                  onClick={async () => { if (await ask({ title: 'Zrušit událost v Kalendáři?', confirmLabel: 'Zrušit událost', cancelLabel: 'Ponechat', danger: true, message: sendInvites ? 'Událost se zruší ve vašem Google Kalendáři a pozvaní dostanou e-mail o zrušení. Porada a její přepis v ClearSpace zůstávají.' : 'Událost se zruší jen ve vašem Google Kalendáři, pozvaným nepřijde e-mail. Porada a její přepis v ClearSpace zůstávají.' })) void run(() => meetingService.calendar('DELETE', { projectId, meetingId: meeting.id, sendInvites }), 'Událost v Kalendáři zrušena. Porada a její přepis zůstávají.'); }}>Zrušit událost</Button>
               </>
             )}
           </div>

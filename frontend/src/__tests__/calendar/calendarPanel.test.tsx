@@ -21,6 +21,7 @@ import CalendarLinksPanel from '../../components/calendar/CalendarLinksPanel';
 import CalendarPickerModal from '../../components/calendar/CalendarPickerModal';
 import GoogleConnectionCard from '../../components/drive/GoogleConnectionCard';
 import { ProjectCalendarView } from '../../components/calendar/useProjectCalendarLayers';
+import { answerConfirm } from '../helpers/confirmDialog';
 
 const ME = 'u-alice';
 const st = (services: { drive: boolean; gmail: boolean; calendar: boolean } | null, calendarAvailable = true): GoogleStatus => ({
@@ -168,12 +169,11 @@ describe('Google settings card: Calendar row', () => {
   });
   it('disable asks twice (turn off; purge?) and reports', async () => {
     h.disable.mockResolvedValue({ calendarRemoved: true, purged: { removed: 3, skipped: 0 } });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<GoogleConnectionCard />);
     fireEvent.click(await screen.findByTestId('calendar-disable'));
+    // one dialog: turn off + the purge choice (unchecked by default = keep basics; checked here)
+    await answerConfirm({ match: /Google Disk a Gmail zůstanou připojené/, option: true });
     await waitFor(() => expect(h.disable).toHaveBeenCalledWith(true));
-    expect(confirm.mock.calls[0][0]).toMatch(/Google Disk a Gmail zůstanou připojené/);
     expect((await screen.findByTestId('google-connection-message')).textContent).toMatch(/Odebráno připojených událostí: 3/);
-    confirm.mockRestore();
   });
 });

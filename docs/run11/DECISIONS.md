@@ -81,3 +81,21 @@ Odloženo (LATER): #18; F-73 nad rámec D5; H-08 nativní checkboxy mimo Classic
 
 ## D. Co potřebuji
 Odpověď na **D1–D10** (stačí „schvaluji doporučení“, případně výjimky). Pak pokračuji autonomně až po nasazení (O7) a závěrečný report.
+
+## E. Rozhodnutí vlastníka (2026-11-28) – SCHVÁLENO
+D1–D10 schváleny včetně #15, #16, #7 a TD-3, s upřesněním (závazné pro implementaci):
+1. **Propojené účty** v existujícím Nastavení; jasně rozlišit osobní vs. projektová propojení, stav autorizace, účel a dostupné akce; u Slacku a
+   Telegramu vysvětlit rozdíl mezi kanály, boty a režimy komunikace. Schválen princip uspořádání, ne globální redesign; design system beze změny.
+2. **AI Studio a stavy**: zobrazovat skutečné serverové hodnoty (limity, aktivní model, dostupnost funkcí podle prostředí a typu účtu);
+   nenahrazovat hardcoded hodnoty jinými hardcoded hodnotami; co nelze spolehlivě získat, přiznat jako nedostupné; pojistky beze změny.
+3. **Oznámení**: nové výchozí nastavení nesmí přepsat preference existujících uživatelů; vysvětlit rozdíl mezi režimy.
+4. **#15, #16**: výjimky z feature freeze jen v prezentační vrstvě nad existujícími daty; bez placených služeb, migrací a zbytečné složitosti;
+   #16 musí být skutečně funkční celoobrazovkový režim.
+5. **TD-3**: opravit test, ne chování; ověřit události podle typu, správné přiřazení a zachování související notifikace; neoslabovat test.
+6. **Testy**: výchozí E2E před implementací, kompletní regrese po ní; finální automatická kontrola **4 kombinace vzhled × motiv × 1440/1024/768/375**;
+   deterministické indikátory připravenosti místo networkidle; praktická kontrola v reálném prohlížeči; axe není náhrada praktického testu
+   přístupnosti; snímky se skutečnými identitami nikdy necommitovat.
+7. **Rozsah**: systémové opravy sdílených komponent a tokenů; žádný mechanický plošný refactoring; Classic, Monograph, light/dark a lokalizace
+   zachovány; žádné zásahy do experimentálních větví ani V2.
+8. **Dokončení**: aktualizovat UX backlog, tech dluh, dokumentaci a školicí materiály; nezahajovat Product Training Hub ani RUN 12; žádné
+   placené testy; nasazení jen při splnění všech akceptačních, bezpečnostních a regresních gate, jinak NO-GO s dokumentací.

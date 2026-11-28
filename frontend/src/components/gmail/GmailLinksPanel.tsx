@@ -5,6 +5,7 @@ import { Mail, MessagesSquare, Eye, RefreshCw, Trash2, Plus, ExternalLink, Paper
 import { driveService, onLinksChanged, serviceActive, DriveError, type GoogleStatus } from '../../services/driveService';
 import { gmailService, GMAIL_PRIVACY_TEXT, type GmailLink, type GmailPreview } from '../../services/gmailService';
 import ModalShell from '../ui/ModalShell';
+import { useConfirm } from '../ui/useConfirm';
 import GmailPickerModal from './GmailPickerModal';
 
 interface GmailLinksPanelProps {
@@ -27,6 +28,7 @@ const kb = (n: number | null) => (n === null ? '' : n < 1024 ? `${n} B` : n < 10
 
 
 export default function GmailLinksPanel({ projectId, cardId, canEdit, returnTo, cardTitle }: GmailLinksPanelProps) {
+  const [ask, confirmDialog] = useConfirm();
   const [links, setLinks] = useState<GmailLink[] | null>(null);
   const [status, setStatus] = useState<GoogleStatus | null>(null);
   const [me, setMe] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function GmailLinksPanel({ projectId, cardId, canEdit, returnTo, 
   };
 
   const remove = async (l: GmailLink) => {
-    if (!confirm(`Odebrat e-mail „${l.subject}“ z ${cardId ? 'úkolu' : 'projektu'}? Ve vaší schránce Gmail se nic nezmění.`)) return;
+    if (!(await ask({ title: 'Odebrat e-mail?', message: `Odebrat e-mail „${l.subject}“ z ${cardId ? 'úkolu' : 'projektu'}? Ve vaší schránce Gmail se nic nezmění.`, confirmLabel: 'Odebrat', danger: true }))) return;
     try {
       await gmailService.remove(l.id);
       setLinks((prev) => prev?.filter((x) => x.id !== l.id) ?? prev);
@@ -139,6 +141,7 @@ export default function GmailLinksPanel({ projectId, cardId, canEdit, returnTo, 
 
   return (
     <section className="drive-panel" data-testid={cardId ? 'task-gmail-section' : 'project-gmail-section'} aria-label="E-maily z Gmailu">
+      {confirmDialog}
       <div className="drive-panel-head">
         <h3 className="drawer-section-title drive-section-title">
           <Mail size={14} aria-hidden="true" /> {cardId ? 'E-maily' : 'E-maily projektu'} ({own.length})

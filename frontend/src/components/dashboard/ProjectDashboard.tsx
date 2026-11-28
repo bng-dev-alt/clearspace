@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import StatusMessage from '../ui/StatusMessage';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Plus, Folder, ArrowRight, X, Clock, Trash2, Sparkles } from 'lucide-react';
@@ -24,6 +25,7 @@ export default function ProjectDashboard() {
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const handleGenerateProjectAccept = async (data: GenerateProjectResponse) => {
@@ -160,6 +162,7 @@ export default function ProjectDashboard() {
 
   const handleDeleteClick = (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
+    setDeleteError(null);
     setProjectToDelete(project);
   };
 
@@ -171,7 +174,7 @@ export default function ProjectDashboard() {
       setProjectToDelete(null);
     } catch (err) {
       console.error('Failed to delete project:', err);
-      alert(err instanceof Error && err.message ? `Nepodařilo se odstranit projekt. ${err.message}` : 'Nepodařilo se odstranit projekt.');
+      setDeleteError(err instanceof Error && err.message ? `Projekt se nepodařilo odstranit. ${err.message}` : 'Projekt se nepodařilo odstranit. Zkuste to prosím znovu.');
     }
   };
 
@@ -434,6 +437,7 @@ export default function ProjectDashboard() {
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-text)', lineHeight: '1.4' }}>
                 Varování: Tato akce je zcela nevratná. Odstraněním projektu dojde k trvalému smazání všech jeho boardů, sloupců, karet, porad a zvukových nahrávek. Pokud se nepodaří smazat nahrávky, projekt se nesmaže. Data, která u poskytovatele strojového přepisu nešlo smazat hned, poskytovatel odstraní sám do 30 dnů.
               </p>
+              {deleteError && <StatusMessage kind="error" testId="delete-project-error">{deleteError}</StatusMessage>}
             </div>
             <div className="modal-footer">
               <button

@@ -213,7 +213,7 @@ textarea.cs-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   animation: csModalIn var(--dur-base) var(--ease-out);
 }
 .cs-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--border); }
-.cs-modal-title { font-family: var(--font-serif); font-size: 1.2rem; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.cs-modal-title { display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-serif); font-size: 1.2rem; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
 .cs-modal-close { display: flex; padding: 0.4rem; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm); transition: var(--transition-base); }
 .cs-modal-close:hover { color: var(--text); background: var(--surface-2); }
 .cs-modal-body { padding: 1.5rem; overflow-y: auto; }
@@ -255,3 +255,30 @@ textarea.cs-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   .cs-modal-header { flex: none; }
   .cs-modal-body { flex: 1 1 auto; }
 }
+
+/* ============================================================
+   RUN 11 – sdílené primitivy zpětné vazby (StatusMessage, CopyButton, useConfirm)
+   Jen existující tokeny; Monograph je přebírá přes stejné proměnné.
+   ============================================================ */
+.cs-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.cs-modal:focus { outline: none; }
+
+.cs-status {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;
+  margin: 0.5rem 0; padding: 0.55rem 0.75rem; font-size: 0.82rem; line-height: 1.45;
+  color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.cs-status--success { border-left-color: var(--success); }
+.cs-status--info { border-left-color: var(--accent); }
+.cs-status--warning { border-left-color: var(--warning); }
+.cs-status--error { border-left-color: var(--danger); color: var(--text); }
+.cs-status-dismiss { border: 0; background: none; color: var(--text-secondary); font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 0.25rem; }
+.cs-status-dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+span.cs-status { display: inline-flex; margin: 0 0 0 0.5rem; padding: 0.25rem 0.5rem; }
+
+.cs-confirm-message { color: var(--text); font-size: 0.9rem; line-height: 1.55; }
+.cs-confirm-option { display: flex; gap: 0.5rem; align-items: flex-start; margin-top: 1rem; font-size: 0.85rem; color: var(--text); cursor: pointer; }
+.cs-confirm-option input { margin-top: 0.2rem; accent-color: var(--accent); }
+.cs-confirm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; flex-wrap: wrap; }
+@media (max-width: 767px) { .cs-confirm-actions { flex-direction: column-reverse; } .cs-confirm-actions .cs-btn { width: 100%; min-height: 44px; } }

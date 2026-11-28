@@ -1,32 +1,16 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Copy, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import CopyButton from '../ui/CopyButton';
 
 /**
  * RUN 08 UX: one pairing pattern for every Slack / Telegram link (project destinations, chat identities, personal notifications):
  * numbered steps, the EXACT command with one-click copy + visible confirmation, a button that opens the right app, a live countdown of the
  * code's validity, and an expired state. While active it calls `onTick` every 3 s so the caller can detect the link automatically.
  */
-export function CopyButton({ text, label = 'Kopírovat', testId }: { text: string; label?: string; testId?: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); } catch {
-      const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } finally { ta.remove(); }
-    }
-    setCopied(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), 2500);
-  };
-  return (
-    <button type="button" className={`cs-btn cs-btn--sm ${copied ? 'cs-btn--primary' : 'cs-btn--secondary'}`} onClick={() => void copy()} data-testid={testId} aria-live="polite">
-      {copied ? <><Check size={14} aria-hidden="true" /> Zkopírováno</> : <><Copy size={14} aria-hidden="true" /> {label}</>}
-    </button>
-  );
-}
+/** Shared since RUN 11: `components/ui/CopyButton` (re-exported here for existing imports). */
+export { CopyButton };
 
 export function useCountdown(until: number | null): number {
   const [now, setNow] = useState(() => Date.now());

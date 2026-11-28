@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useConfirm } from '../ui/useConfirm';
 import { Paperclip, Upload, Trash2, Download, Eye, FileText, Image as ImageIcon, FileSpreadsheet, FileCode, X, Sparkles } from 'lucide-react';
 import { resourceService, resourceErrorMessage, ResourceUploadError } from '../../services/resourceService';
 import { TaskResource } from '../../types/kanban';
@@ -19,6 +20,7 @@ export default function TaskResourcesSection({
   uploadedBy = 'Uživatel',
   onAddSubtaskToChecklist,
 }: TaskResourcesSectionProps) {
+  const [ask, confirmDialog] = useConfirm();
   const [resources, setResources] = useState<TaskResource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -68,13 +70,13 @@ export default function TaskResourcesSection({
   };
 
   const handleDelete = async (res: TaskResource) => {
-    if (!confirm(`Opravdu chcete smazat zdroj "${res.filename}"?`)) return;
+    if (!(await ask({ title: 'Smazat přílohu?', message: `Příloha „${res.filename}“ se smaže z úkolu i z úložiště. Tuto akci nelze vrátit.`, confirmLabel: 'Smazat', danger: true }))) return;
     const success = await resourceService.deleteResource(res.id, res.storagePath);
     if (success) {
       setResources((prev) => prev.filter((r) => r.id !== res.id));
       if (previewResource?.id === res.id) setPreviewResource(null);
     } else {
-      alert('Nepodařilo se smazat zdroj.');
+      setUploadErrors(['Přílohu se nepodařilo smazat. Zkuste to prosím znovu.']);
     }
   };
 
@@ -118,9 +120,10 @@ export default function TaskResourcesSection({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }} data-testid="task-resources-section">
+      {confirmDialog}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
-          <Paperclip size={14} /> Resources ({resources.length})
+          <Paperclip size={14} /> Přílohy ({resources.length})
         </h3>
         <button
           type="button"

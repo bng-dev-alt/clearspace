@@ -58,7 +58,7 @@ describe('ScheduleCard', () => {
     expect(screen.getByTestId('schedule-join')).toHaveAttribute('href', 'https://meet.google.com/abc-defg-hij');
     expect(screen.getByTestId('schedule-join')).toHaveAttribute('rel', 'noopener noreferrer');
     fireEvent.click(screen.getByTestId('schedule-copy-link'));
-    await waitFor(() => expect(screen.getByTestId('schedule-copy-link')).toHaveTextContent('Zkopírováno ✓'));
+    await waitFor(() => expect(screen.getByTestId('schedule-copy-link')).toHaveTextContent('Zkopírováno'));
     expect(write).toHaveBeenCalledWith('https://meet.google.com/abc-defg-hij');
     expect(await screen.findByText('host@klient.example')).toBeInTheDocument();
   });

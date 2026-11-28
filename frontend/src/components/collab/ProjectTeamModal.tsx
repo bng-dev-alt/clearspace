@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from '../ui/useConfirm';
+import { isTopDialog, useDialogFocus } from '../ui/useDialogFocus';
 import { X, Users, Mail, Copy, Check, Trash2, UserPlus, Settings2 } from 'lucide-react';
 import type { ProjectRole, ProjectRosterEntry, TeamMember } from '../../types/kanban';
 import { collaborationService, type InvitationRow, type DeliveryState } from '../../services/collaborationService';
@@ -83,6 +85,9 @@ function grantable(myRole: ProjectRole | null): AssignableRole[] {
 export default function ProjectTeamModal({
   isOpen, onClose, projectId, projectOwnerId, myRole, myUserId, roster, onChanged, onManageWorkspace,
 }: ProjectTeamModalProps) {
+  const [ask, confirmDialog] = useConfirm();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, isOpen);
   const canManage = myRole === 'owner' || myRole === 'admin';
   const roles = grantable(myRole);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +103,7 @@ export default function ProjectTeamModal({
   const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen && isTopDialog(dialogRef.current)) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
@@ -160,10 +165,13 @@ export default function ProjectTeamModal({
 
   return (
     <div className="modal-overlay" onClick={onClose} data-testid="project-team-overlay">
+      {confirmDialog}
       <div
         className="modal-content"
         style={{ maxWidth: '560px', width: '100%' }}
         onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="project-team-title"
@@ -238,8 +246,8 @@ export default function ProjectTeamModal({
                           aria-label={`Odebrat ${m.fullName} z projektu`}
                           title="Odebrat z projektu"
                           disabled={busy !== null}
-                          onClick={() => {
-                            if (confirm(`Odebrat ${m.fullName} z projektu? Ztratí přístup okamžitě.`)) {
+                          onClick={async () => {
+                            if (await ask({ title: `Odebrat ${m.fullName} z projektu?`, message: 'Ztratí přístup k projektu okamžitě. Jeho úkoly a komentáře zůstanou.', confirmLabel: 'Odebrat z projektu', danger: true })) {
                               void run(`remove-${m.id}`, () => collaborationService.removeMember(projectId, m.id));
                             }
                           }}

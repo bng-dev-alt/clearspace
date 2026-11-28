@@ -206,7 +206,7 @@ export default function AiVoiceCopilotBar({
 
       onClose();
     } catch {
-      alert('Chyba při vykonávání akce na nástěnce.');
+      setError('Akci na boardu se nepodařilo dokončit. Zkontrolujte board a zkuste to prosím znovu.');
     }
   };
 

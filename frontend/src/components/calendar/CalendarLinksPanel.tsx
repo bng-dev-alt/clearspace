@@ -6,6 +6,7 @@ import { driveService, onLinksChanged, serviceActive, DriveError, type GoogleSta
 import { calendarService, CALENDAR_PRIVACY_TEXT, eventWhen, type CalendarLink } from '../../services/calendarService';
 import { gmailService } from '../../services/gmailService';
 import CalendarPickerModal from './CalendarPickerModal';
+import { useConfirm } from '../ui/useConfirm';
 
 interface CalendarLinksPanelProps {
   projectId: string;
@@ -65,6 +66,7 @@ export function CalendarLinkRow({ link: l, me, calendarOn, canEdit, removable, b
 
 /** Actions on linked events (shared by the panel and the project calendar). */
 export function useCalendarLinkActions(setMessage: (m: { kind: 'info' | 'error'; text: string } | null) => void, reload: () => Promise<void> | void, where: string) {
+  const [ask, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState(false);
   const onRefresh = async (l: CalendarLink) => {
     setBusy(true);
@@ -89,12 +91,12 @@ export function useCalendarLinkActions(setMessage: (m: { kind: 'info' | 'error';
     }
   };
   const onRemove = async (l: CalendarLink) => {
-    if (!confirm(`Odebrat událost „${l.title}“ z ${where}? Ve vašem Google Kalendáři se nic nezmění.`)) return;
+    if (!(await ask({ title: 'Odebrat událost?', message: `Odebrat událost „${l.title}“ z ${where}? Ve vašem Google Kalendáři se nic nezmění.`, confirmLabel: 'Odebrat', danger: true }))) return;
     try { await calendarService.remove(l.id); await reload(); } catch (e) {
       setMessage({ kind: 'error', text: e instanceof DriveError ? e.message : 'Událost se nepodařilo odebrat.' });
     }
   };
-  return { busy, onRefresh, onOpen, onRemove };
+  return { busy, onRefresh, onOpen, onRemove, confirmDialog };
 }
 
 export default function CalendarLinksPanel({ projectId, cardId, canEdit, returnTo, cardTitle }: CalendarLinksPanelProps) {
@@ -145,6 +147,7 @@ export default function CalendarLinksPanel({ projectId, cardId, canEdit, returnT
 
   return (
     <section className="drive-panel" data-testid={cardId ? 'task-calendar-section' : 'project-calendar-section'} aria-label="Události z Google Kalendáře">
+      {actions.confirmDialog}
       <div className="drive-panel-head">
         <h3 className="drawer-section-title drive-section-title">
           <CalendarDays size={14} aria-hidden="true" /> {cardId ? 'Události' : 'Události projektu'} ({own.length})

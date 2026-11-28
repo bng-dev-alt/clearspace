@@ -1,6 +1,7 @@
 'use client';
 
 import { TaskConversation } from '../hub/CommunicationList';
+import { useConfirm } from '../ui/useConfirm';
 import { hubService } from '../../services/hubService';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
@@ -86,6 +87,7 @@ export default function TaskDetailDrawer({
   notice = null,
   onDismissNotice,
 }: TaskDetailDrawerProps) {
+  const [ask, confirmDialog] = useConfirm();
   // RUN 07B: provenance of comments synced with a chat thread (only when the hub is on)
   const [chatInfo, setChatInfo] = useState<Awaited<ReturnType<typeof hubService.commentSources>> | null>(null);
   const commentCount = card?.comments?.length ?? 0;
@@ -392,11 +394,10 @@ export default function TaskDetailDrawer({
     }
   };
 
-  const handleDeleteCard = () => {
-    if (confirm('Opravdu chcete tento úkol smazat?')) {
-      onDeleteCard(columnId, card.id);
-      requestClose();
-    }
+  const handleDeleteCard = async () => {
+    if (!(await ask({ title: 'Smazat úkol?', message: `Úkol „${card.title}“ se smaže i s checklistem, komentáři a přílohami. Tuto akci nelze vrátit.`, confirmLabel: 'Smazat úkol', danger: true }))) return;
+    onDeleteCard(columnId, card.id);
+    requestClose();
   };
 
   // Calculate checklist progress
@@ -409,6 +410,7 @@ export default function TaskDetailDrawer({
 
   return (
     <>
+      {confirmDialog}
       {/* Semi-transparent backdrop overlay */}
       <div
         className={`drawer-overlay ${mode === 'focused' ? 'mode-focused' : ''} ${isClosing ? 'closing' : ''}`}

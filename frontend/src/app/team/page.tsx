@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useConfirm } from '../../components/ui/useConfirm';
+import StatusMessage from '../../components/ui/StatusMessage';
 import { Search, Plus, Users, Mail, Copy, Ban, Check } from 'lucide-react';
 import Navbar from '../../components/layout/Navbar';
 import MembersTable from '../../components/team/MembersTable';
@@ -15,6 +17,8 @@ import Button from '../../components/ui/Button';
 import UserDetailModal from '../../components/team/UserDetailModal';
 
 export default function TeamPage() {
+  const [ask, confirmDialog] = useConfirm();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { members, projectCounts, isLoading, ownerProfileId, addMember, editMember, deleteMember } = useWorkspaceMembers();
   const { user } = useAuth();
 
@@ -123,11 +127,12 @@ export default function TeamPage() {
   };
 
   const handleDelete = async (member: TeamMember) => {
-    if (confirm(`Odebrat ${member.fullName} z celého workspace? Bude odstraněn ze všech projektů i přiřazených úkolů.`)) {
+    if (await ask({ title: `Odebrat ${member.fullName} z workspace?`, message: 'Bude odebrán ze všech projektů i z přiřazených úkolů. Úkoly samotné zůstanou.', confirmLabel: 'Odebrat z workspace', danger: true })) {
+      setDeleteError(null);
       try {
         await deleteMember(member.id);
       } catch {
-        alert('Nepodařilo se odstranit člena.');
+        setDeleteError(`Člena ${member.fullName} se nepodařilo odebrat. Zkuste to prosím znovu.`);
       }
     }
   };
@@ -137,6 +142,7 @@ export default function TeamPage() {
   return (
     <div className="app-container" style={{ backgroundColor: 'var(--bg-page)' }}>
       <Navbar />
+      {confirmDialog}
 
       <section className="app-hero">
         <div className="hero-content">
@@ -148,6 +154,8 @@ export default function TeamPage() {
           <div className="hero-right" />
         </div>
       </section>
+
+      {deleteError && <div style={{ maxWidth: '1200px', margin: '1rem auto 0', padding: '0 1rem' }}><StatusMessage kind="error" testId="team-delete-error" onDismiss={() => setDeleteError(null)}>{deleteError}</StatusMessage></div>}
 
       {canInvite && (
         <section

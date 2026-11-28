@@ -7,6 +7,7 @@ import { driveService, serviceActive, DriveError, type GoogleServiceName, type G
 import { gmailService } from '../../services/gmailService';
 import { calendarService } from '../../services/calendarService';
 import { ACCESS_TEXT, PILOT_TEXT } from '../../lib/google/labels';
+import { useConfirm } from '../ui/useConfirm';
 
 /** Outcome of Google's redirect back to ClearSpace (?google=...). */
 export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string }> = {
@@ -32,6 +33,7 @@ export const RETURN_TEXT: Record<string, { kind: 'info' | 'error'; text: string 
 
 /** Integration settings: ONE Google account, per-service state (Drive / Gmail / Calendar). Extends into the RUN 07 Integrations Hub. */
 export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?: string | null }) {
+  const [ask, confirmDialog] = useConfirm();
   const [status, setStatus] = useState<GoogleStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(returnOutcome ? RETURN_TEXT[returnOutcome] ?? null : null);
@@ -52,7 +54,8 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   };
 
   const disconnect = async () => {
-    if (!confirm('Odpojit účet Google? Google zruší celé oprávnění ClearSpace najednou – Google Disk i Gmail a také Google Kalendář. Soubory připojené k projektům a úkolům v ClearSpace zůstanou; nikdo z týmu tím nezíská ani neztratí přístup k souborům v Google Disku. U připojených e-mailů a událostí zůstanou jen základní údaje.')) return;
+    if (!(await ask({ title: 'Odpojit účet Google?', confirmLabel: 'Odpojit účet Google', danger: true,
+      message: 'Google zruší celé oprávnění ClearSpace najednou – Google Disk i Gmail a také Google Kalendář. Soubory připojené k projektům a úkolům v ClearSpace zůstanou; nikdo z týmu tím nezíská ani neztratí přístup k souborům v Google Disku. U připojených e-mailů a událostí zůstanou jen základní údaje.' }))) return;
     setBusy(true);
     try {
       const r = await driveService.disconnect();
@@ -68,8 +71,11 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   };
 
   const disableGmail = async () => {
-    if (!confirm('Vypnout Gmail v ClearSpace? ClearSpace přestane Gmail používat; Google Disk zůstane připojený. Oprávnění u Googlu zůstane, dokud neodpojíte celý účet Google (to ukončí i Disk) nebo ho neodeberete v nastavení účtu Google.')) return;
-    const purge = confirm('Odebrat také všechny e-maily, které jste připojili k projektům a úkolům? (OK = odebrat, Zrušit = ponechat základní údaje v projektech)');
+    const r0 = await ask({ title: 'Vypnout Gmail v ClearSpace?', confirmLabel: 'Vypnout Gmail', danger: true,
+      message: 'ClearSpace přestane Gmail používat; Google Disk zůstane připojený. Oprávnění u Googlu zůstane, dokud neodpojíte celý účet Google (to ukončí i Disk) nebo ho neodeberete v nastavení účtu Google.',
+      option: 'Odebrat také všechny e-maily, které jste připojili k projektům a úkolům (jinak v projektech zůstanou základní údaje)' });
+    if (!r0) return;
+    const purge = r0.option;
     setBusy(true);
     try {
       const r = await gmailService.disable(purge);
@@ -84,8 +90,11 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   };
 
   const disableCalendar = async () => {
-    if (!confirm('Vypnout Google Kalendář v ClearSpace? ClearSpace přestane kalendář číst; Google Disk a Gmail zůstanou připojené. Oprávnění u Googlu zůstane, dokud neodpojíte celý účet Google (to ukončí i Disk a Gmail) nebo ho neodeberete v nastavení účtu Google.')) return;
-    const purge = confirm('Odebrat také všechny události, které jste připojili k projektům a úkolům? (OK = odebrat, Zrušit = ponechat základní údaje v projektech)');
+    const r0 = await ask({ title: 'Vypnout Google Kalendář v ClearSpace?', confirmLabel: 'Vypnout Kalendář', danger: true,
+      message: 'ClearSpace přestane kalendář číst; Google Disk a Gmail zůstanou připojené. Oprávnění u Googlu zůstane, dokud neodpojíte celý účet Google (to ukončí i Disk a Gmail) nebo ho neodeberete v nastavení účtu Google.',
+      option: 'Odebrat také všechny události, které jste připojili k projektům a úkolům (jinak v projektech zůstanou základní údaje)' });
+    if (!r0) return;
+    const purge = r0.option;
     setBusy(true);
     try {
       const r = await calendarService.disable(purge);
@@ -107,6 +116,7 @@ export default function GoogleConnectionCard({ returnOutcome }: { returnOutcome?
   const active = c?.status === 'active';
   return (
     <section className="settings-card" data-testid="google-connection-card" aria-labelledby="google-card-title">
+      {confirmDialog}
       <h2 id="google-card-title">
         <Link2 size={18} aria-hidden="true" /> Účet Google
         {status?.simulated && <span className="cs-badge cs-badge--warning" title="Lokální testovací poskytovatel, ne skutečný Google">simulace</span>}

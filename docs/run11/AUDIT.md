@@ -11,7 +11,7 @@ Legenda zdroje: **[UI]** viděno v prohlížeči / na snímku · **[KÓD]** ově
 | Produkce | `vercel inspect clearspace.luffast.com` → `dpl_FwWirB1MSS4hA7Mig8Rp67t92pia`, target production, Ready **[ověřeno]** |
 | Unit testy | `vitest run`: **101 souborů, 1 500 / 1 500 PASS** |
 | Lint | **0 chyb, 10 varování** (starší, v `supabase/tests/*.mjs`) |
-| E2E | baseline převzat z RUN 10 (stejný kód `c468e2e`): PASS kromě TD-3, 18 skipped (jiné stacky) **[DOC]**; plný běh ve fázi E |
+| E2E (výchozí, před implementací, `scripts/run11-e2e.sh`) | **stack porad** (čistý `cs-run11-sb`): 45 PASS, 3 FAIL – všechny předem existující: TD-3 `meetings:152`, TD-2 `task-resources:140`, `r6-quality:102`; 8 nespuštěno (sériový `meetings.spec` za TD-3), 1 skip · **živý přepis** 3/3 PASS · **demo režim** 27 + 19 PASS · **hub + oznámení** 2/2 PASS |
 | `V1-run10` | ověřeno: není worktree (`git worktree list`), 0 souborů (jen prázdné `.claude/.cc-writes`), žádný proces → **odstraněn** |
 | Lokální prostředí | `meetings-stack.sh` (cs-run10-sb, loopback), app `http://127.0.0.1:3481/?login=auto` |
 | Snímky | `docs/run11/screens/before/` – nástroj `frontend/scripts/run11-shots.mjs` (overflow, chyby konzole, axe) |

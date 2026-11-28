@@ -129,6 +129,7 @@ export function useProjectCalendarLayers({ projectId, month, canEdit, returnTo }
 
   const dialogs = (
     <>
+      {actions.confirmDialog}
       {selected?.link && (
         <ModalShell isOpen onClose={() => setSelected(null)} title={selected.link.title} icon={<CalendarDays size={16} />} maxWidth={620} testId="calendar-event-modal">
           <p className="drive-hint">Událost připojená k projektu. Členové projektu vidí jen tyto základní údaje.</p>

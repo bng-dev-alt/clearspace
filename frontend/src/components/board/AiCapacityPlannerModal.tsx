@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import StatusMessage from '../ui/StatusMessage';
 import { X, Users, Scale, Check, ArrowRight, RefreshCw } from 'lucide-react';
 import { Card, Column, TeamMember } from '../../types/kanban';
 import { aiClient } from '../../services/ai/aiClient';
@@ -49,6 +50,7 @@ export default function AiCapacityPlannerModal({
 }: AiCapacityPlannerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ kind: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [data, setData] = useState<CapacityPlanningData | null>(null);
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
 
@@ -101,8 +103,7 @@ export default function AiCapacityPlannerModal({
 
     const toApply = data.rebalanceSuggestions.filter((s) => selectedSuggestionIds.has(s.cardId));
     if (toApply.length === 0) {
-      alert('Vyberte prosím alespoň jedno přerozdělení.');
-      return;
+      return; // the apply button is disabled until something is selected
     }
 
     let applied = 0;
@@ -135,14 +136,14 @@ export default function AiCapacityPlannerModal({
     }
 
     if (applied === 0) {
-      alert('Žádné přerozdělení se nepodařilo aplikovat (karta nebo člen týmu neexistuje).');
+      setResult({ kind: 'error', text: 'Žádné přerozdělení se nepodařilo aplikovat (karta nebo člen týmu neexistuje).' });
       return;
     }
-    alert(
+    setSelectedSuggestionIds(new Set()); // applied: nothing stays selected, a second click cannot apply the same change twice
+    setResult({ kind: skipped.length > 0 ? 'warning' : 'success', text:
       `Přerozděleno ${applied} z ${toApply.length} karet.` +
         (skipped.length > 0 ? `\nNeznámý člen týmu: ${skipped.join(', ')}.` : '')
-    );
-    onClose();
+    });
   };
 
   return (
@@ -361,6 +362,7 @@ export default function AiCapacityPlannerModal({
           ) : null}
         </div>
 
+        {result && <div style={{ padding: '0 1.5rem' }}><StatusMessage kind={result.kind} testId="ai-apply-result">{result.text}</StatusMessage></div>}
         {/* Footer */}
         <div
           style={{

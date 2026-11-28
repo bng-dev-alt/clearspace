@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import StatusMessage from '../ui/StatusMessage';
 import { X, Sparkles, ShieldAlert, Check, RefreshCw, ArrowRight, FileDiff } from 'lucide-react';
 import { Card, Column } from '../../types/kanban';
 import { aiClient } from '../../services/ai/aiClient';
@@ -49,6 +50,7 @@ export default function AiProjectManagerModal({
 }: AiProjectManagerModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ kind: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [analysis, setAnalysis] = useState<AiProjectManagerAnalysis | null>(null);
   const [selectedChangeIds, setSelectedChangeIds] = useState<Set<string>>(new Set());
 
@@ -109,8 +111,7 @@ export default function AiProjectManagerModal({
 
     const changesToApply = analysis.suggestedChanges.filter((c) => selectedChangeIds.has(c.id));
     if (changesToApply.length === 0) {
-      alert('Vyberte prosím alespoň jednu změnu k aplikování.');
-      return;
+      return; // the apply button is disabled until something is selected
     }
 
     // Aplikují se jen změny, které lze skutečně provést nad AKTUÁLNÍM boardem.
@@ -160,14 +161,14 @@ export default function AiProjectManagerModal({
     }
 
     if (applied === 0) {
-      alert('Žádnou z vybraných změn se nepodařilo aplikovat (úkol nebo sloupec už neexistuje, případně akce není podporována).');
+      setResult({ kind: 'error', text: 'Žádnou z vybraných změn se nepodařilo aplikovat (úkol nebo sloupec už neexistuje, případně akce není podporována).' });
       return;
     }
-    alert(
+    setSelectedChangeIds(new Set()); // applied: nothing stays selected, a second click cannot apply the same change twice
+    setResult({ kind: skipped.length > 0 ? 'warning' : 'success', text:
       `Aplikováno ${applied} z ${changesToApply.length} změn.` +
         (skipped.length > 0 ? `\nNeaplikováno: ${skipped.join(', ')}.` : '')
-    );
-    onClose();
+    });
   };
 
   return (
@@ -452,6 +453,7 @@ export default function AiProjectManagerModal({
         </div>
 
         {/* Footer actions */}
+        {result && <div style={{ padding: '0 1.5rem' }}><StatusMessage kind={result.kind} testId="ai-apply-result">{result.text}</StatusMessage></div>}
         <div
           style={{
             display: 'flex',

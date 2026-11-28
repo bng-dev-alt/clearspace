@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { allowed, LiveCaptureController, parseSonioxMessage, type CaptureDeps } from '../../lib/meetings/liveCapture';
 
 /** Falešný prohlížeč: média, kodér, WebSocket a ručně řízené časovače. Žádné skutečné zařízení ani síť. */
-function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: boolean; startError?: { code: string; message: string } } = {}) {
+function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: boolean; startError?: { code: string; message: string }; longRun?: boolean } = {}) {
+  let closedMs = 0;
   const calls: { action: string; body: Record<string, unknown> }[] = [];
   const sockets: FakeWs[] = [];
   const timers: { fn: () => void; at: number }[] = [];
@@ -41,8 +42,9 @@ function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: 
       if (action === 'start') {
         if (opts.startError) throw opts.startError;
         seg += 1;
-        return { segment: seg, offsetMs: seg === 1 ? 0 : 5000, reservedMs: 600_000, apiKey: `snx_temp_key${seg}`, wsUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', config: { model: 'stt-rt-v6', audio_format: 'auto' } };
+        return { segment: seg, offsetMs: opts.longRun ? closedMs : seg === 1 ? 0 : 5000, reservedMs: 600_000, apiKey: `snx_temp_key${seg}`, wsUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', config: { model: 'stt-rt-v6', audio_format: 'auto' } };
       }
+      if (action === 'close') closedMs += Number(body.audioMs ?? 0);
       if (action === 'complete') return { outcome: 'completed', revision: 'a'.repeat(64) };
       return { ok: true };
     },
@@ -66,7 +68,7 @@ function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: 
     for (const t of timers.filter((x) => x.at <= now)) { timers.splice(timers.indexOf(t), 1); t.fn(); }
     await new Promise((r) => setTimeout(r, 0));
   };
-  return { deps, calls, sockets, stopped, advance, micTrack, tabAudioTrack };
+  return { deps, calls, sockets, stopped, advance, micTrack, tabAudioTrack, now: () => now };
 }
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -231,4 +233,48 @@ describe('LiveCaptureController', () => {
     expect(c.snapshot().tabAudio).toBe(false);
     expect(c.snapshot().warning).toMatch(/jen váš mikrofon/);
   });
+});
+
+describe('long meeting (deterministic 60 minutes, RUN 10 live acceptance substitute)', () => {
+  it('60 min of speech: segments roll over before each 10-min reservation ends, no final token is lost or misplaced, memory stays bounded', async () => {
+    const b = fakeBrowser({ longRun: true });
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic');
+    b.sockets[0].open();
+    let word = 0;
+    const HOUR = 3_600_000;
+    let segStart = b.now();
+    let opened = 1;
+    while (b.now() - 1_000_000 < HOUR) {
+      const ws = b.sockets[b.sockets.length - 1];
+      if (ws.readyState === 1) {
+        ws.say([{ text: ` w${word}`, is_final: true, start_ms: b.now() - segStart, end_ms: b.now() - segStart + 400, speaker: String(1 + (word % 2)) }]);
+        word += 1;
+      }
+      await b.advance(1000);
+      if (b.sockets.length > opened) { // rollover opened a new stream
+        await new Promise((r) => setTimeout(r, 0));
+        b.sockets[b.sockets.length - 1].open();
+        opened = b.sockets.length;
+        segStart = b.now();
+      }
+    }
+    const done = await c.stop();
+    expect(done.outcome).toBe('completed');
+    const starts = b.calls.filter((x) => x.action === 'start').length;
+    expect(starts).toBeGreaterThanOrEqual(6);         // 60 min / (10 min - 30 s lead) = 7 streams
+    expect(starts).toBeLessThanOrEqual(8);
+    const closes = b.calls.filter((x) => x.action === 'close');
+    expect(closes).toHaveLength(starts);              // every stream was closed and settled
+    expect(closes.every((x) => Number(x.body.audioMs) <= 600_000)).toBe(true); // never beyond its reservation
+    const sent = b.calls.filter((x) => x.action === 'append').flatMap((x) => (x.body.tokens as { text: string }[]).map((t) => t.text));
+    expect(sent).toHaveLength(word);                  // every final token reached the server exactly once
+    expect(sent).toEqual(Array.from({ length: word }, (_, i) => ` w${i}`)); // in order
+    const seqs = new Map<number, number[]>();
+    for (const x of b.calls.filter((y) => y.action === 'append')) seqs.set(x.body.segment as number, [...(seqs.get(x.body.segment as number) ?? []), x.body.seq as number]);
+    for (const list of seqs.values()) expect(list).toEqual(list.map((_, i) => i + 1)); // idempotent seq per stream, no gaps
+    expect(c.snapshot().finals.length).toBeLessThanOrEqual(4000); // display buffer bounded
+    expect(c.snapshot().pendingFlush).toBe(0);
+    expect(c.snapshot().elapsedMs).toBeGreaterThan(HOUR - 120_000);
+  }, 60_000);
 });

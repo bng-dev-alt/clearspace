@@ -106,3 +106,29 @@ describe('liveComplete', () => {
     expect(f.calls.map((c) => c.name)).toEqual(['stt_live_chunks', 'stt_live_discard']);
   });
 });
+
+describe('long meeting assembly (60 min of stored chunks)', () => {
+  it('1200 chunks over 7 segments normalise into one transcript within limits, in time order', async () => {
+    const rows: { segment: number; seq: number; offset_ms: number; tokens: unknown }[] = [];
+    let t = 0;
+    for (let seg = 1; seg <= 7; seg += 1) {
+      const offset = (seg - 1) * 570_000;
+      for (let seq = 1; seq <= 172; seq += 1) {
+        const local = (seq - 1) * 3000;
+        rows.push({ segment: seg, seq, offset_ms: offset, tokens: [{ text: ` slovo${t}.`, start_ms: local, end_ms: local + 800, speaker: '1' }, { text: ' Odpověď.', start_ms: local + 1500, end_ms: local + 2200, speaker: '2' }] });
+        t += 1;
+      }
+    }
+    const toks = assembleLiveTokens(rows);
+    expect(toks).toHaveLength(rows.length * 2);
+    for (let i = 1; i < toks.length; i += 1) expect(toks[i].start_ms).toBeGreaterThanOrEqual(toks[i - 1].start_ms);
+    const f = fakeDb({ stt_live_chunks: rows, stt_live_complete: 'e'.repeat(64) });
+    const started = Date.now();
+    const r = await liveComplete(ctx(f.db, null));
+    expect(r.outcome).toBe('completed');
+    expect(Date.now() - started).toBeLessThan(5000);
+    const tr = f.calls[1].args.p_transcript as { segments: unknown[]; char_count: number };
+    expect(tr.char_count).toBeLessThan(400_000);
+    expect(tr.segments.length).toBeGreaterThan(100);
+  });
+});

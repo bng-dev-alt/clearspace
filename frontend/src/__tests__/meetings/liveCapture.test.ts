@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { allowed, LiveCaptureController, parseSonioxMessage, type CaptureDeps } from '../../lib/meetings/liveCapture';
+import { allowed, levelOf, listMics, LiveCaptureController, parseSonioxMessage, testMic, type CaptureDeps } from '../../lib/meetings/liveCapture';
 
 /** Falešný prohlížeč: média, kodér, WebSocket a ručně řízené časovače. Žádné skutečné zařízení ani síť. */
-function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: boolean; startError?: { code: string; message: string }; longRun?: boolean } = {}) {
+function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: boolean; startError?: { code: string; message: string }; longRun?: boolean; completeOutcome?: string; discardError?: boolean } = {}) {
+  const gum: MediaStreamConstraints[] = [];
   let closedMs = 0;
   const calls: { action: string; body: Record<string, unknown> }[] = [];
   const sockets: FakeWs[] = [];
@@ -45,10 +46,11 @@ function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: 
         return { segment: seg, offsetMs: opts.longRun ? closedMs : seg === 1 ? 0 : 5000, reservedMs: 600_000, apiKey: `snx_temp_key${seg}`, wsUrl: 'wss://stt-rt.soniox.com/transcribe-websocket', config: { model: 'stt-rt-v6', audio_format: 'auto' } };
       }
       if (action === 'close') closedMs += Number(body.audioMs ?? 0);
-      if (action === 'complete') return { outcome: 'completed', revision: 'a'.repeat(64) };
+      if (action === 'complete') return opts.completeOutcome === 'empty' ? { outcome: 'empty', revision: null } : { outcome: 'completed', revision: 'a'.repeat(64) };
+      if (action === 'discard' && opts.discardError) throw { code: 'stt_failed', message: 'Síť selhala.' };
       return { ok: true };
     },
-    getUserMedia: async () => { if (opts.micError) throw Object.assign(new Error('x'), { name: opts.micError }); return stream([micTrack]); },
+    getUserMedia: async (c) => { gum.push(c); if (opts.micError) throw Object.assign(new Error('x'), { name: opts.micError }); return stream([micTrack]); },
     getDisplayMedia: opts.noDisplay ? undefined : async () => stream(opts.tabAudio === false ? [tabVideoTrack] : [tabAudioTrack, tabVideoTrack]),
     createAudioContext: () => ({
       createMediaStreamDestination: () => ({ channelCount: 2, stream: stream([]) }),
@@ -68,7 +70,7 @@ function fakeBrowser(opts: { micError?: string; tabAudio?: boolean; noDisplay?: 
     for (const t of timers.filter((x) => x.at <= now)) { timers.splice(timers.indexOf(t), 1); t.fn(); }
     await new Promise((r) => setTimeout(r, 0));
   };
-  return { deps, calls, sockets, stopped, advance, micTrack, tabAudioTrack, now: () => now };
+  return { deps, calls, sockets, stopped, advance, micTrack, tabAudioTrack, gum, now: () => now };
 }
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -277,4 +279,136 @@ describe('long meeting (deterministic 60 minutes, RUN 10 live acceptance substit
     expect(c.snapshot().pendingFlush).toBe(0);
     expect(c.snapshot().elapsedMs).toBeGreaterThan(HOUR - 120_000);
   }, 60_000);
+});
+
+describe('RUN 10 hardening: device choice, levels, cancel, honest end states', () => {
+  it('the chosen microphone is requested exactly; a missing device gives a specific message and books nothing', async () => {
+    const b = fakeBrowser();
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic', 'usb-mic-1');
+    expect(b.gum[0].audio).toMatchObject({ deviceId: { exact: 'usb-mic-1' }, echoCancellation: true });
+    const b2 = fakeBrowser({ micError: 'OverconstrainedError' });
+    const c2 = new LiveCaptureController(b2.deps);
+    await c2.start('mic', 'gone');
+    expect(c2.snapshot().error?.code).toBe('mic_device_missing');
+    expect(b2.calls).toEqual([]);
+    const b3 = fakeBrowser();
+    await new LiveCaptureController(b3.deps).start('mic', null);
+    expect(b3.gum[0].audio).not.toHaveProperty('deviceId');
+  });
+
+  it('mic and shared-tab levels are reported separately; mic-only has no tab level', async () => {
+    const b = fakeBrowser();
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic+tab');
+    b.sockets[0].open();
+    expect(c.levels().mic).toBeCloseTo(levelOf(0.2), 5);
+    expect(c.levels().tab).toBeCloseTo(levelOf(0.2), 5);
+    const b2 = fakeBrowser();
+    const c2 = new LiveCaptureController(b2.deps);
+    await c2.start('mic');
+    expect(c2.levels().tab).toBeNull();
+    c.release();
+    expect(c.levels()).toEqual({ mic: null, tab: null });
+  });
+
+  it('cancel: stream ends at once, nothing is completed, stored parts discarded, actual time billed, resources released, idempotent', async () => {
+    const b = fakeBrowser();
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic+tab');
+    b.sockets[0].open();
+    b.sockets[0].say([{ text: 'Tajné', is_final: true, start_ms: 0, end_ms: 300 }]);
+    await b.advance(20_000);
+    expect(await c.cancel()).toBe('cancelled');
+    expect(b.sockets[0].sent).not.toContain(''); // no waiting for the provider to finish
+    expect(b.calls.find((x) => x.action === 'close')?.body).toMatchObject({ segment: 1, reason: 'stopped', audioMs: 20_000 });
+    expect(b.calls.some((x) => x.action === 'complete')).toBe(false);
+    expect(b.calls.at(-1)?.action).toBe('discard');
+    expect(b.stopped).toEqual(expect.arrayContaining(['mic', 'tab-audio', 'ctx']));
+    expect(c.snapshot()).toMatchObject({ capture: 'stopped', transcription: 'cancelled', finals: [], partial: [] });
+    const n = b.calls.length;
+    expect(await c.cancel()).toBe('noop');
+    expect(b.calls).toHaveLength(n);
+  });
+
+  it('cancel while paused and cancel when the server is unreachable (error kept, can retry from the recovery panel)', async () => {
+    const b = fakeBrowser({ discardError: true });
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic');
+    b.sockets[0].open();
+    await c.pause();
+    expect(await c.cancel()).toBe('error');
+    expect(c.snapshot().error?.code).toBe('cancel');
+    expect(b.stopped).toContain('mic');
+  });
+
+  it('stop with no speech never reports "Přepis uložen"', async () => {
+    const b = fakeBrowser({ completeOutcome: 'empty' });
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic');
+    b.sockets[0].open();
+    const r = await c.stop();
+    expect(r.outcome).toBe('empty');
+    expect(c.snapshot().transcription).toBe('empty');
+  });
+
+  it('after a lost microphone the text so far can still be saved', async () => {
+    const b = fakeBrowser();
+    const c = new LiveCaptureController(b.deps);
+    await c.start('mic');
+    b.sockets[0].open();
+    b.micTrack.listeners.ended();
+    await settle(); await settle();
+    expect(c.snapshot().capture).toBe('error');
+    expect(c.snapshot().error?.code).toBe('mic_lost');
+    expect((await c.stop()).outcome).toBe('completed');
+  });
+});
+
+describe('free local microphone test (never calls the server or the provider)', () => {
+  const deps = (level: number, err?: string) => {
+    const stopped: string[] = [];
+    const timers: (() => void)[] = [];
+    return {
+      stopped, timers,
+      d: {
+        getUserMedia: async () => {
+          if (err) throw Object.assign(new Error('x'), { name: err });
+          return { getTracks: () => [{ stop: () => stopped.push('track') }] } as unknown as MediaStream;
+        },
+        createAudioContext: () => ({
+          createAnalyser: () => ({ fftSize: 32, getFloatTimeDomainData: (b: Float32Array) => b.fill(level) }),
+          createMediaStreamSource: () => ({ connect: () => undefined }),
+          close: async () => { stopped.push('ctx'); },
+        }) as unknown as AudioContext,
+        setTimer: (fn: () => void) => { timers.push(fn); return fn; },
+        clearTimer: () => undefined,
+      },
+    };
+  };
+  it('speech -> ok, levels reported, everything released', async () => {
+    const f = deps(0.1);
+    const seen: number[] = [];
+    const t = await testMic(f.d, 'usb-1', (l) => seen.push(l), 300);
+    while (f.timers.length) f.timers.shift()!();
+    expect(await t.result).toBe('ok');
+    expect(Math.max(...seen)).toBeGreaterThan(0.5);
+    expect(f.stopped).toEqual(['track', 'ctx']);
+  });
+  it('silence -> silent; denied -> mic_denied; the dependency set has no api at all', async () => {
+    const f = deps(0);
+    const t = await testMic(f.d, null, () => undefined, 300);
+    while (f.timers.length) f.timers.shift()!();
+    expect(await t.result).toBe('silent');
+    expect(await (await testMic(deps(0, 'NotAllowedError').d, null, () => undefined)).result).toBe('mic_denied');
+    expect(Object.keys(f.d)).not.toContain('api');
+  });
+  it('lists only real audio inputs (interní, Bluetooth, USB) and labels unnamed ones', async () => {
+    const md = { enumerateDevices: async () => [
+      { kind: 'audioinput', deviceId: 'default', label: 'Výchozí' }, { kind: 'audioinput', deviceId: 'bt', label: 'AirPods' },
+      { kind: 'audioinput', deviceId: 'usb', label: '' }, { kind: 'audiooutput', deviceId: 'spk', label: 'Repro' },
+    ] as MediaDeviceInfo[] };
+    expect(await listMics(md)).toEqual([{ deviceId: 'bt', label: 'AirPods' }, { deviceId: 'usb', label: 'Mikrofon 2' }]);
+    expect(await listMics(undefined)).toEqual([]);
+  });
 });

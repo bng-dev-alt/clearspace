@@ -81,7 +81,9 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
   }
 
   const provider = conferenceProvider(meeting.conferenceUrl);
-  const upcoming = Date.parse(meeting.endsAt ?? meeting.occurredAt) > now;
+  // plánovaný termín a skutečný průběh jsou dvě různé věci: uplynulý termín nic neblokuje (připojení ani přepis)
+  const term = termState(meeting, now);
+  const actual = actualState(meeting);
   const projectUrl = typeof window !== 'undefined' ? `${window.location.origin}/projects/${projectId}/meetings/${meeting.id}` : '';
   const linked = link && link.state !== 'deleted';
   const { valid, invalid } = parseAttendees(adding);
@@ -91,7 +93,8 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
       <div className="mi-row" style={{ justifyContent: 'space-between' }}>
         <h2>Termín a připojení</h2>
         <div className="mi-row">
-          <Badge variant={upcoming ? 'accent' : 'default'}>{upcoming ? 'Nadcházející' : 'Proběhlá'}</Badge>
+          <Badge variant={term === 'upcoming' ? 'accent' : 'default'}><span data-testid="schedule-term">{TERM_LABEL[term]}</span></Badge>
+          {actual && <Badge variant={actual.variant}><span data-testid="schedule-actual">{actual.label}</span></Badge>}
           {linked && <Badge variant="success"><span data-testid="schedule-calendar-linked">V Google Kalendáři</span></Badge>}
           {link?.state === 'deleted' && <Badge variant="warning">Událost zrušena</Badge>}
         </div>
@@ -100,7 +103,8 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
 
       {meeting.conferenceUrl ? (
         <div className="mi-row" data-testid="schedule-conference">
-          <a className="cs-btn cs-btn--primary cs-btn--sm" href={meeting.conferenceUrl} target="_blank" rel="noopener noreferrer" data-testid="schedule-join">Připojit se ({provider})</a>
+          <a className="cs-btn cs-btn--primary cs-btn--sm" href={meeting.conferenceUrl} target="_blank" rel="noopener noreferrer" data-testid="schedule-join" title={`Otevře ${provider} v nové kartě`}>Připojit se ke schůzce</a>
+          <span className="mi-muted" data-testid="schedule-provider">{provider}</span>
           <CopyButton text={meeting.conferenceUrl} label="Kopírovat odkaz" testId="schedule-copy-link" />
           <CopyButton text={inviteText(meeting, projectUrl)} label="Kopírovat pozvánku (Slack / Telegram / e-mail)" testId="schedule-copy-invite" />
         </div>
@@ -167,4 +171,22 @@ export default function ScheduleCard({ meeting, projectId, isOrganizer, canSched
       {error && <p role="alert" className="mi-error" data-testid="schedule-error">{error}</p>}
     </section>
   );
+}
+
+type Term = 'upcoming' | 'now' | 'past';
+const TERM_LABEL: Record<Term, string> = { upcoming: 'Termín: nadcházející', now: 'Termín: právě teď', past: 'Termín uplynul' };
+
+/** Jen podle plánovaného času (informace, nikdy podmínka). */
+export function termState(m: Pick<Meeting, 'occurredAt' | 'endsAt'>, now: number): Term {
+  const start = Date.parse(m.occurredAt);
+  const end = m.endsAt ? Date.parse(m.endsAt) : start;
+  return now < start ? 'upcoming' : now <= end ? 'now' : 'past';
+}
+
+/** Skutečný průběh podle stavu přepisu – nezávisle na kalendáři. */
+export function actualState(m: Pick<Meeting, 'live' | 'currentRevision'>): { label: string; variant: 'danger' | 'warning' | 'success' } | null {
+  if (m.live.state === 'live') return { label: '● Přepis běží', variant: 'danger' };
+  if (m.live.state === 'paused') return { label: 'Přepis pozastaven', variant: 'warning' };
+  if (m.currentRevision) return { label: 'Přepis uložen', variant: 'success' };
+  return null;
 }

@@ -11,7 +11,7 @@
  */
 
 export type CaptureState = 'idle' | 'acquiring' | 'connecting' | 'live' | 'paused' | 'reconnecting' | 'stopping' | 'stopped' | 'error';
-export type TranscriptionState = 'off' | 'connecting' | 'receiving' | 'stalled' | 'finalizing' | 'done' | 'error';
+export type TranscriptionState = 'off' | 'connecting' | 'receiving' | 'stalled' | 'finalizing' | 'done' | 'empty' | 'cancelled' | 'error';
 export type SourceMode = 'mic' | 'mic+tab';
 
 export interface LiveTokenView { text: string; startMs: number; endMs: number; speaker: string | null; final: boolean }
@@ -35,24 +35,26 @@ export interface LiveSnapshot {
 }
 
 /** Čistý přechodový automat – jediné místo, které rozhoduje, co je v kterém stavu dovoleno (testováno bez prohlížeče). */
-export type CaptureAction = 'start' | 'pause' | 'resume' | 'stop';
+export type CaptureAction = 'start' | 'pause' | 'resume' | 'stop' | 'cancel';
 export function allowed(state: CaptureState, action: CaptureAction): boolean {
   switch (action) {
     case 'start': return state === 'idle' || state === 'error' || state === 'stopped';
     case 'pause': return state === 'live';
     case 'resume': return state === 'paused';
-    case 'stop': return state === 'live' || state === 'paused' || state === 'reconnecting' || state === 'connecting';
+    case 'stop': return state === 'live' || state === 'paused' || state === 'reconnecting' || state === 'connecting' || state === 'error';
+    case 'cancel': return state === 'live' || state === 'paused' || state === 'reconnecting' || state === 'connecting' || state === 'error';
   }
 }
 
 export const ERROR_TEXT: Record<string, string> = {
   mic_denied: 'Prohlížeč nepovolil mikrofon. Povolte ho v nastavení stránky (ikona zámku vedle adresy) a zkuste to znovu.',
   mic_missing: 'Nenašli jsme žádný mikrofon. Připojte ho a zkuste to znovu.',
+  mic_device_missing: 'Vybraný mikrofon není dostupný (odpojený, nebo ho používá jiná aplikace). Vyberte jiný mikrofon a zkuste to znovu.',
   tab_denied: 'Sdílení karty bylo zrušeno. Můžete pokračovat jen s mikrofonem, nebo to zkusit znovu.',
   tab_no_audio: 'Sdílená karta nemá zvuk. Při výběru karty zapněte „Sdílet i zvuk karty“ (Chrome / Edge).',
   tab_unsupported: 'Tento prohlížeč neumí zachytit zvuk jiné karty. Použijte Chrome nebo Edge na počítači, nebo jen mikrofon.',
   recorder_unsupported: 'Tento prohlížeč neumí kódovat zvuk pro živý přepis (WebM/Opus). Použijte aktuální Chrome, Edge nebo Firefox.',
-  mic_lost: 'Mikrofon se odpojil. Přepis je pozastavený; uložený text zůstává.',
+  mic_lost: 'Mikrofon se odpojil (nebo ho převzala jiná aplikace). Stream je ukončený; uložený text zůstává – vyberte mikrofon a spusťte znovu, nebo přepis uložte.',
   provider: 'Služba přepisu spojení ukončila. Uložený text zůstává.',
   network: 'Spojení se službou přepisu se přerušilo a nepodařilo se ho obnovit. Uložený text zůstává.',
 };
@@ -139,6 +141,7 @@ export class LiveCaptureController {
   private ctx: AudioContext | null = null;
   private mixed: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
+  private tabAnalyser: AnalyserNode | null = null;
   private rec: MediaRecorder | null = null;
   private ws: WebSocket | null = null;
   private seg: StartInfo | null = null;
@@ -167,14 +170,14 @@ export class LiveCaptureController {
   }
 
   /** Spuštění: zdroje -> mix -> první segment. Dvojí klik nic nezdvojí (automat + DB `already_live`). */
-  async start(source: SourceMode): Promise<void> {
+  async start(source: SourceMode, deviceId?: string | null): Promise<void> {
     if (!allowed(this.s.capture, 'start')) return;
     this.set({ capture: 'acquiring', source, error: null, warning: null });
     if (!this.deps.isTypeSupported(MIME)) return this.fail('recorder_unsupported');
     try {
-      this.mic = await this.deps.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+      this.mic = await this.deps.getUserMedia({ audio: micConstraints(deviceId) });
     } catch (e) {
-      return this.fail((e as Error)?.name === 'NotAllowedError' || (e as Error)?.name === 'SecurityError' ? 'mic_denied' : 'mic_missing');
+      return this.fail(micErrorCode(e, deviceId));
     }
     if (this.mic.getAudioTracks().length === 0) { this.release(); return this.fail('mic_missing'); }
     if (source === 'mic+tab') {
@@ -200,15 +203,18 @@ export class LiveCaptureController {
     this.ctx = ctx;
     const dest = ctx.createMediaStreamDestination();
     dest.channelCount = 1;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    for (const st of [this.mic, this.tab]) {
-      if (!st || st.getAudioTracks().length === 0) continue;
+    // každý zdroj má vlastní analyzátor -> samostatná úroveň mikrofonu a zvuku karty (jen pro zobrazení, nic se neposílá)
+    const tap = (st: MediaStream | null): AnalyserNode | null => {
+      if (!st || st.getAudioTracks().length === 0) return null;
       const src = ctx.createMediaStreamSource(st); // video stopy karty jsou už zastavené
+      const a = ctx.createAnalyser();
+      a.fftSize = 2048;
       src.connect(dest);
-      src.connect(analyser);
-    }
-    this.analyser = analyser;
+      src.connect(a);
+      return a;
+    };
+    this.analyser = tap(this.mic);
+    this.tabAnalyser = tap(this.tab);
     this.mixed = dest.stream;
     this.set({ tabAudio: Boolean(this.tab?.getAudioTracks().some((t) => t.readyState === 'live')) });
     this.tick();
@@ -231,11 +237,7 @@ export class LiveCaptureController {
       if (this.s.capture === 'stopped' || this.s.capture === 'idle') return;
       if (this.s.capture === 'live' && this.seg) this.set({ elapsedMs: this.baseMs + (this.deps.now() - this.segStartedAt) });
       if (this.analyser && this.s.capture === 'live') {
-        const buf = new Float32Array(this.analyser.fftSize);
-        this.analyser.getFloatTimeDomainData(buf);
-        let sum = 0;
-        for (const v of buf) sum += v * v;
-        const rms = Math.sqrt(sum / buf.length);
+        const rms = Math.max(rmsOf(this.analyser), this.tabAnalyser ? rmsOf(this.tabAnalyser) : 0);
         const now = this.deps.now();
         if (rms < SILENCE_RMS) this.quietSince ??= now; else this.quietSince = null;
         const silent = this.quietSince !== null && now - this.quietSince > SILENCE_AFTER_MS;
@@ -367,6 +369,11 @@ export class LiveCaptureController {
     }
   }
 
+  /** Okamžité úrovně vstupů 0..1 pro ukazatel (mikrofon / sdílená karta zvlášť); null = zdroj se nezachycuje. */
+  levels(): { mic: number | null; tab: number | null } {
+    return { mic: this.analyser ? levelOf(rmsOf(this.analyser)) : null, tab: this.tabAnalyser ? levelOf(rmsOf(this.tabAnalyser)) : null };
+  }
+
   async pause(): Promise<void> {
     if (!allowed(this.s.capture, 'pause')) return;
     await this.endSegment('paused');
@@ -386,13 +393,39 @@ export class LiveCaptureController {
     this.release();
     try {
       const r = await this.deps.api('complete', {});
-      this.set({ capture: 'stopped', transcription: 'done' });
-      return { revision: (r.revision as string | null) ?? null, outcome: String(r.outcome ?? 'completed') };
+      const outcome = String(r.outcome ?? 'completed');
+      // prázdný přepis se neukládá -> nikdy nehlásit „Přepis uložen“
+      this.set({ capture: 'stopped', transcription: outcome === 'completed' ? 'done' : 'empty' });
+      return { revision: (r.revision as string | null) ?? null, outcome };
     } catch (e) {
       const err = e as { code?: string; message?: string };
       this.set({ capture: 'stopped', transcription: 'error', error: { code: err.code ?? 'complete', message: err.message ?? 'Přepis se nepodařilo uložit. Zkuste „Dokončit přepis“ znovu.' } });
       return { revision: null, outcome: 'error' };
     }
+  }
+
+  /**
+   * Zrušení přepisu: stream se hned ukončí (bez čekání na zbytek textu), mikrofon i sdílení se uvolní, neuložené i uložené části
+   * TOHOTO přepisu se zahodí. Spotřebovaná doba se vyúčtuje (close se skutečnou délkou). Porada, účastníci a událost zůstávají.
+   * Opakované volání nic nezdvojí (automat); když selže zahození na serveru, vrátí 'error' a zbytek lze zahodit znovu.
+   */
+  async cancel(): Promise<'cancelled' | 'error' | 'noop'> {
+    if (!allowed(this.s.capture, 'cancel')) return 'noop';
+    this.set({ capture: 'stopping', transcription: 'finalizing' });
+    this.queue = [];
+    if (this.seg) await this.endSegment('stopped', false);
+    this.queue = [];
+    this.release();
+    try {
+      await this.deps.api('discard', {});
+    } catch (e) {
+      const err = e as { code?: string; message?: string };
+      this.set({ capture: 'stopped', transcription: 'error', finals: [], partial: [], pendingFlush: 0,
+        error: { code: 'cancel', message: err.message ?? 'Zrušení se nepodařilo dokončit. Zkuste „Zahodit uložené části“ znovu.' } });
+      return 'error';
+    }
+    this.set({ capture: 'stopped', transcription: 'cancelled', finals: [], partial: [], pendingFlush: 0, error: null, warning: null });
+    return 'cancelled';
   }
 
   /** Uvolní mikrofon, sdílení karty, AudioContext a časovače (i při zavření stránky). */
@@ -407,6 +440,86 @@ export class LiveCaptureController {
     void this.ctx?.close().catch(() => undefined);
     this.ctx = null;
     this.analyser = null;
+    this.tabAnalyser = null;
     this.set({ tabAudio: false, silent: false });
   }
+}
+
+export function micConstraints(deviceId?: string | null): MediaTrackConstraints {
+  return { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) };
+}
+
+function micErrorCode(e: unknown, deviceId?: string | null): string {
+  const n = (e as Error)?.name;
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'mic_denied';
+  if (deviceId && (n === 'OverconstrainedError' || n === 'NotFoundError' || n === 'NotReadableError')) return 'mic_device_missing';
+  return 'mic_missing';
+}
+
+function rmsOf(a: AnalyserNode): number {
+  const buf = new Float32Array(a.fftSize);
+  a.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (const v of buf) sum += v * v;
+  return Math.sqrt(sum / buf.length);
+}
+
+/** RMS -> 0..1 pro ukazatel (odmocnina, aby byla vidět i tichá řeč; ~0,25 RMS = plná stupnice). */
+export const levelOf = (rms: number) => Math.min(1, Math.sqrt(Math.max(0, rms)) * 2);
+
+export interface MicOption { deviceId: string; label: string }
+
+/** Mikrofony, které prohlížeč zpřístupní (interní, Bluetooth, USB…). Názvy jsou známé až po povolení mikrofonu. */
+export async function listMics(md: Pick<MediaDevices, 'enumerateDevices'> | undefined = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined): Promise<MicOption[]> {
+  if (!md?.enumerateDevices) return [];
+  const all = await md.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
+  const mics = all.filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+  return mics.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Mikrofon ${i + 1}` }));
+}
+
+export type MicTestResult = 'ok' | 'silent' | 'mic_denied' | 'mic_missing' | 'mic_device_missing';
+
+/**
+ * Bezplatný lokální test mikrofonu: jen getUserMedia + analyzátor v prohlížeči. ŽÁDNÉ volání serveru ani poskytovatele přepisu.
+ * onLevel dostává úroveň 0..1 (~10× za s); po `ms` se test sám ukončí a vrátí 'silent', když vstup celou dobu mlčel.
+ */
+export async function testMic(
+  deps: Pick<CaptureDeps, 'getUserMedia' | 'createAudioContext' | 'setTimer' | 'clearTimer'>,
+  deviceId: string | null,
+  onLevel: (level: number) => void,
+  ms = 5000,
+): Promise<{ result: Promise<MicTestResult>; stop: () => void }> {
+  let stream: MediaStream;
+  try {
+    stream = await deps.getUserMedia({ audio: micConstraints(deviceId) });
+  } catch (e) {
+    return { result: Promise.resolve(micErrorCode(e, deviceId) as MicTestResult), stop: () => undefined };
+  }
+  const ctx = deps.createAudioContext();
+  const a = ctx.createAnalyser();
+  a.fftSize = 2048;
+  ctx.createMediaStreamSource(stream).connect(a);
+  let peak = 0;
+  let elapsed = 0;
+  let timer: unknown = null;
+  let done: (r: MicTestResult) => void = () => undefined;
+  const result = new Promise<MicTestResult>((r) => { done = r; });
+  const stop = () => {
+    if (timer) deps.clearTimer(timer);
+    timer = null;
+    for (const t of stream.getTracks()) t.stop();
+    void ctx.close().catch(() => undefined);
+    onLevel(0);
+    done(peak >= SILENCE_RMS * 2 ? 'ok' : 'silent');
+  };
+  const step = () => {
+    const rms = rmsOf(a);
+    peak = Math.max(peak, rms);
+    onLevel(levelOf(rms));
+    elapsed += 100;
+    if (elapsed >= ms) { stop(); return; }
+    timer = deps.setTimer(step, 100);
+  };
+  timer = deps.setTimer(step, 100);
+  return { result, stop };
 }

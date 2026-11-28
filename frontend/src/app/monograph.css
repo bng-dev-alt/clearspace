@@ -307,8 +307,8 @@ html[data-style="monograph"] .auth-card h1, html[data-style="monograph"] .auth-c
 html[data-style="monograph"] .mi-page { max-width: 1400px; margin: 0; padding: 32px var(--page-pad) 72px; gap: 24px; }
 html[data-style="monograph"] .mi-page h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.5rem, 5vw, 4rem); line-height: 0.9; text-transform: uppercase; letter-spacing: -0.005em; overflow-wrap: anywhere; }
 html[data-style="monograph"] .mi-page :is(h2, h3) { font-size: 1.375rem; line-height: 1; }
-html[data-style="monograph"] .mi-page a { color: var(--accent); text-underline-offset: 3px; }
-html[data-style="monograph"] .mi-page a:hover { color: var(--text); }
+html[data-style="monograph"] .mi-page a:not(.cs-btn) { color: var(--accent); text-underline-offset: 3px; }
+html[data-style="monograph"] .mi-page a:not(.cs-btn):hover { color: var(--text); }
 html[data-style="monograph"] .mi-grid > * { min-width: 0; }
 html[data-style="monograph"] .mi-card { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--mg-rule); border-radius: 0; padding: 16px; align-content: start; min-width: 0; }
 html[data-style="monograph"] .mi-list { gap: 12px; }

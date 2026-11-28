@@ -146,7 +146,7 @@ export default function AudioPanel({ meeting, projectId, onChanged, pollMs = { f
         <h2>Zvuk</h2>
         <span data-testid="stt-state">
           <Badge variant={a.sttState === 'failed' ? 'danger' : a.sttState === 'completed' ? 'success' : 'default'}>
-            {a.deletedAt && a.sttState === 'none' ? 'Zvuk smazán' : STT_STATE_LABEL[a.sttState]}
+            {a.deletedAt && a.sttState === 'none' ? 'Zvuk smazán' : !a.path && a.sttState === 'none' ? 'Zvuk zatím nenahrán' : STT_STATE_LABEL[a.sttState]}
           </Badge>
         </span>
       </div>

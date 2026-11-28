@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button } from '../ui';
 import { meetingService, MeetingServiceError, type Meeting } from '../../services/meetingService';
-import { browserDeps, LiveCaptureController, type CaptureState, type LiveSnapshot, type SourceMode, type TranscriptionState } from '../../lib/meetings/liveCapture';
+import { browserDeps, listMics, LiveCaptureController, testMic, type CaptureState, type LiveSnapshot, type MicOption, type MicTestResult, type SourceMode, type TranscriptionState } from '../../lib/meetings/liveCapture';
 import { supabase } from '../../lib/supabase';
 import './meetings.css';
 
@@ -21,7 +21,7 @@ const CAPTURE_LABEL: Record<CaptureState, string> = {
   reconnecting: 'Obnovuji spojení…', stopping: 'Ukončuji…', stopped: 'Nahrávání ukončeno', error: 'Chyba',
 };
 const TRANSCRIPTION_LABEL: Record<TranscriptionState, string> = {
-  off: 'Přepis neběží', connecting: 'Přepis se připojuje', receiving: 'Přepis běží', stalled: 'Přepis čeká', finalizing: 'Ukládám přepis…', done: 'Přepis uložen', error: 'Přepis selhal',
+  off: 'Přepis neběží', connecting: 'Přepis se připojuje', receiving: 'Přepis běží', stalled: 'Přepis čeká', finalizing: 'Ukládám přepis…', done: 'Přepis uložen', empty: 'Žádná řeč – nic se neuložilo', cancelled: 'Přepis zrušen', error: 'Přepis selhal',
 };
 
 const fmt = (ms: number) => {
@@ -34,6 +34,25 @@ const fmt = (ms: number) => {
 const canTabAudio = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices && 'getDisplayMedia' in navigator.mediaDevices
   && !/iPad|iPhone|Android/i.test(navigator.userAgent);
 
+const MIC_KEY = 'cs.live.mic';
+const TEST_TEXT: Record<MicTestResult, string> = {
+  ok: 'Mikrofon funguje – zvuk je slyšet.',
+  silent: 'Za 5 s jsme neslyšeli žádný zvuk. Zkontrolujte, že je vybraný správný mikrofon, není ztlumený a že do něj mluvíte.',
+  mic_denied: 'Prohlížeč nepovolil mikrofon. Povolte ho v nastavení stránky (ikona zámku vedle adresy).',
+  mic_missing: 'Nenašli jsme žádný mikrofon. Připojte ho a zkuste to znovu.',
+  mic_device_missing: 'Vybraný mikrofon není dostupný. Vyberte jiný.',
+};
+
+function Level({ label, value, testId }: { label: string; value: number | null; testId: string }) {
+  if (value === null) return null;
+  return (
+    <label className="mi-row" style={{ gap: 6 }} data-testid={testId}>
+      <span className="mi-muted">{label}</span>
+      <meter min={0} max={1} low={0.15} optimum={0.5} value={value} aria-label={`Úroveň: ${label}`} style={{ width: 120 }} />
+    </label>
+  );
+}
+
 interface Props { meeting: Meeting; projectId: string; isOrganizer: boolean; onChanged: (message?: string) => void | Promise<void> }
 
 export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }: Props) {
@@ -43,16 +62,62 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partial, setPartial] = useState<string | null>(null);
+  const [mics, setMics] = useState<MicOption[]>([]);
+  const [micId, setMicId] = useState<string>(() => (typeof window !== 'undefined' ? window.localStorage.getItem(MIC_KEY) ?? '' : ''));
+  const [testLevel, setTestLevel] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<MicTestResult | null>(null);
+  const [levels, setLevels] = useState<{ mic: number | null; tab: number | null }>({ mic: null, tab: null });
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const testStop = useRef<(() => void) | null>(null);
   const ctl = useRef<LiveCaptureController | null>(null);
   const tabOk = useMemo(() => canTabAudio(), []);
-  const unfinished = !snap && (meeting.live.state === 'live' || meeting.live.state === 'paused' || meeting.live.state === 'stopped');
+  // „stopped“ bez uložených částí (např. po zrušení) není nedokončený přepis – nabídne se nové spuštění
+  const candidate = !snap && (meeting.live.state === 'live' || meeting.live.state === 'paused' || meeting.live.state === 'stopped');
+  const unfinished = candidate && (meeting.live.state !== 'stopped' || !!partial);
+
+  // seznam mikrofonů (interní, Bluetooth, USB…); obnoví se při připojení / odpojení zařízení
+  useEffect(() => {
+    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+    const refresh = () => { void listMics().then(setMics); };
+    refresh();
+    md?.addEventListener?.('devicechange', refresh);
+    return () => { md?.removeEventListener?.('devicechange', refresh); testStop.current?.(); };
+  }, []);
+  const micMissing = micId !== '' && mics.length > 0 && !mics.some((m) => m.deviceId === micId);
+
+  // živé úrovně vstupu během nahrávání (jen čtení analyzátoru v prohlížeči)
+  const capturing = snap?.capture === 'live' || snap?.capture === 'reconnecting';
+  useEffect(() => {
+    if (!capturing) return;
+    const h = setInterval(() => { if (ctl.current) setLevels(ctl.current.levels()); }, 150);
+    return () => { clearInterval(h); setLevels({ mic: null, tab: null }); };
+  }, [capturing]);
+
+  function chooseMic(id: string) {
+    setMicId(id);
+    setTestResult(null);
+    try { if (id) window.localStorage.setItem(MIC_KEY, id); else window.localStorage.removeItem(MIC_KEY); } catch { /* private mode */ }
+  }
+
+  async function runTest() {
+    if (testStop.current) { testStop.current(); return; }
+    setTestResult(null);
+    setTestLevel(0);
+    const t = await testMic(browserDeps(async () => ({})), micId || null, setTestLevel);
+    testStop.current = t.stop;
+    const r = await t.result;
+    testStop.current = null;
+    setTestLevel(null);
+    setTestResult(r);
+    void listMics().then(setMics); // po povolení prohlížeč zpřístupní názvy zařízení
+  }
 
   useEffect(() => {
-    if (!unfinished) return;
+    if (!candidate) return;
     let alive = true;
     void meetingService.livePartial(meeting.id).then((p) => { if (alive) setPartial(p.map((x) => x.text).join(' ').trim() || ''); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [unfinished, meeting.id]);
+  }, [candidate, meeting.id]);
 
   // zavření stránky během nahrávání: varování; při odchodu se mikrofon i sdílení vždy uvolní
   useEffect(() => {
@@ -84,7 +149,9 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
       }), { elapsedMs: meeting.live.ms });
       ctl.current = c;
       c.subscribe(setSnap);
-      await c.start(source);
+      testStop.current?.();
+      await c.start(source, micMissing ? null : micId || null);
+      void listMics().then(setMics);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Přepis se nepodařilo spustit.');
     } finally {
@@ -100,6 +167,16 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
     setBusy(false);
     if (r.outcome === 'completed') await onChanged('Přepis porady je uložený. Můžete spustit analýzu.');
     else if (r.outcome === 'empty') await onChanged('Nebyla zachycena žádná řeč, přepis se neuložil.');
+  }
+
+  async function cancel() {
+    const c = ctl.current;
+    setConfirmCancel(false);
+    if (!c) return;
+    setBusy(true);
+    const r = await c.cancel();
+    setBusy(false);
+    if (r === 'cancelled') await onChanged('Přepis byl zrušen a neuložený text zahozen. Porada, pozvaní i událost zůstávají; spotřebovaná doba se započítala.');
   }
 
   async function finishStored(discard = false) {
@@ -156,8 +233,29 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
         </div>
       )}
 
-      {(!s || s.capture === 'idle' || s.capture === 'error') && !unfinished && (
+      {s?.capture === 'error' && (s.segment !== null || meeting.live.segments > 0) && (
+        <div className="mi-row" data-testid="live-error-actions">
+          <Button onClick={() => void stop()} disabled={busy} data-testid="live-error-save">Uložit dosavadní přepis</Button>
+          <Button variant="ghost" onClick={() => setConfirmCancel(true)} disabled={busy} data-testid="live-error-cancel">Zrušit přepis</Button>
+        </div>
+      )}
+
+      {(!s || s.capture === 'idle' || s.capture === 'error' || s.capture === 'stopped') && !unfinished && (
         <>
+          <div className="mi-field" data-testid="live-mic">
+            <label htmlFor="live-mic-select" style={{ fontWeight: 600 }}>Mikrofon</label>
+            <div className="mi-row">
+              <select id="live-mic-select" value={micMissing ? '' : micId} onChange={(e) => chooseMic(e.target.value)} disabled={busy} data-testid="live-mic-select">
+                <option value="">Výchozí mikrofon systému</option>
+                {mics.map((m) => <option key={m.deviceId} value={m.deviceId}>{m.label}</option>)}
+              </select>
+              <Button size="sm" onClick={() => void runTest()} disabled={busy} data-testid="live-mic-test">{testLevel !== null ? 'Ukončit test' : 'Otestovat mikrofon'}</Button>
+              {testLevel !== null && <Level label="Mikrofon" value={testLevel} testId="live-mic-test-level" />}
+            </div>
+            <span className="mi-muted">Test je zdarma a probíhá jen v prohlížeči – nic se neodesílá ani neúčtuje.{mics.length === 0 ? ' Názvy mikrofonů prohlížeč ukáže až po povolení (např. testem).' : ''}</span>
+            {micMissing && <span role="alert" className="mi-error" data-testid="live-mic-missing">Dříve vybraný mikrofon teď není připojený – použije se výchozí. Vyberte jiný, nebo ho připojte.</span>}
+            {testResult && <span role="status" className={testResult === 'ok' ? 'mi-muted' : 'mi-error'} data-testid="live-mic-test-result">{TEST_TEXT[testResult]}</span>}
+          </div>
           <fieldset className="mi-field" data-testid="live-source">
             <legend style={{ fontWeight: 600 }}>Zdroj zvuku</legend>
             <label><input type="radio" name="live-src" checked={source === 'mic'} onChange={() => setSource('mic')} data-testid="live-source-mic" /> Jen mikrofon – porada v místnosti, nebo hovor z reproduktoru vedle vás</label>
@@ -188,6 +286,9 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
             ? <Button variant="primary" onClick={() => void ctl.current?.resume()} disabled={busy} data-testid="live-resume">Pokračovat</Button>
             : <Button onClick={() => void ctl.current?.pause()} disabled={busy || s.capture !== 'live'} data-testid="live-pause">Pozastavit</Button>}
           <Button variant="danger" onClick={() => void stop()} disabled={busy} data-testid="live-stop">Ukončit a uložit přepis</Button>
+          <Button variant="ghost" onClick={() => setConfirmCancel(true)} disabled={busy} data-testid="live-cancel">Zrušit přepis</Button>
+          <Level label="Mikrofon" value={levels.mic} testId="live-level-mic" />
+          {s.source === 'mic+tab' && <Level label="Zvuk karty" value={s.tabAudio ? levels.tab : null} testId="live-level-tab" />}
           <span className="mi-muted" data-testid="live-source-state">
             {s.source === 'mic+tab' ? (s.tabAudio ? 'Zachycuje se mikrofon + zvuk karty' : 'Zachycuje se jen mikrofon') : 'Zachycuje se jen mikrofon'}
             {s.pendingFlush ? ` · čeká na uložení: ${s.pendingFlush}` : ''}
@@ -196,7 +297,18 @@ export default function LivePanel({ meeting, projectId, isOrganizer, onChanged }
         </div>
       )}
 
-      {s?.silent && <p role="status" className="mi-muted" data-testid="live-silent">Už několik sekund neslyšíme žádný zvuk. Je mikrofon zapnutý a ve správném zařízení?</p>}
+      {confirmCancel && (
+        <div className="mi-card" role="alertdialog" aria-label="Zrušit přepis?" data-testid="live-cancel-confirm">
+          <strong>Zrušit přepis?</strong>
+          <p className="mi-muted">Stream se hned ukončí a text tohoto přepisu (i dosud uložené části) se zahodí. Porada, pozvaní a událost v kalendáři zůstanou. Spotřebovaná doba přepisu se započítá do limitu.</p>
+          <div className="mi-row">
+            <Button variant="danger" onClick={() => void cancel()} disabled={busy} data-testid="live-cancel-yes">Ano, zrušit přepis</Button>
+            <Button variant="ghost" onClick={() => setConfirmCancel(false)} disabled={busy} data-testid="live-cancel-no">Pokračovat v přepisu</Button>
+          </div>
+        </div>
+      )}
+
+      {s?.silent && <p role="status" className="mi-error" data-testid="live-silent">Už přes 12 s neslyšíme žádný zvuk. Je mikrofon zapnutý, neztlumený a vybraný správný? (Ukazatel úrovně by se měl při řeči hýbat.)</p>}
       {s?.warning && <p role="status" data-testid="live-warning">{s.warning}</p>}
       {(error || s?.error) && <p role="alert" className="mi-error" data-testid="live-error">{error ?? s?.error?.message}</p>}
 

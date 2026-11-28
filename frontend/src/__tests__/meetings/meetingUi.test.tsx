@@ -11,7 +11,7 @@ vi.mock('../../services/meetingService', async () => {
 });
 vi.mock('../../lib/supabase', () => ({ supabase: { rpc: vi.fn(async () => ({ data: null, error: null })) }, hasSupabaseConfig: true }));
 
-import ScheduleCard, { conferenceProvider, inviteText } from '../../components/meetings/ScheduleCard';
+import ScheduleCard, { actualState, conferenceProvider, inviteText, termState } from '../../components/meetings/ScheduleCard';
 import LivePanel, { INVITE_NOTICE } from '../../components/meetings/LivePanel';
 import { parseAttendees, type Meeting } from '../../services/meetingService';
 
@@ -111,4 +111,51 @@ describe('LivePanel', () => {
     await waitFor(() => expect(svc().callStt).toHaveBeenCalledWith('live', expect.objectContaining({ action: 'complete', meetingId: 'm1', projectId: 'p1' })));
     await waitFor(() => expect(changed).toHaveBeenCalled());
   });
+});
+
+describe('RUN 10 hardening – planned time vs actual state, join, mic, cancel', () => {
+  test('a past planned time is only information: join and start stay available', async () => {
+    const past = meeting({ occurredAt: '2026-01-01T09:00:00Z', endsAt: '2026-01-01T10:00:00Z', conferenceUrl: 'https://meet.google.com/abc-defg-hij' });
+    render(<ScheduleCard meeting={past} projectId="p1" isOrganizer canSchedule onChanged={vi.fn()} />);
+    expect(screen.getByTestId('schedule-term')).toHaveTextContent('Termín uplynul');
+    expect(screen.getByTestId('schedule-join')).toHaveTextContent('Připojit se ke schůzce');
+    expect(screen.queryByTestId('schedule-actual')).toBeNull();
+    render(<LivePanel meeting={{ ...past, audio: { ...past.audio, consentAt: '2026-01-01T09:00:00Z' } }} projectId="p1" isOrganizer onChanged={vi.fn()} />);
+    expect(screen.getByTestId('live-start')).not.toBeDisabled();
+    await screen.findByText('host@klient.example');
+  });
+  test('term and actual state are computed separately', () => {
+    const t = Date.parse('2026-11-28T10:30:00Z');
+    expect(termState({ occurredAt: '2026-11-28T10:00:00Z', endsAt: '2026-11-28T11:00:00Z' }, t)).toBe('now');
+    expect(termState({ occurredAt: '2026-11-28T11:00:00Z', endsAt: null }, t)).toBe('upcoming');
+    expect(actualState({ live: { state: 'live', ms: 0, segments: 1 }, currentRevision: null })?.label).toMatch(/běží/);
+    expect(actualState({ live: { state: 'finalized', ms: 0, segments: 1 }, currentRevision: 'r' })?.label).toBe('Přepis uložen');
+    expect(actualState({ live: { state: 'idle', ms: 0, segments: 0 }, currentRevision: null })).toBeNull();
+  });
+  test('a cancelled / empty capture (stopped, no stored parts) is not shown as unfinished – a new start is offered', async () => {
+    svc().livePartial.mockResolvedValue([]);
+    render(<LivePanel meeting={meeting({ live: { state: 'stopped', ms: 30_000, segments: 1 }, audio: { ...meeting().audio, consentAt: '2026-11-28T10:00:00Z' } })} projectId="p1" isOrganizer onChanged={vi.fn()} />);
+    await waitFor(() => expect(svc().livePartial).toHaveBeenCalled());
+    expect(screen.queryByTestId('live-recovery')).toBeNull();
+    expect(screen.getByTestId('live-start')).toBeInTheDocument();
+  });
+  test('microphone picker lists browser devices; the free test never calls the transcription API', async () => {
+    const stop = vi.fn();
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop }] }));
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      enumerateDevices: async () => [{ kind: 'audioinput', deviceId: 'usb-1', label: 'USB Mic' }, { kind: 'audioinput', deviceId: 'bt-1', label: 'AirPods' }],
+      getUserMedia, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } });
+    vi.stubGlobal('AudioContext', class { createAnalyser() { return { fftSize: 32, getFloatTimeDomainData: (b: Float32Array) => b.fill(0.1) }; } createMediaStreamSource() { return { connect() {} }; } async close() {} });
+    render(<LivePanel meeting={meeting()} projectId="p1" isOrganizer onChanged={vi.fn()} />);
+    expect(await screen.findByRole('option', { name: 'AirPods' })).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('live-mic-select'), { target: { value: 'bt-1' } });
+    fireEvent.click(screen.getByTestId('live-mic-test'));
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ audio: expect.objectContaining({ deviceId: { exact: 'bt-1' } }) }));
+    expect(await screen.findByTestId('live-mic-test-result', {}, { timeout: 7000 })).toHaveTextContent('Mikrofon funguje');
+    expect(stop).toHaveBeenCalled();
+    expect(svc().callStt).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('cs.live.mic')).toBe('bt-1');
+    vi.unstubAllGlobals();
+  }, 10_000);
 });

@@ -125,3 +125,47 @@ test('unfinished capture after a closed tab: stored text is shown and can be com
   await expect(p2.getByTestId('live-finalized')).toBeVisible({ timeout: 20_000 });
   void request;
 });
+
+test('RUN 10 hardening: free mic test, live level, cancel keeps the meeting and discards the text; a new start is possible', async ({ page, request }) => {
+  test.setTimeout(150_000);
+  const id = await newPlanned(page, `RUN10 Zrušení ${Date.now()}`);
+  // the free local test never reaches the server or Soniox
+  const before = await (await request.get(`${FAKE}/__stats`)).json().catch(() => null);
+  let liveCalls = 0;
+  page.on('request', (r) => { if (r.url().includes('/api/intelligence/meetings/live')) liveCalls += 1; });
+  await page.getByTestId('live-mic-test').click();
+  await expect(page.getByTestId('live-mic-test-result')).toBeVisible({ timeout: 15_000 });
+  expect(liveCalls).toBe(0);
+  const afterTest = await (await request.get(`${FAKE}/__stats`)).json().catch(() => null);
+  if (before?.tempKeys !== undefined) expect(afterTest.tempKeys).toBe(before.tempKeys);
+  await expect(page.getByTestId('live-mic-select')).toBeVisible();
+
+  await page.getByTestId('live-notice').check();
+  await page.getByTestId('live-start').click();
+  await expect(page.getByTestId('live-capture-state')).toHaveText(/Nahrává se/, { timeout: 20_000 });
+  await expect(page.getByTestId('live-level-mic')).toBeVisible();
+  await expect(page.getByTestId('live-transcript')).toContainText('Dobrý', { timeout: 20_000 });
+  await page.waitForTimeout(4000); // some parts already stored
+
+  await page.getByTestId('live-cancel').click();
+  await expect(page.getByTestId('live-cancel-confirm')).toBeVisible();
+  await page.getByTestId('live-cancel-no').click();             // second thoughts: nothing happens
+  await expect(page.getByTestId('live-capture-state')).toHaveText(/Nahrává se/);
+  await page.getByTestId('live-cancel').click();
+  await page.getByTestId('live-cancel-yes').click();
+  await expect(page.getByTestId('live-transcription-state')).toHaveText('Přepis zrušen', { timeout: 20_000 });
+  await expect(page.getByTestId('live-start')).toBeVisible();     // a new start is offered, not a "recovery"
+  await expect(page.getByTestId('live-recovery')).toHaveCount(0);
+
+  const t = await tokenOf(request, 'alice');
+  const rest = (path: string) => request.get(`${SB}/rest/v1/${path}`, { headers: { apikey: ANON, Authorization: `Bearer ${t}` } });
+  expect(await (await rest(`meeting_live_chunks?meeting_id=eq.${id}&select=seq`)).json()).toEqual([]);
+  expect(await (await rest(`meeting_transcripts?meeting_id=eq.${id}&select=revision`)).json()).toEqual([]);
+  const segs = await (await rest(`meeting_live_segments?meeting_id=eq.${id}&select=state,audio_ms`)).json();
+  expect(segs.every((s: { state: string }) => s.state === 'closed')).toBe(true);   // billed, not left open
+  expect(await (await rest(`meeting_attendees?meeting_id=eq.${id}&select=email`)).json()).not.toEqual([]); // meeting + guests stay
+  await page.reload();
+  await expect(page.getByTestId('schedule-card')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('live-recovery')).toHaveCount(0);
+  await expect(page.getByTestId('live-start')).toBeVisible();
+});

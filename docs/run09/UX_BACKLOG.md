@@ -16,3 +16,8 @@
 | 12 | **One-click „Kopírovat“ u všech párovacích příkazů a zpráv** (kódy `/clearspace propojit|ucet`, `/start`, `/link@bot`, `/task@bot Název`) – zachovat stávající kopírování s potvrzením „Zkopírováno“ a doplnit tam, kde chybí | vlastník (RUN 09) | |
 | 13 | AI chat na žádost vypíše interní ID projektu (karty, sloupce, komentáře) – v odpovědích preferovat názvy | RUN 09 stage 2 (LOW) | ne tajemství |
 | 14 | Po odpojení Telegram skupiny bot skupinu opustí – v UI to říct předem | RUN 09 | |
+| 15 | Porady: přehled „dnes / tento týden“ a připomenutí „spustit přepis“ u začínající porady | RUN 10 | |
+| 16 | Živý přepis: velký režim „na celou obrazovku“ pro prezentaci, odlišení mluvčích barvou | RUN 10 | |
+| 17 | Detail porady: tlačítko „Analyzovat“ skrýt, dokud porada nemá přepis | RUN 10 | dnes se zobrazuje i u plánované porady |
+| 18 | Přímé odeslání pozvánky do propojeného Slack kanálu / Telegram skupiny (dnes one-click kopírování) | RUN 10 | nový typ zprávy hubu |
+| 19 | Classic: přepínače zdroje zvuku vypadají jako holé radio buttony – sjednotit s design systémem | RUN 10 | |

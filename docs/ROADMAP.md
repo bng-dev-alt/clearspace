@@ -1,4 +1,4 @@
-# ClearSpace V1 – roadmapa (stav k 2026-11-28, aktualizováno po RUN 09)
+# ClearSpace V1 – roadmapa (stav k 2026-11-28, aktualizováno po RUN 10)
 
 | RUN | Téma | Stav | Odkaz |
 |---|---|---|---|
@@ -22,7 +22,8 @@
 | **07B** | Hardening hubu (odolný inbox, souběh, identita zahajovaná v ClearSpace, volitelný PI bot pro Telegram, permalinky, „Ověřit znovu“, 13 nálezů bezpečnostní revize) + konsolidace | **v `main`** (tag `run07b-hardening-complete`), **produkce beze změny** (migrace 1600 + 1700 nacvičené na produkčním DDL); kompletní regrese PASS; **živá akceptace BLOCKED** (owner block: boti, Slack app, pojmenovaný tunel) | `docs/run07b/README.md`, `OWNER_BLOCK.md` |
 | 08 / 08B | Živá akceptace hubu (dev, tunel) + plán pilotu | **hotovo** (lokálně, skuteční poskytovatelé) | `docs/run08/RUN08B.md` |
 | **09** | **Communication Hub – produkční release, etapa 1** (Slack + Telegram, osobní oznámení, pilot jen prezentační účet) | **HOTOVO 2026-11-28, tag `run09-complete`**: etapa 1 v produkci (`dpl_EfUg58JQ…`, pilot = prezentační účet), živá akceptace PASS; etapa 2 Gemini test PASS (6 req, ≤ 0,05 USD) a od 28. 11. **trvale aktivní** pro prezentační účet (40k tokenů/den, 2/min); 14 Gmail vláken obnoveno; credential cleanup; ADR rozdělení účtů | `docs/run09/README.md`, `ACCOUNTS_ADR.md` |
-| **10** | **Meeting Intelligence** – poslední velká funkce před feature freeze | další | `docs/run09/RUN10_HANDOFF.md` |
+| **10** | **Meeting Intelligence** (plánované/ad-hoc porady, pozvaní, Google Kalendář + Meet, živý přepis prohlížeč ⇄ Soniox s rezervací a dočasným klíčem, PI zdroj porad) | **v produkci s vypnutými přepínači** (`dpl_FZMYZjkv…`, migrace 1800); mock + DB + E2E + regrese PASS; **živá akceptace BLOCKED** (jediný owner block: Soniox/Gemini placený test, OAuth scope, relace s druhým účastníkem) | `docs/run10/README.md`, `OWNER_BLOCK.md` |
+| freeze | **Feature freeze V1** (po akceptaci RUN 10) | další | `docs/run10/README.md` §Handoff |
 | polish | Finální UX polish celé aplikace (vč. redesignu Propojených účtů) | po RUN 10 | `docs/run09/UX_BACKLOG.md` |
 | později (LATER z RUN 07) | Plnohodnotní klienti chatu, kontakty, soukromé konverzace, celoworkspace indexace, historický import, hovory, zrcadlení souborů, autonomní AI odpovědi, další poskytovatelé (Teams, Discord, e-mail), volitelný ingest bot pro Telegram, přehled kanálů pro výběr (`channels:read`) | návrh | `docs/run07/DECISIONS.md` |
 

@@ -138,3 +138,15 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
 * Cortex zůstal členem testovací skupiny bez webhooku → Telegram drží jeho updaty až 24 h (ClearSpace je nečte); před trvalou aktivací etapy 2 jen `setWebhook`.
 * **Etapa 2 trvale aktivní (2026-11-28)**: limity jsou per-UTC-den v `ai_reserve`; žádný alert na blížící se strop (jen 429 uživateli) – zvážit
   přehled spotřeby. `check-deployment.sh` neověřuje hodnoty `AI_DEMO_*` (jen chování) – ověřováno ručně bezplatnými sondami (deterministická funkce, předimenzovaná rezervace).
+
+## RUN 10 (Meeting Intelligence) – omezení a zjištění
+* **TD-3** `e2e/meetings.spec.ts:152` „approval …“: test čeká 1 záznam aktivity po vytvoření úkolu, aplikace od RUN 01 (migrace 1000, 2026-11-24) zapisuje
+  `card_created` + `card_assigned`. Test byl naposledy upraven 2026-11-23 → zastaralé očekávání, ne regrese RUN 10. Oprava: očekávat oba záznamy.
+* `meetings.spec` / `meeting-flow.spec` vyžadují `GEMINI_MODEL=fake-gemini` v prostředí aplikace (jinak jiný název modelu v ledgeru) – zapsat do skriptu stacku.
+* Zkouška na replice: katalog řetězce migrací (repo) se od produkce liší v 11 řádcích katalogu (hostované role/volby, např. `pg_attver`); replika B proto
+  používá vlastní DDL produkce. Rozdíl stojí za samostatný audit při finálním bezpečnostním auditu.
+* Mluvčí se mezi segmenty živého přepisu neslučují (Soniox čísluje mluvčí jen v rámci streamu) – po pauze/výpadku vznikne „Mluvčí 2.1“; jména přiřazuje člověk.
+* Výpadek sítě: mezera v přepisu (sekundy) – protokol Soniox `reconnect` s bufferem je LATER.
+* Hodinová porada na skutečném zařízení, Safari/iPad a Windows systémový zvuk: neověřeno (jen dokumentace prohlížečů).
+* Pozvánka do Slacku/Telegramu jen kopírováním (přímé odeslání do cíle hubu = nový typ zprávy, LATER).
+* Preview nástroj desktopové aplikace nemohl spouštět skripty z externího svazku (`Operation not permitted`) – lokální servery RUN 10 běžely přes Bash na pozadí.

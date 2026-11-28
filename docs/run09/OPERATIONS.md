@@ -56,3 +56,8 @@ Aktivace: `hub-prod.sh push-env stage2` + Vercel `AI_DEMO_USER_IDS` (prezentačn
 s potvrzením (Telegram navíc „celá komunikace“). Deaktivace: u cílů PI vypnout (importy se smažou) → `telegram-webhook cortex off` → smazat 8 proměnných
 (`HUB_INTELLIGENCE_ENABLED`, `TELEGRAM_HUB_PI_*` ×3, `AI_DEMO_*` ×4; CLI vyžaduje potvrzení – REST `DELETE /v9/projects/clearspace/env/<id>`) → staged deploy +
 `EXPECT_HUB_PILOT=1 EXPECT_HUB_TELEGRAM=1` → promote → ověřit AI 403 a `/api/hub/telegram/pi-webhook` 503.
+
+## Stav k 2026-11-28 (po trvalé aktivaci etapy 2)
+Produkce `dpl_GWQF6jGsECxp16U99vJ6ZpNH6afv`. Etapa 2 AKTIVNÍ jen pro prezentační účet; Cortex webhook nastaven; cíle s PI: žádné (každý zdroj zapíná
+správce projektu výslovně). Limity demo AI: 40 000 tokenů/den, 2/min (uživatel i globálně), přepis řeči 0 min. Rozpočet hlídá `ai_reserve` před voláním
+modelu; spotřeba v `ai_requests`. Kill switch: `HUB_INTELLIGENCE_ENABLED=0` + redeploy (kontext i ingest okamžitě prázdné, ověřeno).

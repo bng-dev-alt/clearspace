@@ -15,13 +15,13 @@ Stav: **přijato vlastníkem 2026-11-27**. Platí pro všechny budoucí runy vč
    Osobní oznámení (HQ bot) chodí do Telegramu vlastníka, protože demo nemá vlastní telefonní číslo (vědomé omezení).
 5. **Veřejnost**: neexistuje veřejný demo login, auto-login ani sdílené heslo. Prezentační účet zná jen vlastník. Každý jiný účet (i nově
    registrovaný) dostane u Slack/Telegram 403 „pilotní provoz“, u Google `*_disabled`, u AI 403 `ai_owner_only` – ještě před voláním
-   poskytovatele, tedy bez nákladů. AI je dnes jen pro `AI_OWNER_USER_IDS` (vlastník); prezentační účet AI nemá.
+   poskytovatele, tedy bez nákladů. AI mají jen `AI_OWNER_USER_IDS` (vlastník, beze změny od RC1–RC5) a od 2026-11-28 prezentační účet
+   v demo tieru (`AI_DEMO_USER_IDS`, 40 000 tokenů/den, 2/min); nikdo jiný.
 6. **Testovací obsah** vzniká jen v označených testovacích projektech prezentačního účtu („RUN09 Pilot …“, „RUN09 Izolace …“), nikdy v CSD
    projektech, kromě obnovy evidovaných demo vazeb (Gmail vlákna t01–t14).
 
 ## Důsledky pro budoucí runy
 * RUN 10 Meeting Intelligence: pilot = prezentační účet, demo porady jen v CSD projektech nebo v testovacím projektu; náklady (STT/AI)
   jen přes `AI_DEMO_USER_IDS` s přísnými limity po schválení vlastníka.
-* Stage 2 (Cortex + PI): vyžaduje přidat prezentační účet do `AI_DEMO_USER_IDS` (demo tier: vlastní denní rozpočet tokenů a limity) –
-  viz `STAGE2_GEMINI_PROPOSAL.md`.
+* Stage 2 (Cortex + PI): od 2026-11-28 aktivní – `AI_DEMO_USER_IDS` = prezentační účet (40 000 tokenů/den, 2/min, bez přepisu řeči).
 * Změna allowlistu = změna tohoto ADR (vlastník).

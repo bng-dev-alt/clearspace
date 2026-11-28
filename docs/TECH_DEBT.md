@@ -136,3 +136,5 @@ Ověřeno i v RUN 03 a RUN 03B (2026-11-25, stack `cs-gmail-sb`, po merge `run02
   připomínka termínu + zkušební zprávy (RUN 08 ověřil vše lokálně se skutečnými poskytovateli). Další mezery: 90denní retence (jen kód + harness),
   `google_pilot_http` lokálně (Google pilot ověřen živě), druhý reálný Slack/Telegram účet, odvolání produkčního tokenu (vědomě nedestruktivně).
 * Cortex zůstal členem testovací skupiny bez webhooku → Telegram drží jeho updaty až 24 h (ClearSpace je nečte); před trvalou aktivací etapy 2 jen `setWebhook`.
+* **Etapa 2 trvale aktivní (2026-11-28)**: limity jsou per-UTC-den v `ai_reserve`; žádný alert na blížící se strop (jen 429 uživateli) – zvážit
+  přehled spotřeby. `check-deployment.sh` neověřuje hodnoty `AI_DEMO_*` (jen chování) – ověřováno ručně bezplatnými sondami (deterministická funkce, předimenzovaná rezervace).

@@ -1,8 +1,8 @@
 # RUN 09 – Communication Hub Production Release (report)
 
 **Verdikt: GO – etapa 1 (Slack + Telegram, osobní oznámení) je v produkci a živě akceptována v pilotu jen pro prezentační účet.
-Etapa 2 (Cortex + Project Intelligence z chatů): skutečný Gemini test PASS (6 požadavků, ≤ 0,05 USD) → technicky GO; trvalá aktivace NEschválena,
-etapa 2 je po testu znovu VYPNUTÁ (ověřeno).**
+Etapa 2 (Cortex + Project Intelligence z chatů): skutečný Gemini test PASS (6 požadavků, ≤ 0,05 USD) a od 2026-11-28 **TRVALE AKTIVNÍ**
+jen pro prezentační účet (`dpl_GWQF6jGsECxp16U99vJ6ZpNH6afv`), limity 40 000 tokenů/den a 2 požadavky/min ověřeny po nasazení.**
 Rozdělení účtů: `ACCOUNTS_ADR.md` (závazné). Provoz a rollback: `OPERATIONS.md`. Etapa 2: `STAGE2_GEMINI_PROPOSAL.md`. UX: `UX_BACKLOG.md`. RUN 10: `RUN10_HANDOFF.md`.
 
 ## 1. Produkce
@@ -124,3 +124,20 @@ Google: Gmail náhled 200, Kalendář 19 událostí, Disk refresh OK. Oddělení
 
 ## 13. Zbývá / dluh
 Trvalá aktivace etapy 2 (rozhodnutí) · osobní oznámení od jiného uživatele živě (pilot má 1 účet) · UX backlog · `TECH_DEBT.md` (RUN 09).
+
+## 14. Trvalá aktivace etapy 2 (schváleno vlastníkem 2026-11-28)
+| Kontrola | Výsledek |
+|---|---|
+| Proměnné (Production, z Keychainu): `HUB_INTELLIGENCE_ENABLED=1`, `TELEGRAM_HUB_PI_*`, `AI_DEMO_USER_IDS`=prezentační účet, `AI_DEMO_DAILY_TOKEN_BUDGET=40000`, `AI_DEMO_RATE_PER_USER_PER_MINUTE=2`, `AI_DEMO_RATE_GLOBAL_PER_MINUTE=2`, `AI_DEMO_STT_DAILY_AUDIO_MIN_PER_USER=0` | nastaveno |
+| Staged build + `check-deployment.sh` (pilot, Telegram, **PI**, Google) | 142/142 → promote `dpl_GWQF6jGs…` |
+| Cortex webhook `/api/hub/telegram/pi-webhook` (secret_token) | nastaven, 0 čekajících, bez chyb |
+| Explicitní opt-in: zpráva v testovací skupině bez potvrzeného cíle | přijata, **0 uloženo** (0 cílů s PI) |
+| Limit 2/min (deterministická funkce, 0 tokenů) | 200, 200, **429 `rate_limited`** |
+| Denní strop 40 000 tokenů (rezervace ~81 000) | **429 `budget_exceeded`** před voláním modelu |
+| Placené požadavky při aktivaci | **0** (ledger beze změny: 15 řádků Gemini celkem) |
+| Nepilotní účet | hub/notify 403 (8 rout), AI 403 `ai_owner_only`, `aiOwner:false` |
+| Prezentační účet | `aiOwner:true`, přepis řeči `false` |
+| Osobní účet vlastníka | není v pilotu hubu (403) → nemůže připojit chaty ani mít PI nad chaty; jeho dřívější vlastnický přístup k AI (`AI_OWNER_USER_IDS`, RC1–RC5) beze změny |
+| Etapa 1 | 2 osobní kanály aktivní, zkušební zprávy `sent`, 2 identity, Relay webhook OK, plánovače 120 běhů/h bez chyb |
+| Google | Gmail náhled 200, Kalendář 19 událostí, Disk refresh OK; demo data 14 CSD / 154 úkolů / 51 odkazů / 14 Gmail zdrojů |
+Rollback etapy 2: `OPERATIONS.md` (deaktivace) – ověřeno 2026-11-28 ráno.

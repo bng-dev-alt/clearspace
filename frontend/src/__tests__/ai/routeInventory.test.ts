@@ -7,6 +7,9 @@ import { join, relative } from 'node:path';
 // A new route that talks to a provider without one of these fails here instead of shipping ungated.
 const API = join(__dirname, '../../app/api');
 const GATED = /\b(runAi|runStt|runSttDelete)\b/;
+// RUN 10: the live-transcription route gates itself: owner/demo tier via authenticate(req) (gate ON), then the meeting pilot list,
+// then the tier's STT permission -- all before any provider call. Checked explicitly below.
+const SELF_GATED = new Set(['intelligence/meetings/live/route.ts']);
 const REEXPORT = /export \{ POST \} from '(\.\.\/)+ai\/[a-z-]+\/route'/;
 const ALLOWED_OTHER = new Set(['intelligence/access/route.ts']); // authenticate(req,{gate:false}); answers only {aiOwner, stt}
 
@@ -25,7 +28,7 @@ describe('AI/STT route inventory', () => {
   });
 
   it.each(files)('%s is owner-gated', (f) => {
-    if (ALLOWED_OTHER.has(f)) return;
+    if (ALLOWED_OTHER.has(f) || SELF_GATED.has(f)) return;
     const src = readFileSync(join(API, f), 'utf8');
     expect(GATED.test(src) || REEXPORT.test(src)).toBe(true);
   });
@@ -34,6 +37,21 @@ describe('AI/STT route inventory', () => {
     const src = readFileSync(join(API, 'intelligence/access/route.ts'), 'utf8');
     expect(src).toContain('authenticate(req, { gate: false })');
     expect(src).not.toMatch(/runAi|runStt|fetch\(/);
+  });
+
+  it('live route: authenticate with the gate ON, pilot + STT permission checked before the provider client is created', () => {
+    const src = readFileSync(join(API, 'intelligence/meetings/live/route.ts'), 'utf8');
+    expect(src).toContain('await authenticate(req);');
+    expect(src).not.toContain('gate: false');
+    const auth = src.indexOf('await authenticate(req)');
+    const pilot = src.indexOf('inLivePilot(cfg, auth.user.id)');
+    const stt = src.indexOf('!policy.stt.allowed');
+    const provider = src.indexOf('new SonioxClient(');
+    expect(auth).toBeGreaterThan(0);
+    expect(pilot).toBeGreaterThan(auth);
+    expect(stt).toBeGreaterThan(pilot);
+    expect(provider).toBeGreaterThan(stt);
+    expect(src).not.toMatch(/fetch\(/);
   });
 
   it('no rewrites or middleware can route around the handlers', () => {

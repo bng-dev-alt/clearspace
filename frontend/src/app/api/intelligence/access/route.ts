@@ -7,7 +7,7 @@ import { inLivePilot, liveConfigFromEnv } from '../../../../lib/stt/live';
 import { serviceAllowedFor, serviceMode } from '../../../../lib/google/config';
 
 // "Mám přístup?" jen pro UX (zobrazení voleb zvuku a AI). Neoprávňuje k ničemu: každá AI/STT cesta si seznam vlastníků ověřuje sama.
-// Anonym: 401. Přihlášený: { aiOwner, stt } bez dalších údajů (žádný seznam vlastníků, žádná konfigurace).
+// Anonym: 401. Přihlášený: { aiOwner, stt, live, schedule } (jen booleany: žádný seznam vlastníků ani pilotů, žádná konfigurace).
 export async function POST(req: NextRequest) {
   try {
     const { tier, user } = await authenticate(req, { gate: false });

@@ -113,9 +113,15 @@ describe('every owner route: a non-owner is refused BEFORE any database, storage
     expect((await r.json().catch(() => ({}))).code).not.toBe('ai_owner_only');
   });
   test('the access question: owner true, other false, anonymous 401, and it reveals nothing else', async () => {
-    h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: true });
-    h.userId = OTHER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: false, stt: false });
+    // RUN 10: two more booleans (live transcription / meeting scheduling available) -- still no lists, ids or configuration
+    h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: true, live: false, schedule: false });
+    h.userId = OTHER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: false, stt: false, live: false, schedule: false });
     expect((await post(access, null)).status).toBe(401);
-    vi.stubEnv('STT_ENABLED', ''); h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: false });
+    vi.stubEnv('MEETING_LIVE_ENABLED', '1'); vi.stubEnv('MEETING_PILOT_USER_IDS', 'someone-else');
+    h.userId = OWNER; expect((await (await post(access, TOKEN)).json()).live).toBe(false); // switch on, but not in the meeting pilot
+    vi.stubEnv('MEETING_PILOT_USER_IDS', OWNER);
+    expect((await (await post(access, TOKEN)).json()).live).toBe(true);
+    h.userId = OTHER; expect((await (await post(access, TOKEN)).json()).live).toBe(false);
+    vi.stubEnv('STT_ENABLED', ''); h.userId = OWNER; expect(await (await post(access, TOKEN)).json()).toEqual({ aiOwner: true, stt: false, live: false, schedule: false });
   });
 });
